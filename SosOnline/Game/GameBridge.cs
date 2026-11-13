@@ -1,0 +1,277 @@
+using System;
+using System.Collections.Generic;
+using Il2CppInterop.Runtime;
+using Rewired;
+using UnityEngine;
+using UnityEngine.SceneManagement;
+
+namespace SosOnline.Game;
+
+/// <summary>Thin, defensive wrappers around the bits of Sea of Stars the mod touches.</summary>
+internal static class GameBridge
+{
+    public static InputManager Input => SafeInstance<InputManager>();
+    public static SaveManager Saves => SafeInstance<SaveManager>();
+    public static SinglePlayerPlusManager Coop => SafeInstance<SinglePlayerPlusManager>();
+    public static PlayerPartyManager Party => SafeInstance<PlayerPartyManager>();
+
+    private static T SafeInstance<T>() where T : Manager<T>
+    {
+        try { return Manager<T>.instance; } catch { return null; }
+    }
+
+    /// <summary>
+    /// Which of the game's players (P1..P3) each session slot drives. Identity at session start; the Assign Players
+    /// screen can reorder it (same on every peer).
+    /// </summary>
+    public static readonly int[] SlotPlayerIndex = { 0, 1, 2 };
+
+    public static void ResetSlotPlayers()
+    {
+        for (int i = 0; i < SlotPlayerIndex.Length; i++) SlotPlayerIndex[i] = i;
+    }
+
+    /// <summary>Rewired player that session slot <paramref name="slot"/> drives (slot 0 = host).</summary>
+    public static Player PlayerForSlot(int slot)
+    {
+        if (slot >= 0 && slot < SlotPlayerIndex.Length) slot = SlotPlayerIndex[slot];
+        return GamePlayer(slot);
+    }
+
+    /// <summary>The game's player <paramref name="index"/> (P1 = 0).</summary>
+    public static Player GamePlayer(int index)
+    {
+        int slot = index;
+        try
+        {
+            var im = Input;
+            if (im != null)
+            {
+                var p = im.GetPlayer(slot);
+                if (p != null) return p;
+            }
+        }
+        catch { }
+        return ReInput.isReady ? ReInput.players.GetPlayer(slot) : null;
+    }
+
+    public static TitleScreen FindTitleScreen()
+    {
+        var all = UnityEngine.Object.FindObjectsOfType<TitleScreen>();
+        foreach (var t in all)
+            if (t != null && t.isActiveAndEnabled) return t;
+        return null;
+    }
+
+    private static float _titleCheckedAt = -1;
+    private static bool _atTitle;
+
+    /// <summary>Whether the title screen is up (cached for half a second, FindObjectsOfType is slow).</summary>
+    public static bool AtTitleScreen
+    {
+        get
+        {
+            if (_titleCheckedAt < 0 || Time.unscaledTime - _titleCheckedAt > 0.5f)
+            {
+                _titleCheckedAt = Time.unscaledTime;
+                try { _atTitle = FindTitleScreen() != null; } catch { _atTitle = false; }
+            }
+            return _atTitle;
+        }
+    }
+
+    public static string ActiveSceneName
+    {
+        get
+        {
+            try
+            {
+                var names = new List<string>();
+                for (int i = 0; i < SceneManager.sceneCount; i++) names.Add(SceneManager.GetSceneAt(i).name);
+                names.Sort(StringComparer.Ordinal);
+                return string.Join(",", names);
+            }
+            catch { return "?"; }
+        }
+    }
+
+    // ---------------- Determinism ----------------
+
+    private static float _savedCaptureDelta;
+    private static int _savedTargetFps, _savedVsync;
+    private static bool _timeLocked;
+
+    /// <summary>Every frame advances game time by exactly 1/60 s on every peer.</summary>
+    public static void LockTime()
+    {
+        if (_timeLocked) return;
+        _savedCaptureDelta = Time.captureDeltaTime;
+        _savedTargetFps = Application.targetFrameRate;
+        _savedVsync = QualitySettings.vSyncCount;
+        Time.captureDeltaTime = 1f / 60f;
+        QualitySettings.vSyncCount = 0;
+        Application.targetFrameRate = 60;
+        _timeLocked = true;
+    }
+
+    public static void UnlockTime()
+    {
+        if (!_timeLocked) return;
+        Time.captureDeltaTime = _savedCaptureDelta;
+        QualitySettings.vSyncCount = _savedVsync;
+        Application.targetFrameRate = _savedTargetFps;
+        _timeLocked = false;
+    }
+
+    // ---------------- Session entry ----------------
+
+    /// <summary>
+    /// Loads <paramref name="slotIndex"/> (or its autosave) through the title screen's Continue flow.
+    /// Runs on the same lockstep frame on every peer.
+    /// </summary>
+    public static bool EnterGameFromSlot(int slotIndex, bool autoSave)
+    {
+        var saves = Saves;
+        if (saves == null) { Plugin.Log.LogError("SaveManager not available"); return false; }
+        var slot = autoSave ? saves.GetAutoSaveSlot(slotIndex) : saves.GetSaveSlot(slotIndex);
+        if (slot == null) { Plugin.Log.LogError($"Save slot {slotIndex} (auto={autoSave}) not found"); return false; }
+        saves.LoadSaveSlotAndSetLastIndex(slot);
+        var title = FindTitleScreen();
+        if (title == null) { Plugin.Log.LogError("Title screen not active"); return false; }
+        title.OnContinue();
+        return true;
+    }
+
+    /// <summary>Makes the game consider every occupied slot as a player with an input device.</summary>
+    public static void RegisterSlotPlayers(IEnumerable<int> slots)
+    {
+        var im = Input;
+        if (im == null) return;
+        foreach (int s in slots)
+        {
+            var p = PlayerForSlot(s);
+            if (p == null) continue;
+            try
+            {
+                if (!im.assignedPlayers.Contains(p)) im.AssignPlayer(p);
+            }
+            catch (Exception e) { Plugin.Log.LogWarning($"AssignPlayer({s}) failed: {e.Message}"); }
+        }
+    }
+
+    // ---------------------------------------------------------------- co-op players
+
+    /// <summary>The game's co-op player object for a session slot.</summary>
+    public static SinglePlayerPlusPlayer CoopPlayer(int slot)
+    {
+        try
+        {
+            var p = PlayerForSlot(slot);
+            return p == null ? null : Coop?.GetSinglePlayerPlusPlayer(p);
+        }
+        catch { return null; }
+    }
+
+    public static bool IsPlaying(int slot)
+    {
+        try { return CoopPlayer(slot)?.Playing ?? false; } catch { return false; }
+    }
+
+    /// <summary>Makes a slot's player leave co-op (their character goes back to the AI follower).</summary>
+    public static void MakeLeave(int slot)
+    {
+        try
+        {
+            var p = CoopPlayer(slot);
+            if (p != null && p.Playing) p.Leave();
+        }
+        catch (Exception e) { Plugin.Log.LogWarning($"Leave({slot}) failed: {e.Message}"); }
+    }
+
+    /// <summary>Rewired player id → session slot (or -1).</summary>
+    public static int SlotOf(Player p)
+    {
+        if (p == null) return -1;
+        for (int s = 0; s < Lockstep.InputOverride.SlotCount; s++)
+            if (PlayerForSlot(s)?.id == p.id) return s;
+        return -1;
+    }
+
+    // ---------------------------------------------------------------- level / saving
+
+    public static LevelManager Levels => SafeInstance<LevelManager>();
+
+    public static string CurrentLevelId
+    {
+        get { try { return Levels?.CurrentLevel?.levelDefinitionGuid ?? ""; } catch { return ""; } }
+    }
+
+    public static bool LoadingLevel
+    {
+        get { try { return Levels?.LoadingLevel ?? true; } catch { return true; } }
+    }
+
+    /// <summary>In free gameplay where the game itself would allow saving (no battle, cutscene or loading).</summary>
+    public static bool CanSaveNow
+    {
+        get
+        {
+            try
+            {
+                if (LoadingLevel || Party?.Leader == null) return false;
+                var combat = SafeInstance<CombatManager>();
+                if (combat != null && combat.IsAnEncounterRunning()) return false;
+                return Saves != null && Saves.CanSave() && !Saves.Saving;
+            }
+            catch { return false; }
+        }
+    }
+
+    public static bool Saving
+    {
+        get { try { return Saves?.Saving ?? false; } catch { return false; } }
+    }
+
+    /// <summary>Writes an autosave of the current game; returns its slot index (or -1).</summary>
+    public static int AutoSave()
+    {
+        try
+        {
+            var saves = Saves;
+            if (saves == null || !saves.AutoSave()) return -1;
+            return saves.LoadedSaveGameSlot?.slotIndex ?? -1;
+        }
+        catch (Exception e) { Plugin.Log.LogWarning($"AutoSave failed: {e.Message}"); return -1; }
+    }
+
+    /// <summary>Leaves gameplay for the title screen, like "Return to title" in the pause menu.</summary>
+    public static bool ReturnToTitle()
+    {
+        try
+        {
+            var levels = Levels;
+            if (levels == null) return false;
+            var loading = new LevelLoading { levelToLoad = LevelReference.TitleScreen, showTransition = false };
+            levels.LoadLevel(loading);
+            return true;
+        }
+        catch (Exception e) { Plugin.Log.LogError($"ReturnToTitle failed: {e}"); return false; }
+    }
+
+    public static List<(int index, bool auto, string label)> ListSaveSlots()
+    {
+        var result = new List<(int, bool, string)>();
+        var saves = Saves;
+        if (saves == null) return result;
+        for (int i = 0; i < SaveManager.MAX_SAVE_SLOT; i++)
+        {
+            try
+            {
+                if (saves.GetSaveSlot(i) != null) result.Add((i, false, $"Slot {i + 1}"));
+                if (saves.GetAutoSaveSlot(i) != null) result.Add((i, true, $"Slot {i + 1} (autosave)"));
+            }
+            catch { }
+        }
+        return result;
+    }
+}
