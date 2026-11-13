@@ -1,0 +1,21 @@
+# Store text with LF in the repository; check out with the platform's line endings (CRLF on Windows).
+* text=auto
+
+# Explicitly text
+*.cs      text diff=csharp
+*.csproj  text
+*.md      text
+*.txt     text
+*.json    text
+
+# Scripts that must keep a specific line ending regardless of platform
+*.sh      text eol=lf
+*.cmd     text eol=crlf
+*.bat     text eol=crlf
+*.ps1     text eol=crlf
+
+# Binary
+*.png     binary
+*.dll     binary
+*.pdb     binary
+*.reg     binary
