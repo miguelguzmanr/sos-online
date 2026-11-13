@@ -1,0 +1,3 @@
+1160 UIAssignMoveHorizontal 10 1
+1200 UIAssignConfirm 1
+1450 MoveHorizontal 40 1

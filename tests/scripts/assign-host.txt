@@ -1,0 +1,4 @@
+1000 UI_Start 4
+1240 UIAssignConfirm 1
+1270 UIAssignConfirm 1
+1400 UI_Start 4

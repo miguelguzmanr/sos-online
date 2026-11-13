@@ -1,0 +1,3 @@
+# Host walks, then opens the pause menu.
+700 MoveVertical 60 -1
+1100 UI_Start 4

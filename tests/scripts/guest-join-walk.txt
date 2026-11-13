@@ -1,0 +1,5 @@
+# Player 2 presses Join, then walks on their own.
+1000 Join 6
+1150 MoveHorizontal 60 1
+1230 MoveVertical 45 -1
+1500 MoveHorizontal 40 -1

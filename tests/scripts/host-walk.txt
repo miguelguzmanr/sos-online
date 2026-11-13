@@ -1,0 +1,5 @@
+# frame [sys] action holdFrames [axis]
+700 MoveVertical 60 -1
+780 MoveHorizontal 60 1
+860 MoveVertical 40 1
+1400 MoveHorizontal 50 -1
