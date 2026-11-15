@@ -281,7 +281,7 @@ Two PCs over Steam (host at 1920×1080, guest at 2560×1440), build `d9d6210`, a
 - In the next run, at the first attack, the host ran Valere's attack bound to Rewired player 0 (P1, impact f3581) while the guest ran it about 20 frames later bound to player 1 (P2, impact f3600). Valere moved on the host from f3540, the guest stayed put.
 - So on the same turn, one PC let P1 act and the other waited for P2. That matches the morning's report ("they used Valere instead of Zale"). In co-op battles a "current player" picks the next action (`EncounterController.SetCurrentPlayer`, `AdvancePlayers`), and the PCs' bookkeeping of it differs now and then, with identical inputs. Cause not found yet.
 - **Added:** `Lockstep/CombatTrace.cs` logs the turn decisions with the frame (`[combat] … current player`, `selected`, `turn`, `players advance`, `<character> answers to player N`), so the next occurrence shows the first frame where the PCs differ.
-- **Also found:** the log zip had no `Player.log`. The game doesn't write it where `Application.persistentDataPath` points, so the path needs checking.
+- **Also found:** the log zip had no `Player.log`. Sea of Stars writes none: its Unity messages only reach BepInEx's `LogOutput.log`, which is in the zip. A crash leaves a Windows dump in `%LOCALAPPDATA%\CrashDumps\SeaOfStars.exe.<pid>.dmp`; the zip now includes the newest one made since the two included starts.
 
 **Protocol 10:** snapshots carry each character's facing (9) and the game's pause flag (10).
 

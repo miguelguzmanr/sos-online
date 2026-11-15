@@ -209,14 +209,14 @@ Nothing Steam-specific has been tested end to end yet (see *Not yet verified*). 
 
 Every start of the game writes its own log, so nothing is lost when you restart.
 
-**Friends: press a button.** While connected to the host's session (also after a crash: rejoin first), choose **Send logs to the host**. It's on the pause screen (Esc, outside battles and cutscenes) and in the title screen's **Online** menu. Your game zips your last two starts' logs, the game's own `Player.log`/`Player-prev.log` and BepInEx's `LogOutput.log`, and sends them to the host only. The host gets a toast and the zip in `BepInEx\SosOnline\logs\received`. The host can also choose **Ask friends for their logs**, which shows friends a reminder; they still decide.
+**Friends: press a button.** While connected to the host's session (also after a crash: rejoin first), choose **Send logs to the host**. It's on the pause screen (Esc, outside battles and cutscenes) and in the title screen's **Online** menu. Your game zips your last two starts' logs and BepInEx's `LogOutput.log` (which also has the game's own messages), and sends them to the host only. If the game crashed since, the zip also includes the newest Windows crash dump of the game (`%LOCALAPPDATA%\CrashDumps\SeaOfStars.exe.*.dmp`, a snapshot of the game's memory at the crash). The host gets a toast and the zip in `BepInEx\SosOnline\logs\received`. The host can also choose **Ask friends for their logs**, which shows friends a reminder; they still decide.
 
 **By hand** (the host's own logs, or without a session), from the same session on **both PCs**:
 
 1. Open the logs folder: press **F8** in game → **Open logs folder**, or title screen → **Online** → **Open logs folder**. It is `BepInEx\SosOnline\logs` in the game folder.
 2. Send the newest `sosonline-<date-time>.log` and `state-<date-time>.log` (the file names carry when the game was started). If you restarted the game since the problem, take the pair from that earlier start; the last 10 starts are kept.
 3. Say roughly what happened and when (the log lines carry the time of day).
-4. If the game crashed, also send the game's own log from `%USERPROFILE%\AppData\LocalLow\Sabotage Studio\Sea of Stars\`: `Player.log` if you haven't started the game since, otherwise `Player-prev.log`. It is gone after two more starts.
+4. If the game crashed, also send `BepInEx\LogOutput.log` from the game folder (it has the game's own messages) and the newest `SeaOfStars.exe.*.dmp` from `%LOCALAPPDATA%\CrashDumps\` (Windows' crash dump of the game). Sea of Stars writes no `Player.log`.
 
 What's in them: everything the mod logged (joins, drop-ins, desyncs, pauses, leaves), the game's own errors, the mod build (the commit, e.g. `0.1.0+e3d3ca0`), the game version, Windows version and graphics card, and a session summary every minute (players, ping, input delay, sync checks). The state file has a snapshot of the game state every half second, so the host's and a guest's can be compared frame by frame. The logs contain the Steam names of the players in the session and Steam lobby ids (sometimes a player's Steam id); nothing else personal.
 
