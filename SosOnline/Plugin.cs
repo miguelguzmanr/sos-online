@@ -33,6 +33,7 @@ public sealed class Plugin : BasePlugin
             AddComponent<OnlineBehaviour>();
             Settings.Bind(Config);
             TestHarness.Init();
+            SosOnline.Update.AutoUpdate.Start();
             GameClock.Install();
             if (TestHarness.TraceEnabled) Diagnostics.InstallTrace(harmony);
             if (TestHarness.TryArg("tracecalls", out var traceClasses)) Diagnostics.InstallCallTrace(harmony, traceClasses);
@@ -54,12 +55,17 @@ public sealed class Plugin : BasePlugin
 internal static class Settings
 {
     private static BepInEx.Configuration.ConfigEntry<bool> _openToFriends;
+    private static BepInEx.Configuration.ConfigEntry<bool> _autoUpdate;
 
     public static void Bind(BepInEx.Configuration.ConfigFile config)
     {
         _openToFriends = config.Bind("Online", "OpenToFriends", false,
             "Keep a Steam lobby open while you play, so friends can join your game from Steam at any time.");
+        _autoUpdate = config.Bind("Updates", "AutoUpdate", true,
+            "At game start, download the newest signed release from GitHub; it runs from the next start.");
     }
+
+    public static bool AutoUpdate => _autoUpdate?.Value ?? true;
 
     /// <summary>A Steam lobby is open whenever this PC plays its own game; friends join from Steam, no hosting step.</summary>
     public static bool OpenToFriends
@@ -86,6 +92,7 @@ public sealed class OnlineBehaviour : MonoBehaviour
             if (!ActionTable.Ready) ActionTable.TryBuild();
             Session.Instance.Update();
             InputOverride.KeepUiFocus();
+            SosOnline.Update.AutoUpdate.Update();
             SessionLogs.Update();
             Overlay.Update();
             NativeMenus.Update();

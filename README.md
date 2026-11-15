@@ -125,18 +125,18 @@ The menus use the game's own widgets, so they look, sound and navigate like the 
 
 ## Install
 
-Everyone in a session needs **the same build of the mod** and the same game version (both are checked when a friend joins). The host builds it once and sends the zip to the others.
+Everyone in a session needs **the same build of the mod** and the same game version (both are checked when a friend joins). Install it once from a release; after that it **updates itself** (see *Automatic updates*).
 
 ### Friends: install from the zip
 
-You need Sea of Stars on Steam (Windows) and the zip the host sent you (`SosOnline-<commit>.zip`).
+You need Sea of Stars on Steam (Windows) and the mod zip, `SosOnline-<version>.zip`, from the [latest release](https://github.com/miguelguzmanr/sosonline/releases/latest).
 
 1. **Install BepInEx 6 (IL2CPP).** Download [BepInEx-Unity.IL2CPP-win-x64-6.0.0-be.793](https://builds.bepinex.dev/projects/bepinex_be/793/BepInEx-Unity.IL2CPP-win-x64-6.0.0-be.793%2Bdbc82f0.zip) and extract it into the game folder, next to `SeaOfStars.exe`. To find that folder: Steam → right-click Sea of Stars → *Manage* → *Browse local files*.
 2. **Start the game once from Steam** and wait for the title screen. The first start takes a minute or two longer while BepInEx prepares itself; a console window opens next to the game. Then quit.
 3. **Install the mod.** Extract the mod zip into the same game folder. It adds `BepInEx\plugins\SosOnline\SosOnline.dll`.
 4. Start the game from Steam. The title screen has an **Online** entry.
 
-To update, extract the new zip over the old one. To uninstall, delete `BepInEx\plugins\SosOnline`; to remove BepInEx too, delete `winhttp.dll` from the game folder.
+Updates install themselves (below). To update by hand, extract the new zip over the old one. To uninstall, delete `BepInEx\plugins\SosOnline`; to remove BepInEx too, delete `winhttp.dll` from the game folder.
 
 ### Host: build it
 
@@ -147,13 +147,35 @@ powershell -ExecutionPolicy Bypass -File tools\deploy.ps1 -GameDir "W:\SteamLibr
 ```
 
 - The first run installs BepInEx 6 IL2CPP (it asks first). Start the game once so BepInEx can generate its interop assemblies, quit, then run the script again to build and install the plugin.
-- Then pack the build for your friends and send them the zip:
+- To pack a zip without releasing it (needs PowerShell 7):
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File tools\package.ps1 -GameDir "W:\SteamLibrary\steamapps\common\Sea of Stars"
+pwsh -File tools\package.ps1 -GameDir "W:\SteamLibrary\steamapps\common\Sea of Stars"
 ```
 
-  It writes `dist\SosOnline-<commit>.zip`. Install that same zip yourself too (or run `deploy.ps1` from the same commit) so everyone has the identical file.
+  It writes `dist\SosOnline-<version>.zip`, signed when the release key exists.
+
+### Automatic updates
+
+At every game start the mod asks GitHub for the [latest release](https://github.com/miguelguzmanr/sosonline/releases/latest). If it is newer, the mod downloads its zip in the background. It installs the DLL only if the DLL's signature matches the release key built into the mod. A toast then says *Update … downloaded. Restart the game to use it*, and the next start runs it. Nothing downloaded is loaded in the running game.
+
+- To turn it off, set `AutoUpdate = false` under `[Updates]` in `BepInEx\config\sosonline.coop.cfg`.
+- Builds you made yourself with uncommitted changes (`…-modified`) and test runs never update.
+- If someone joins with a different version, the host refuses them and names both versions. Restarting the game picks up the update.
+- The check is one request to `api.github.com` at start, plus the download when there is an update. No account is needed and nothing personal is sent.
+
+### Releasing a build (maintainer)
+
+Needs PowerShell 7, the GitHub CLI (`gh`, logged in), and the release signing key.
+
+1. Once: `pwsh -File tools\new-signing-key.ps1` creates the key in `%APPDATA%\SosOnline\release-signing-key.txt` and prints the public key, which goes in `SosOnline\Update\AutoUpdate.cs`. **Back up the private key and never commit it.** Without it, players need one manual install of a build signed with a new key.
+2. For each release, commit everything on `main`, then run:
+
+```powershell
+pwsh -File tools\publish.ps1 -GameDir "W:\SteamLibrary\steamapps\common\Sea of Stars"
+```
+
+   It pushes `main`, builds and signs `dist\SosOnline-0.1.<count>+<commit>.zip`, and creates release `v0.1.<count>`. The count is the number of commits, so versions always increase. Players get the release at their next game start.
 
 ## Playing
 
@@ -283,6 +305,10 @@ SosOnline/          plugin source (net6.0, references the game's BepInEx interop
   Net/              session, protocol, transports (Steam, UDP)
   Steam/            steam_api64 flat-API bindings, invites
   UI/               native menus, localization bridge, toasts, debug panel
+  Update/           automatic updates from signed GitHub releases
 tests/              two-instance test scripts and input scripts
 tools/deploy.ps1    install BepInEx + build and deploy
+tools/package.ps1   build a (signed) zip in dist/
+tools/publish.ps1   release main on GitHub (automatic updates pick it up)
+tools/new-signing-key.ps1  create the release signing key (once)
 ```

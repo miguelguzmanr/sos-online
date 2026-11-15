@@ -4,3 +4,6 @@ obj/
 .vs/
 tests/.display-prefs.reg
 dist/
+# Never commit a release signing key (it lives in %APPDATA%\SosOnline).
+release-signing-key*.txt
+*.pkcs8

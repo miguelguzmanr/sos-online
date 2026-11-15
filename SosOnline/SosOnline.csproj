@@ -12,6 +12,8 @@
     <CopyLocalLockFileAssemblies>false</CopyLocalLockFileAssemblies>
     <CheckEolTargetFramework>false</CheckEolTargetFramework>
     <NoWarn>$(NoWarn);CS0618;CS8632</NoWarn>
+    <!-- Major.minor; the build target appends the commit count (0.1.<count>). -->
+    <VersionPrefixBase>0.1</VersionPrefixBase>
     <Version>0.1.0</Version>
     <!-- The commit is appended to the informational version ("0.1.0+e3d3ca0"): logs and the join handshake show it. -->
     <IncludeSourceRevisionInInformationalVersion>true</IncludeSourceRevisionInInformationalVersion>
@@ -63,6 +65,16 @@
     <Exec Command="git status --porcelain -- ." ConsoleToMSBuild="true" IgnoreExitCode="true" StandardOutputImportance="low" WorkingDirectory="$(MSBuildProjectDirectory)">
       <Output TaskParameter="ConsoleOutput" PropertyName="_GitDirty" />
     </Exec>
+    <!-- Build number = commits on HEAD, so versions sort: 0.1.<count>. Automatic updates compare it. -->
+    <Exec Command="git rev-list --count HEAD" ConsoleToMSBuild="true" IgnoreExitCode="true" StandardOutputImportance="low" WorkingDirectory="$(MSBuildProjectDirectory)">
+      <Output TaskParameter="ConsoleOutput" PropertyName="_GitCount" />
+    </Exec>
+    <PropertyGroup Condition="'$(_GitCount)' != ''">
+      <Version>$(VersionPrefixBase).$(_GitCount)</Version>
+      <AssemblyVersion>$(VersionPrefixBase).$(_GitCount).0</AssemblyVersion>
+      <FileVersion>$(VersionPrefixBase).$(_GitCount).0</FileVersion>
+      <InformationalVersion>$(VersionPrefixBase).$(_GitCount)</InformationalVersion>
+    </PropertyGroup>
     <PropertyGroup>
       <SourceRevisionId Condition="'$(_GitCommit)' != ''">$(_GitCommit)</SourceRevisionId>
       <SourceRevisionId Condition="'$(_GitCommit)' != '' and '$(_GitDirty)' != ''">$(_GitCommit)-modified</SourceRevisionId>

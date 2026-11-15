@@ -253,6 +253,8 @@ internal static class TestHarness
     }
 
     public static bool TraceEnabled => Args.ContainsKey("trace");
+    /// <summary>Started with any --sosonline-* flag (a test run): no automatic update.</summary>
+    public static bool HasArgs => Args.Count > 0;
 
     public static bool TryArg(string key, out string value) => Args.TryGetValue(key, out value);
 

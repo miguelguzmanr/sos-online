@@ -618,7 +618,8 @@ internal sealed class Session
                 string name = r.ReadString();
                 if (peer != null) { SendWelcome(peer); return; } // duplicate hello
                 string reason = null;
-                if (proto != Protocol.Version) reason = $"mod protocol mismatch (host {Protocol.Version}, you {proto})";
+                if (proto != Protocol.Version)
+                    reason = $"different mod versions (host {SessionLogs.Build}, you {modVersion}). Restart the game to get the latest version automatically, or install the same zip";
                 else if (gameVersion != (Application.version ?? "")) reason = $"game version mismatch (host {Application.version}, you {gameVersion})";
                 else if (ActionTable.Ready && actionHash != 0 && actionHash != ActionTable.Hash) reason = "input configuration mismatch";
                 else if (Phase == Phase.AwaitingReady) reason = "the session is starting, try again in a moment";
