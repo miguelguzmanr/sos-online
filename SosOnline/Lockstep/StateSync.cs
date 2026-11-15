@@ -15,6 +15,8 @@ namespace SosOnline.Lockstep;
 internal sealed class StateSnapshot
 {
     public int Frame;
+    /// <summary>Captured while a level was loading: not compared (scene loads and unloads finish at different times).</summary>
+    public bool Loading;
     /// <summary>(component name, value). Same order on every peer.</summary>
     public readonly List<(string key, string value)> Components = new();
     /// <summary>Per-component hashes. A snapshot read from the network has only these, not the values.</summary>
@@ -28,7 +30,7 @@ internal sealed class StateSnapshot
     public static StateSnapshot CaptureLocal(int frame)
     {
         var sw = System.Diagnostics.Stopwatch.StartNew();
-        var s = new StateSnapshot { Frame = frame };
+        var s = new StateSnapshot { Frame = frame, Loading = GameBridge.LoadingLevel };
         s.Add("lvl", () => GameBridge.CurrentLevelId);
         s.Add("scenes", () => GameBridge.ActiveSceneName);
         s.Add("party", s.CaptureParty);
@@ -161,6 +163,7 @@ internal sealed class StateSnapshot
     public void Write(BinaryWriter w)
     {
         w.Write(Frame);
+        w.Write(Loading);
         w.Write((byte)Hashes.Count);
         foreach (var (k, h) in Hashes) { w.Write(k); w.Write(h); }
         w.Write((byte)Characters.Count);
@@ -173,7 +176,7 @@ internal sealed class StateSnapshot
 
     public static StateSnapshot Read(BinaryReader r)
     {
-        var s = new StateSnapshot { Frame = r.ReadInt32() };
+        var s = new StateSnapshot { Frame = r.ReadInt32(), Loading = r.ReadBoolean() };
         int c = r.ReadByte();
         for (int i = 0; i < c; i++) s.Hashes.Add((r.ReadString(), r.ReadUInt32()));
         int n = r.ReadByte();
@@ -199,7 +202,7 @@ internal sealed class StateSnapshot
     /// <summary>One <c>key=[value]</c> group per component, so a diff shows which one differs.</summary>
     public override string ToString()
     {
-        var parts = new List<string> { $"f{Frame}" };
+        var parts = new List<string> { Loading ? $"f{Frame} loading" : $"f{Frame}" };
         foreach (var (k, v) in Components) parts.Add($"{k}=[{v}]");
         var pos = new List<string>();
         foreach (var (name, p) in Characters) pos.Add($"{name}@({P(p.x)},{P(p.y)},{P(p.z)})");
@@ -230,6 +233,7 @@ internal sealed class StateSync
 
     public int Corrections { get; private set; }
     public int Checks { get; private set; }
+    public int SkippedLoading { get; private set; }
     public int DesyncStreak { get; private set; }
     public bool Desynced => DesyncStreak >= 2;
     public string LastDesyncReason { get; private set; } = "";
@@ -238,7 +242,7 @@ internal sealed class StateSync
     {
         _localHistory.Clear();
         _pendingHost.Clear();
-        Corrections = Checks = DesyncStreak = 0;
+        Corrections = Checks = DesyncStreak = SkippedLoading = 0;
         LastDesyncReason = "";
     }
 
@@ -262,6 +266,7 @@ internal sealed class StateSync
 
     private void Compare(StateSnapshot host, StateSnapshot local)
     {
+        if (host.Loading || local.Loading) { SkippedLoading++; return; }
         Checks++;
         var reasons = new List<string>();
         foreach (var (key, hostHash) in host.Hashes)

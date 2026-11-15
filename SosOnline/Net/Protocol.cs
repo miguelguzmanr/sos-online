@@ -24,11 +24,13 @@ internal enum Msg : byte
     ResyncRequest = 17, // guest → host
     SlotLeft = 18,    // host → guests: slot, first frame without that slot
     Resync = 19,      // host → guests: stop and return to the title screen; the session restarts from a fresh save
+    Loaded = 20,      // guest → host: load sequence, frame this PC reached the end of level loading
+    LoadRelease = 21, // host → guests: load sequence, frame on which every PC ends the level loading
 }
 
 internal static class Protocol
 {
-    public const int Version = 2;
+    public const int Version = 3;
 
     public static (BinaryWriter w, MemoryStream ms) Begin(Msg type)
     {

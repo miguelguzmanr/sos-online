@@ -336,6 +336,7 @@ internal sealed class Session
         }
 
         UpdateDropIn();
+        if (IsHost && Phase == Phase.Running) TryReleaseLoad();
         if (IsHost && Phase == Phase.Running)
             foreach (var peer in _peers.Values.Where(p => p.LeavingAt >= 0 && Engine.AppliedFrame >= p.LeavingAt).ToList())
                 DropPeer(peer.Id, "left the session");
@@ -506,6 +507,14 @@ internal sealed class Session
                     if (other.Id != from) SendInputTo(other.Id, frame, slot, input, null);
                 break;
             }
+            case Msg.Loaded:
+            {
+                if (peer == null) return;
+                int seq = r.ReadInt32();
+                int at = r.ReadInt32();
+                ReportLoaded(peer.Slot, seq, at);
+                break;
+            }
             case Msg.Hash:
                 // Guests also run the comparison themselves; this is for the host's log.
                 break;
@@ -597,6 +606,13 @@ internal sealed class Session
             case Msg.Snapshot:
                 Sync.OnHostSnapshot(StateSnapshot.Read(r));
                 break;
+            case Msg.LoadRelease:
+            {
+                int seq = r.ReadInt32();
+                int at = r.ReadInt32();
+                ScheduleLoadRelease(seq, at);
+                break;
+            }
             case Msg.Stop:
                 StopLockstep(r.ReadString());
                 break;
@@ -705,6 +721,7 @@ internal sealed class Session
         ControllerRouting.RouteLocalDevicesTo(GameBridge.PlayerForSlot(LocalSlot));
 
         Sync.Reset();
+        ResetLoadBarrier();
         _desyncNotifiedFrame = -1;
         Engine.SendInput = BroadcastInput;
         Engine.PollNetwork = Pump;
@@ -809,6 +826,103 @@ internal sealed class Session
             SetError("Desync detected: " + Sync.LastDesyncReason);
         }
         TestHarness.OnFrame(frame);
+    }
+
+    // ------------------------------------------------------------------ loading barrier
+
+    private int _loadSeq;                 // level loads that reached their end during this lockstep run
+    private int _heldSeq = -1;            // load whose end is held locally, waiting for the release frame
+    private int _heldSince;
+    private readonly Dictionary<int, Dictionary<int, int>> _loadReports = new(); // host: seq → slot → frame
+
+    /// <summary>A level load is ending sooner than it was released for.</summary>
+    public int LoadBarrierLateReleases { get; private set; }
+
+    private void ResetLoadBarrier()
+    {
+        _loadSeq = 0;
+        _heldSeq = -1;
+        _loadReports.Clear();
+    }
+
+    /// <summary>
+    /// Called from <c>LevelManager.EndCurrentLevelLoading</c> during lockstep. Returns true if the call is held: it
+    /// runs later, on a release frame the host picks, identical on every PC.
+    /// </summary>
+    public bool HoldLevelLoadEnd()
+    {
+        if (!Engine.Running) return false;
+        int seq = ++_loadSeq;
+        int frame = Engine.AppliedFrame;
+        _heldSeq = seq;
+        _heldSince = frame;
+        Plugin.Log.LogInfo($"[barrier] load {seq} reached its end at f{frame}, held");
+        if (IsHost) ReportLoaded(LocalSlot, seq, frame);
+        else
+        {
+            var (w, ms) = Protocol.Begin(Msg.Loaded);
+            w.Write(seq);
+            w.Write(frame);
+            Send(HostId, ms, true);
+        }
+        return true;
+    }
+
+    /// <summary>Host: a PC (possibly the host) reached the end of load <paramref name="seq"/> at <paramref name="frame"/>.</summary>
+    private void ReportLoaded(int slot, int seq, int frame)
+    {
+        if (!_loadReports.TryGetValue(seq, out var bySlot)) _loadReports[seq] = bySlot = new Dictionary<int, int>();
+        bySlot[slot] = frame;
+        TryReleaseLoad();
+    }
+
+    /// <summary>Host: once every PC in the session reached the end of the load, schedule its release everywhere.</summary>
+    private void TryReleaseLoad()
+    {
+        if (!Engine.Running || _loadReports.Count == 0) return;
+        int now = Engine.AppliedFrame;
+        foreach (int seq in _loadReports.Keys.OrderBy(k => k).ToList())
+        {
+            var bySlot = _loadReports[seq];
+            bool all = true;
+            for (int s = 0; s < InputOverride.SlotCount; s++)
+                if (Engine.InSessionAt(s, now) && !bySlot.ContainsKey(s)) { all = false; break; }
+            if (!all) return;
+            // Guests can run at most Delay + 1 frames ahead of the host's applied frame (they need its system input),
+            // and they receive this message before any input that would take them past the release frame.
+            int release = now + Engine.Delay + 3;
+            Plugin.Log.LogInfo($"[barrier] load {seq}: reached at {string.Join(", ", bySlot.OrderBy(kv => kv.Key).Select(kv => $"P{kv.Key + 1} f{kv.Value}"))}; release at f{release}");
+            foreach (var peer in _peers.Values.Where(p => !p.Pending))
+            {
+                var (w, ms) = Protocol.Begin(Msg.LoadRelease);
+                w.Write(seq);
+                w.Write(release);
+                Send(peer.Id, ms, true);
+            }
+            _loadReports.Remove(seq);
+            ScheduleLoadRelease(seq, release);
+        }
+    }
+
+    private void ScheduleLoadRelease(int seq, int frame)
+    {
+        if (!Engine.Running) return;
+        if (frame < Engine.Frame)
+        {
+            LoadBarrierLateReleases++;
+            Plugin.Log.LogError($"[barrier] load {seq}: release frame {frame} already passed (now f{Engine.Frame})");
+        }
+        Engine.Schedule(frame, () =>
+        {
+            if (_heldSeq != seq)
+            {
+                Plugin.Log.LogError($"[barrier] load {seq}: release at f{frame} but this PC holds load {_heldSeq}");
+                return;
+            }
+            _heldSeq = -1;
+            Plugin.Log.LogInfo($"[barrier] load {seq} released at f{frame} (held {frame - _heldSince} frames)");
+            LoadBarrier.Release();
+        });
     }
 
     // ------------------------------------------------------------------ drop-out
