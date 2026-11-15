@@ -3,3 +3,4 @@ obj/
 *.user
 .vs/
 tests/.display-prefs.reg
+dist/

@@ -1,0 +1,7 @@
+# Host opens the game's own pause menu for everyone from its local pause screen ("Pause for everyone", third entry),
+# then closes it again.
+1000 UI_Start 4
+1040 UIMoveVertical 6 -1
+1070 UIMoveVertical 6 -1
+1100 UI_Confirm 4
+1300 UI_Start 4

@@ -230,6 +230,8 @@ Not covered: a joiner that catches up *after* a local-screen leave (the leave is
 
 Harness: `--sosonline-play` on the host plays a save with the lobby open; `--sosonline-quitruns=N` keeps a host that goes back to solo running until N runs have ended; a test game that never gets into a session quits after 300 s.
 
+**Pause for everyone** (local pause screen). The local pause had made the game's own pause menu unreachable in free gameplay, and with it Assign Players, Return to title and the host's game Options. The entry closes the local screen and puts a pause press into this PC's next synced input, so the shared pause menu opens on every PC as before (tested: open on f1107–1110 and closed on every PC by the banner's 0.15 s poll; a joiner caught up across it; 0 differences). Calling `PauseManager.TryPauseAndShowAssignControllers` on a scheduled frame was tried first: it returned false on every PC.
+
 **Not tested:** everything Steam (lobby, invites, the invite popup, `OpenToFriends`' automatic lobby), a character swap while another joiner catches up, and a re-sync during a battle.
 
 ## Tools added

@@ -19,7 +19,7 @@ It is a BepInEx 6 (IL2CPP) plugin. The game ships Steamworks (`steam_api64.dll`,
 | Lockstep engine | Runs in Rewired's update. Captures input for frame N + delay and sends it. Waits for every player's input for frame N, applies it, and reseeds `UnityEngine.Random` from (session seed, frame). | `Lockstep/LockstepEngine.cs` |
 | Shared game clock | Unity's time getters (`time`, unscaled time, `smoothDeltaTime`, `frameCount`) are hooked at the native level and read the same on every PC: local time plus an offset re-based on every level load's release. Each PC's own clock made 0.1 s timers end a frame apart (float rounding at a different magnitude), which drifted every battle. | `Lockstep/GameClock.cs` |
 | Device routing | During a session your pads and keyboard drive your slot's player. The game's automatic controller (re)assignment and its pause on focus loss or Steam overlay are suspended, because they would only happen on one PC. | `Patches/Patches.cs` |
-| Save mirroring | The host sends its save folder (slots, autosaves, options) to the guests. Guests redirect the game's save I/O to `SosOnlineSession\`, so their own saves are never read or overwritten. | `Game/SaveMirror.cs` |
+| Save mirroring | The host sends the save the session plays from (that slot and the index) to the guests. Guests redirect the game's save I/O to `SosOnlineSession\`, so their own saves are never read or overwritten. Options stay each PC's own. | `Game/SaveMirror.cs` |
 | Host fixes | Every 30 frames the host sends a snapshot: scenes, RNG, party positions. Guests compare it with their own state at that frame, correct small position drift in place, and report real divergence as a desync. | `Lockstep/StateSync.cs` |
 | Session and transport | Friends-only Steam lobby, Steam Networking Messages (relayed by Valve, NAT handled), star topology through the host, handshake checks (mod protocol, game version, input configuration). | `Net/Session.cs`, `Net/Transport.cs`, `Steam/SteamApi.cs` |
 | Steam joins | `+connect_lobby` at launch, overlay invites and friends-list **Join Game** while running (observed from Facepunch's callback dispatcher). | `Steam/SteamInvites.cs` |
@@ -123,28 +123,67 @@ The menus use the game's own widgets, so they look, sound and navigate like the 
 - **Text:** the mod's strings go through the game's localization (`LocalizationManager.GetText` patched for a private `SosOnline` category).
 - **F8** opens a small debug panel, and a one-line HUD shows players, ping and sync state during a session.
 
-## Playing
-
-1. Everyone installs the mod (see below) and starts the game.
-2. **Host:** Title screen → **Online** → **Host co-op session** → **Invite friends**, or friends can use **Join a friend**.
-3. **Guests:** accept the Steam invite, or use Title screen → **Online** → **Join a friend**, or use **Join Game** in the Steam friends list.
-4. **Host:** **Start co-op** and pick a save. Everyone loads it together, and guests automatically take over a party member.
-5. **Choosing who plays whom:** pause → **Assign Players** (the game's own screen, works online).
-6. **Friends joining later** drop in as soon as the game allows saving: everyone sees a short fade and keeps their place. **Leaving:** pause → **Online** → **Leave session**.
-
-Use a gamepad or keyboard. The mouse is not synchronized. Saves made during co-op are written by the host as usual. On guests they go to the session folder, so the host keeps the shared progress.
-
 ## Install
 
-Requirements: Sea of Stars on Steam (Windows) and the .NET 6+ SDK (to build).
+Everyone in a session needs **the same build of the mod** and the same game version (both are checked when a friend joins). The host builds it once and sends the zip to the others.
+
+### Friends: install from the zip
+
+You need Sea of Stars on Steam (Windows) and the zip the host sent you (`SosOnline-<commit>.zip`).
+
+1. **Install BepInEx 6 (IL2CPP).** Download [BepInEx-Unity.IL2CPP-win-x64-6.0.0-be.793](https://builds.bepinex.dev/projects/bepinex_be/793/BepInEx-Unity.IL2CPP-win-x64-6.0.0-be.793%2Bdbc82f0.zip) and extract it into the game folder, next to `SeaOfStars.exe`. To find that folder: Steam → right-click Sea of Stars → *Manage* → *Browse local files*.
+2. **Start the game once from Steam** and wait for the title screen. The first start takes a minute or two longer while BepInEx prepares itself; a console window opens next to the game. Then quit.
+3. **Install the mod.** Extract the mod zip into the same game folder. It adds `BepInEx\plugins\SosOnline\SosOnline.dll`.
+4. Start the game from Steam. The title screen has an **Online** entry.
+
+To update, extract the new zip over the old one. To uninstall, delete `BepInEx\plugins\SosOnline`; to remove BepInEx too, delete `winhttp.dll` from the game folder.
+
+### Host: build it
+
+Requirements: Sea of Stars on Steam (Windows) and the .NET 6+ SDK.
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File tools\deploy.ps1 -GameDir "W:\SteamLibrary\steamapps\common\Sea of Stars"
 ```
 
-- The first run installs BepInEx 6 IL2CPP (asks first).
-- Start the game once so BepInEx can generate its interop assemblies, then run the script again to build and install the plugin.
-- To uninstall, delete `winhttp.dll` from the game folder (disables BepInEx), or delete `BepInEx\plugins\SosOnline`.
+- The first run installs BepInEx 6 IL2CPP (it asks first). Start the game once so BepInEx can generate its interop assemblies, quit, then run the script again to build and install the plugin.
+- Then pack the build for your friends and send them the zip:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tools\package.ps1 -GameDir "W:\SteamLibrary\steamapps\common\Sea of Stars"
+```
+
+  It writes `dist\SosOnline-<commit>.zip`. Install that same zip yourself too (or run `deploy.ps1` from the same commit) so everyone has the identical file.
+
+## Playing
+
+**Start from your own game (no title screen).**
+1. **Host:** pause → **Online** → **Open to friends**. A Steam lobby stays open while you play (also on the next start: it's a setting, toggled in the title screen's **Online** menu). **Invite friends** opens the Steam overlay.
+2. **Friend:** accept the invite, or use **Join Game** in the Steam friends list. From the title screen, **Online** → **Join a friend** works too. Accepting while in your own game asks once, then replaces your game with the host's.
+3. The friend drops in at the next moment the game allows saving (no battle, cutscene or loading): either they catch up on their own PC while the host keeps playing, or everyone sees a short fade. Then they take a party member automatically.
+
+**Or start together from the title screen:** Title screen → **Online** → **Host co-op session**, friends join, then **Start co-op** and pick a save.
+
+**During a session:**
+- **Pause** (Start / Esc) opens a pause screen on your PC only; the game keeps running for everyone and the others see "P2 is paused". It has **Options** (volumes, brightness, display: this PC only), **Pause for everyone** and **Leave session** (the host: **End session** for everyone). In battles and cutscenes the game's own pause still stops everyone.
+- **Pause for everyone** opens the game's own pause menu on every PC, as in local co-op: the game stops for everyone and only you move in it. Use it for **Assign Players**, **Return to title** and the like.
+- **Choosing who plays whom:** pause → **Pause for everyone** → **Assign Players**; each player moves their own cursor. A friend who rejoins gets the character they had back, if it's free.
+- **Leaving:** pause → **Leave session**. Your character goes back to the party AI and the others keep playing. When the last friend leaves, the host simply keeps playing; the lobby stays open.
+- If a friend's game gets out of sync, it re-syncs by itself with a short reload on their PC.
+
+Use a gamepad or keyboard; the mouse is not synchronized. Saves made during co-op are written by the host as usual. On guests they go to a separate session folder, so the guests' own saves are never touched and the host keeps the shared progress. Options stay each PC's own.
+
+### Trying it with a friend over Steam (first time)
+
+Nothing Steam-specific has been tested end to end yet (see *Not yet verified*). Worth checking, in this order:
+1. The friend sees the invite and joins from the title screen; both PCs show the friend in the HUD line (F8 opens the debug panel).
+2. The friend drops in and takes a party member; both walk around for a few minutes. The HUD should keep saying *synced*.
+3. Pause on one PC: only that PC shows the pause screen, the other shows "P… is paused".
+4. A battle with timed hits from both players.
+5. The friend leaves and rejoins (gets the same character back); the host walks into a new area first so the rejoin catches up instead of reloading.
+6. Accept an invite while in your own game (one confirmation, then the join).
+
+If something goes wrong, the logs are in `BepInEx\LogOutput.log` on each PC (`[session]`, `[sync]`, `[dropin]`, `[catchup]`, `[resync]` lines).
 
 ## Testing without a second PC
 
@@ -216,10 +255,11 @@ The command-line flags are documented in `SosOnline/TestHarness.cs`.
 
 ## Known limitations
 
-- Joining mid-session waits for a moment the game allows saving, and everyone briefly reloads an autosave in place (a fade of about 1.5 s); about 2 s of progress other than positions is undone.
+- Joining mid-session waits for a moment the game allows saving. If the party entered its current area recently (and nobody joined, left or swapped characters since), only the joiner waits while it catches up; otherwise everyone briefly reloads an autosave in place (a fade of about 1.5 s) and about 2 s of progress other than positions is undone.
+- Options are not available from the pause screen in battles and cutscenes for guests (the shared pause there would put the PCs' menus out of step).
 - If the host leaves, the session ends; the host's save is the shared one.
 - On Assign Players, every player's cursor shows the keyboard icon (the stand-in device used online).
-- No automatic full resync after a desync yet. End the session from the pause menu and restart it from the latest save (or let someone "join" to force a reload).
+- After a desync, the guest that diverged re-syncs with a reload in place on its PC; a desync of the host's own game can't be detected (the host is the reference).
 - If one PC can't keep 60 fps, everyone slows down with it (lockstep).
 - Mod and game versions must match on every PC (checked when joining).
 

@@ -23,6 +23,9 @@ internal static class LocalPause
 {
     public static bool IsOpen { get; private set; }
 
+    /// <summary>"Pause for everyone" chosen: the next captured input of this PC's slot carries a pause press.</summary>
+    private static bool _forwardStart;
+
     private enum Page { Main, Options, ConfirmLeave }
 
     private static Page _page;
@@ -55,6 +58,15 @@ internal static class LocalPause
         Init();
 
         if (IsOpen && (s.Phase != Phase.Running || s.CatchingUp)) Close("session not running");
+
+        if (!IsOpen && own && _forwardStart)
+        {
+            _forwardStart = false;
+            snap = StripHeld(snap, true);
+            if (_start >= 0) snap.Bits[_start] |= ActionBits.Button | ActionBits.ButtonDown;
+            Plugin.Log.LogInfo($"[localpause] f{s.Engine.AppliedFrame} pause press sent for everyone (input frame {frame})");
+            return snap;
+        }
 
         if (!IsOpen)
         {
@@ -110,6 +122,7 @@ internal static class LocalPause
     public static void Reset()
     {
         IsOpen = false;
+        _forwardStart = false;
         _held.Clear();
     }
 
@@ -169,6 +182,9 @@ internal static class LocalPause
             default:
                 list.Add(new Entry { Label = "Resume", Action = () => Close("resume") });
                 if (LocalOptions.Available) list.Add(new Entry { Label = "Options", Action = () => GoTo(Page.Options, 0) });
+                // The game's own pause menu (Assign Players, the game's Options, return to title), shared as before:
+                // the next synced input carries a pause press that this screen lets through.
+                list.Add(new Entry { Label = "Pause for everyone", Action = () => { Close("pause for everyone"); _forwardStart = true; } });
                 list.Add(new Entry { Label = s.IsHost ? "End session" : "Leave session", Action = () => GoTo(Page.ConfirmLeave, 1) });
                 break;
         }
