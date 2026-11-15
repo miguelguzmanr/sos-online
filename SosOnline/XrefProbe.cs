@@ -11,16 +11,20 @@ internal static class XrefProbe
 {
     private static readonly (Type type, string method)[] Targets =
     {
-        (typeof(PauseMenu), "ReturnToTitle"),
-        (typeof(PauseMenu), "OnReturnToTitlePopupAnswered"),
-        (typeof(PauseMenu), "OnTitleScreenLoadingStarted"),
-        (typeof(GameOverScreen), "OnBackToTitle"),
-        (typeof(ReturnToTitleScreenNode), "OnUpdate"),
-        (typeof(ReturnToTitleScreenNode), "OnEnter"),
-        (typeof(TitleSequenceManager), "GoToScreen"),
-        (typeof(SaveManager), "SaveLoadedSaveSlot"),
-        (typeof(SinglePlayerPlusManager), "AssignCharactersToPlayers"),
-        (typeof(SinglePlayerPlusManager), "RemoveAllActivePlayers"),
+        // Loading path: title screen Continue → LevelManager (spike A, loading barrier).
+        (typeof(TitleScreen), "OnContinue"),
+        (typeof(TitleScreen), "WaitAndContinueGame"),
+        (typeof(LevelManager), "GetInitialLevelInfo"),
+        (typeof(LevelManager), "LoadLevel"),
+        (typeof(LevelManager), "DoLevelLoading"),
+        (typeof(LevelManager), "OnLevelLoaded"),
+        (typeof(LevelManager), "EndCurrentLevelLoading"),
+        (typeof(LevelManager), "UnloadUnusedAssetsBeforeEndingLoading"),
+        (typeof(LevelManager), "OnTransitionInDone"),
+        (typeof(LevelManager), "WaitBeforeLoading"),
+        (typeof(SaveManager), "LoadSaveSlot"),
+        (typeof(SaveManager), "LoadSaveSlotAndSetLastIndex"),
+        (typeof(SaveManager), "UnloadSaveSlotData"),
     };
 
     public static void Run()

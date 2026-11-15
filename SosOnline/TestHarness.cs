@@ -22,6 +22,8 @@ namespace SosOnline;
 ///   --sosonline-script=FILE       scripted local input: "frame [sys] action holdFrames [axis]" per line
 ///   --sosonline-shots=F1,F2,...   screenshot at those lockstep frames
 ///   --sosonline-quit=F            quit at lockstep frame F
+///   --sosonline-stateevery=N      state snapshot interval in frames (default 30)
+///   --sosonline-hpdiverge=F       at lockstep frame F, lower the first party member's HP by 1 on this PC only
 /// Every state snapshot is also appended to BepInEx/SosOnline/state-&lt;id&gt;.log for offline comparison.
 /// </summary>
 /// <summary>Per-instance copy of this plugin's log lines (several test instances share BepInEx's log file).</summary>
@@ -81,6 +83,7 @@ internal static class TestHarness
         Args.TryGetValue("script", out _scriptPath);
         if (Args.ContainsKey("nocomp")) TimingCompensation.Enabled = false;
         if (Args.TryGetValue("botoffset", out var bo)) CombatBot.ImpactOffset = int.Parse(bo);
+        if (Args.TryGetValue("stateevery", out var se)) StateSync.Interval = Math.Max(1, int.Parse(se));
 
         Directory.CreateDirectory(OutDir);
         BepInEx.Logging.Logger.Listeners.Add(new InstanceLog(Path.Combine(OutDir, $"log-{InstanceId}.txt")));
@@ -234,6 +237,18 @@ internal static class TestHarness
         target.InitiateEncounter(leader);
     }
 
+    /// <summary>Deliberate divergence for testing the state check: this PC only.</summary>
+    private static void DivergeHp(int frame)
+    {
+        var ids = GameBridge.Party?.CurrentParty;
+        if (ids == null || ids.Count == 0) { Plugin.Log.LogWarning("[test] hpdiverge: no party"); return; }
+        var data = GameBridge.Stats?.GetCharacterData(ids[0]);
+        if (data == null) { Plugin.Log.LogWarning("[test] hpdiverge: no character data"); return; }
+        int hp = data.currentHP;
+        data.SetCurrentHP(hp - 1);
+        Plugin.Log.LogInfo($"[test] hpdiverge at {frame}: {ids[0].characterId} HP {hp} -> {data.currentHP}");
+    }
+
     public static void OnSnapshot(StateSnapshot s)
     {
         _stateLog?.WriteLine($"{s.Hash():X8} {s}");
@@ -247,6 +262,7 @@ internal static class TestHarness
         if (At("leave", frame)) { Plugin.Log.LogInfo($"[test] leaving at {frame}"); session.Leave(); }
         if (At("kill", frame)) { Plugin.Log.LogInfo($"[test] killing process at {frame}"); System.Diagnostics.Process.GetCurrentProcess().Kill(); }
         if (At("pauseleave", frame)) { Plugin.Log.LogInfo($"[test] synced pause-menu leave of P2 at {frame}"); session.LeaveSlotDeterministic(1); }
+        if (At("hpdiverge", frame)) DivergeHp(frame);
         if (At("admit", frame)) { Plugin.Log.LogInfo($"[test] admit waiting players at {frame}"); session.RequestResync(); }
         if (At("assigntest", frame))
         {
@@ -267,6 +283,7 @@ internal static class TestHarness
         if (frame == _quitFrame)
         {
             Plugin.Log.LogInfo($"[timing] stats: deferred attacks {TimingCompensation.DeferredAttacks}, attack regrades {TimingCompensation.AttackRegrades}, block checks {TimingCompensation.BlockChecks}, upgrades {TimingCompensation.BlockUpgrades}, downgrades {TimingCompensation.BlockDowngrades}, look-ahead wait {Session.Instance.Engine.LookaheadWaitMs:F0} ms");
+            Plugin.Log.LogInfo($"[sync] snapshot capture: {StateSnapshot.CaptureCount} taken, avg {StateSnapshot.CaptureMsTotal / Math.Max(1, StateSnapshot.CaptureCount):F2} ms, max {StateSnapshot.CaptureMsMax:F2} ms");
             Plugin.Log.LogInfo($"[test] quitting at frame {frame}");
             _stateLog?.Flush();
             Application.Quit();

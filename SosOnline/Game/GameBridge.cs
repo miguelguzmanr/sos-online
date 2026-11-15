@@ -14,6 +14,10 @@ internal static class GameBridge
     public static SaveManager Saves => SafeInstance<SaveManager>();
     public static SinglePlayerPlusManager Coop => SafeInstance<SinglePlayerPlusManager>();
     public static PlayerPartyManager Party => SafeInstance<PlayerPartyManager>();
+    public static CharacterStatsManager Stats => SafeInstance<CharacterStatsManager>();
+    public static CurrencyManager Currency => SafeInstance<CurrencyManager>();
+    public static InventoryManager Inventory => SafeInstance<InventoryManager>();
+    public static CombatManager Combat => SafeInstance<CombatManager>();
 
     private static T SafeInstance<T>() where T : Manager<T>
     {
