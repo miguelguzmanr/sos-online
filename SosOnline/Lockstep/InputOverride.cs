@@ -34,9 +34,59 @@ internal static class InputOverride
     public static int ChannelOf(Player p) => p != null && ChannelByPlayerId.TryGetValue(p.id, out int c) ? c : -1;
     public static void ClearMapping() => ChannelByPlayerId.Clear();
 
-    public static void SetFrame(InputSnapshot[] channels)
+    /// <param name="advance">False when priming the first frame at start: hold durations don't count it.</param>
+    public static void SetFrame(InputSnapshot[] channels, bool advance = true)
     {
         for (int c = 0; c < ChannelCount; c++) Current[c] = channels[c] ?? InputSnapshot.Empty;
+        if (advance) AdvanceHold();
+    }
+
+    // ---------------- Hold durations ----------------
+    // Rewired's GetButtonTimePressed & co. measure how long each PC's own controllers have held a button, so a hold
+    // made by a remote player never advanced on this PC: the game's "overwrite this save?" question, confirmed by a
+    // hold on the guest's PC, stayed open on the host's while the guest's game went on (2026-11-15). They answer
+    // from the synced input instead: consecutive applied frames in each state, 1/60 s each.
+
+    private const double FrameTime = 1.0 / 60.0;
+    private enum Hold { Pressed, Unpressed, NegPressed, NegUnpressed, AxisActive, AxisInactive, RawActive, RawInactive, Count }
+    private static int[,,] _hold = new int[ChannelCount, 0, (int)Hold.Count];
+
+    /// <summary>Starts every hold count from zero (a new lockstep run).</summary>
+    public static void ResetHold() => _hold = new int[ChannelCount, ActionTable.Ids.Length, (int)Hold.Count];
+
+    private static void AdvanceHold()
+    {
+        int n = ActionTable.Ids.Length;
+        if (_hold.GetLength(1) != n) ResetHold();
+        for (int c = 0; c < ChannelCount; c++)
+        {
+            var s = Current[c];
+            for (int a = 0; a < n; a++)
+            {
+                // A snapshot made before the action table was built has no entries: nothing held.
+                bool known = a < s.Bits.Length;
+                var bits = known ? s.Bits[a] : ActionBits.None;
+                Step(c, a, Hold.Pressed, Hold.Unpressed, (bits & ActionBits.Button) != 0);
+                Step(c, a, Hold.NegPressed, Hold.NegUnpressed, (bits & ActionBits.NegButton) != 0);
+                Step(c, a, Hold.AxisActive, Hold.AxisInactive, known && s.Axis[a] != 0);
+                Step(c, a, Hold.RawActive, Hold.RawInactive, known && s.AxisRaw[a] != 0);
+            }
+        }
+    }
+
+    private static void Step(int c, int a, Hold on, Hold off, bool isOn)
+    {
+        if (isOn) { _hold[c, a, (int)on]++; _hold[c, a, (int)off] = 0; }
+        else { _hold[c, a, (int)off]++; _hold[c, a, (int)on] = 0; }
+    }
+
+    private static bool HoldTime(Player p, int index, Hold which, ref double result)
+    {
+        var s = Resolve(p);
+        if (s == null) return true;
+        int ch = ChannelByPlayerId.TryGetValue(p.id, out int c) ? c : -1;
+        result = ch >= 0 && index >= 0 && index < _hold.GetLength(1) ? _hold[ch, index, (int)which] * FrameTime : 0.0;
+        return false;
     }
 
     /// <summary>Returns the snapshot to answer from, or null to run Rewired's original method.</summary>
@@ -193,6 +243,33 @@ internal static class InputOverride
             return false;
         }
     }
+
+    [HarmonyPatch(typeof(Player), nameof(Player.GetButtonTimePressed), typeof(int))]
+    private static class P_TimePressed_I { private static bool Prefix(Player __instance, int __0, ref double __result) => HoldTime(__instance, ActionTable.IndexOf(__0), Hold.Pressed, ref __result); }
+
+    [HarmonyPatch(typeof(Player), nameof(Player.GetButtonTimePressed), typeof(string))]
+    private static class P_TimePressed_S { private static bool Prefix(Player __instance, string __0, ref double __result) => HoldTime(__instance, ActionTable.IndexOf(__0), Hold.Pressed, ref __result); }
+
+    [HarmonyPatch(typeof(Player), nameof(Player.GetButtonTimeUnpressed), typeof(int))]
+    private static class P_TimeUnpressed_I { private static bool Prefix(Player __instance, int __0, ref double __result) => HoldTime(__instance, ActionTable.IndexOf(__0), Hold.Unpressed, ref __result); }
+
+    [HarmonyPatch(typeof(Player), nameof(Player.GetNegativeButtonTimePressed), typeof(int))]
+    private static class P_NegTimePressed_I { private static bool Prefix(Player __instance, int __0, ref double __result) => HoldTime(__instance, ActionTable.IndexOf(__0), Hold.NegPressed, ref __result); }
+
+    [HarmonyPatch(typeof(Player), nameof(Player.GetNegativeButtonTimeUnpressed), typeof(int))]
+    private static class P_NegTimeUnpressed_I { private static bool Prefix(Player __instance, int __0, ref double __result) => HoldTime(__instance, ActionTable.IndexOf(__0), Hold.NegUnpressed, ref __result); }
+
+    [HarmonyPatch(typeof(Player), nameof(Player.GetAxisTimeActive), typeof(int))]
+    private static class P_AxisActive_I { private static bool Prefix(Player __instance, int __0, ref double __result) => HoldTime(__instance, ActionTable.IndexOf(__0), Hold.AxisActive, ref __result); }
+
+    [HarmonyPatch(typeof(Player), nameof(Player.GetAxisTimeInactive), typeof(int))]
+    private static class P_AxisInactive_I { private static bool Prefix(Player __instance, int __0, ref double __result) => HoldTime(__instance, ActionTable.IndexOf(__0), Hold.AxisInactive, ref __result); }
+
+    [HarmonyPatch(typeof(Player), nameof(Player.GetAxisRawTimeActive), typeof(int))]
+    private static class P_RawActive_I { private static bool Prefix(Player __instance, int __0, ref double __result) => HoldTime(__instance, ActionTable.IndexOf(__0), Hold.RawActive, ref __result); }
+
+    [HarmonyPatch(typeof(Player), nameof(Player.GetAxisRawTimeInactive), typeof(int))]
+    private static class P_RawInactive_I { private static bool Prefix(Player __instance, int __0, ref double __result) => HoldTime(__instance, ActionTable.IndexOf(__0), Hold.RawInactive, ref __result); }
 
     [HarmonyPatch(typeof(Player), nameof(Player.GetAxisRaw), typeof(int))]
     private static class P_GetAxisRaw_I

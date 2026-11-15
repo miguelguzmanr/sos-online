@@ -258,7 +258,13 @@ Two PCs over Steam (host at 1920×1080, guest at 2560×1440), build `d9d6210`, a
 
 **Drop-in autosave between training rounds.** The game allows saving in the short gaps between the training's rounds (`combat=off` for about 2 s), and a drop-in autosave was taken in one of them (f68987). The guest had already crashed by then (15:39:00, save at 15:39:24), so it didn't cause the crash, and the join-frame check would have postponed the join when the next round started. It still saved and sent files for nothing. **Fix:** the host takes a drop-in autosave only once no battle has run for 3 s (`Session.BattleSettleFrames`, 180 frames).
 
-**Protocol 9:** snapshots carry each character's facing.
+**Saving with P2 (second session, build `8bc51ec`).** P2 saved at a save point. On P2's PC the overwrite question stayed open about 2 s (f1508 to f1631) and closed. On the host's it never closed, so the host's game sat paused in the save menu while the guest's played on. The guest corrected a position and a facing on every snapshot for 30 s, and nothing was reported as out of sync.
+- **Cause:** Rewired's hold-duration getters (`GetButtonTimePressed`/`TimeUnpressed`, the negative-button versions, and `GetAxis`/`GetAxisRaw` `TimeActive`/`TimeInactive`) were not overridden. They measure each PC's own controllers, so a hold by a remote player never advanced. IL2CPP strips methods the game never calls, so their presence in the build means the game uses them. **Fix:** `InputOverride` answers them from the synced input (consecutive applied frames, 1/60 s each, counted from the start of each run).
+- **Not detected:** the snapshot had no pause state. **Fix:** a `pause` component (`PauseManager.isPaused`). A PC stuck in a menu now goes out of sync after two snapshots.
+- The tutorial attack that ran 1.5 s early on the guest (above) may be the same cause, for example a hold to skip the tutorial's text.
+- **Edge case:** a PC that drops in counts holds from its join frame, so a button already held at that moment reads shorter there until it is released.
+
+**Protocol 10:** snapshots carry each character's facing (9) and the game's pause flag (10).
 
 **Open:**
 - Why the guest ran Valere's attack 1.5 s early. It could be the same random-roll cause (the training dummy's behaviour); retest with the new build first.

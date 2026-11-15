@@ -41,6 +41,9 @@ internal sealed class StateSnapshot
         s.Add("inv", CaptureInventory);
         s.Add("combat", CaptureCombat);
         s.Add("npcs", CaptureNpcs);
+        // The game's own pause (menus, pause screen, questions). One PC stuck in a menu while the other plays on
+        // otherwise only shows as endless position corrections (2026-11-15: a save question left open on the host).
+        s.Add("pause", () => (Manager<PauseManager>.instance?.isPaused ?? false) ? "on" : "off");
         foreach (var (k, v) in s.Components) s.Hashes.Add((k, Fnv(v)));
         double ms = sw.Elapsed.TotalMilliseconds;
         CaptureMsTotal += ms;

@@ -204,7 +204,8 @@ internal sealed class LockstepEngine
 
         GameBridge.ResetSlotPlayers();
         RemapPlayers();
-        InputOverride.SetFrame(startFrame == 0 ? Slots(0) : EmptyFrame());
+        InputOverride.ResetHold();
+        InputOverride.SetFrame(startFrame == 0 ? Slots(0) : EmptyFrame(), advance: false);
         InputOverride.Active = true;
         Running = true;
         Plugin.Log.LogInfo($"[lockstep] started at frame {startFrame}: slot {localSlot}, host={isHost}, delay={Delay}, occupied={string.Join(",", occupied)}");
