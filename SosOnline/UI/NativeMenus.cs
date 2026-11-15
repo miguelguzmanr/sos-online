@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using HarmonyLib;
 using Il2CppInterop.Runtime;
+using Rewired;
 using SosOnline.Game;
 using SosOnline.Lockstep;
 using SosOnline.Net;
@@ -39,6 +40,7 @@ internal static class NativeMenus
     // ================================================================== popups (two choices max)
 
     private static bool _popupOpen;
+    private static int _popupToken;
 
     /// <summary>
     /// The game's generic popup: a message, up to two choices; onAnswer(index), -1 for cancel. False when it can't
@@ -56,13 +58,21 @@ internal static class NativeMenus
             p.AddChoice(OnlineText.Dynamic(yes));
             if (no != null) p.AddChoice(OnlineText.Dynamic(no));
             _popupOpen = true;
+            int token = ++_popupToken;
             Action<View> done = view =>
             {
                 var screen = view?.TryCast<GenericPopupScreen>();
-                if (screen == null) { _popupOpen = false; return; }
+                if (screen == null) { if (token == _popupToken) _popupOpen = false; return; }
+                bool handled = false;
                 Action<GenericPopupScreen, bool, int> answered = (_, success, index) =>
                 {
+                    // The game reuses its popup view and adds its own handler with +=, so ours stays on the view after
+                    // this answer. Without these guards, the game's next question (e.g. "Overwrite this save?") also
+                    // ran our old choice: a Yes there ended the co-op session.
+                    if (handled || token != _popupToken || !_popupOpen) return;
+                    handled = true;
                     _popupOpen = false;
+                    try { screen.onPopupAnswered = null; } catch { }
                     try { onAnswer?.Invoke(success ? index : -1); }
                     catch (Exception e) { Plugin.Log.LogError($"[menu] {e}"); }
                 };
@@ -204,6 +214,8 @@ internal static class NativeMenus
                 SubmenuOpen = true;
             }
 
+            // Rebuilding the page that is showing (a toggle, a player joining): keep the cursor on the same entry.
+            string keep = page == _currentPage ? SelectedEntryKey() : null;
             _currentPage = page;
             _pagePhase = Session.Instance.Phase;
             _pagePeers = Session.Instance.Peers.Count();
@@ -240,14 +252,52 @@ internal static class NativeMenus
                 _entries[i].navigation = n;
             }
 
+            _labels.Clear();
+            _labels.AddRange(items.Select(it => it.label));
             UpdateStatus(container);
-            Select(_entries[0]);
+            int at = keep == null ? -1 : _labels.FindIndex(l => EntryKey(l) == keep);
+            Select(_entries[Math.Max(at, 0)]);
         }
         catch (Exception e)
         {
             Plugin.Log.LogError($"[menu] submenu failed: {e}");
             CloseSubmenu(true);
         }
+    }
+
+    private static readonly List<string> _labels = new();
+
+    /// <summary>An entry's label without its current value ("Open to friends: on" → "Open to friends").</summary>
+    private static string EntryKey(string label)
+    {
+        int colon = label.IndexOf(':');
+        return colon >= 0 ? label[..colon] : label;
+    }
+
+    private static string SelectedEntryKey()
+    {
+        try
+        {
+            var selected = EventSystem.current?.currentSelectedGameObject;
+            if (selected == null) return null;
+            for (int i = 0; i < _labels.Count && i < _entries.Count; i++)
+                if (_entries[i] != null && _entries[i].gameObject == selected) return EntryKey(_labels[i]);
+        }
+        catch { }
+        return null;
+    }
+
+    /// <summary>The game's cancel (B / Esc) on any player, read straight from Rewired: no lockstep at the title.</summary>
+    private static bool BackPressed()
+    {
+        try
+        {
+            if (!ReInput.isReady) return false;
+            foreach (var p in ReInput.players.Players.ToList())
+                if (p != null && p.GetButtonDown("UI_Back")) return true;
+        }
+        catch { }
+        return false;
     }
 
     private static void Select(Selectable s)
@@ -332,6 +382,13 @@ internal static class NativeMenus
     {
         if (!SubmenuOpen || _title == null) return;
         if (!GameBridge.AtTitleScreen) { CloseSubmenu(false); return; }
+        if (!_popupOpen && BackPressed())
+        {
+            // Same as the page's own Back entry: a sub-page goes back to the main page, the main page closes.
+            if (_currentPage == MainPage) CloseSubmenu(true);
+            else ShowPage(MainPage);
+            return;
+        }
         var s = Session.Instance;
         if (s.Phase != _pagePhase || s.Peers.Count() != _pagePeers)
         {

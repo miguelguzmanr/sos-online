@@ -22,6 +22,8 @@ internal sealed class StateSnapshot
     /// <summary>Per-component hashes. A snapshot read from the network has only these, not the values.</summary>
     public readonly List<(string key, uint hash)> Hashes = new();
     public readonly List<(string name, Vector3 pos)> Characters = new();
+    /// <summary>Facing of each entry of <see cref="Characters"/> (-1 unknown). Corrected in place like positions, not hashed.</summary>
+    public readonly List<int> Angles = new();
 
     public static double CaptureMsTotal { get; private set; }
     public static int CaptureCount { get; private set; }
@@ -58,7 +60,11 @@ internal sealed class StateSnapshot
     private static string P(float f) => f.ToString("F2", CultureInfo.InvariantCulture);
     private static string P1(float f) => f.ToString("F1", CultureInfo.InvariantCulture);
 
-    /// <summary>Leader and followers: name and facing. Positions go to <see cref="Characters"/>, compared with drift tolerance.</summary>
+    /// <summary>
+    /// Leader and followers, by name. Positions and facing go to <see cref="Characters"/>/<see cref="Angles"/>: the
+    /// guest corrects those in place. Facing used to be part of this hash, and a one-step facing difference after a
+    /// drop-in forced a full re-sync again and again (2026-11-15).
+    /// </summary>
     private string CaptureParty()
     {
         var list = GameBridge.Party?.LeaderAndFollowers;
@@ -68,10 +74,11 @@ internal sealed class StateSnapshot
         {
             var c = list[i];
             if (c == null) continue;
-            Characters.Add((c.gameObject.name, c.transform.position));
             int angle = -1;
             try { angle = c.lookDirectionController?.CurrentLookAngle ?? -1; } catch { }
-            parts.Add($"{c.gameObject.name}/{angle}");
+            Characters.Add((c.gameObject.name, c.transform.position));
+            Angles.Add(angle);
+            parts.Add(c.gameObject.name);
         }
         return string.Join(" ", parts);
     }
@@ -148,6 +155,8 @@ internal sealed class StateSnapshot
         return string.Join(" ", parts);
     }
 
+    public int AngleAt(int i) => i < Angles.Count ? Angles[i] : -1;
+
     public string Get(string key)
     {
         foreach (var (k, v) in Components) if (k == key) return v;
@@ -167,10 +176,12 @@ internal sealed class StateSnapshot
         w.Write((byte)Hashes.Count);
         foreach (var (k, h) in Hashes) { w.Write(k); w.Write(h); }
         w.Write((byte)Characters.Count);
-        foreach (var (name, pos) in Characters)
+        for (int i = 0; i < Characters.Count; i++)
         {
+            var (name, pos) = Characters[i];
             w.Write(name);
             w.Write(pos.x); w.Write(pos.y); w.Write(pos.z);
+            w.Write((short)AngleAt(i));
         }
     }
 
@@ -181,7 +192,10 @@ internal sealed class StateSnapshot
         for (int i = 0; i < c; i++) s.Hashes.Add((r.ReadString(), r.ReadUInt32()));
         int n = r.ReadByte();
         for (int i = 0; i < n; i++)
+        {
             s.Characters.Add((r.ReadString(), new Vector3(r.ReadSingle(), r.ReadSingle(), r.ReadSingle())));
+            s.Angles.Add(r.ReadInt16());
+        }
         return s;
     }
 
@@ -205,7 +219,11 @@ internal sealed class StateSnapshot
         var parts = new List<string> { Loading ? $"f{Frame} loading" : $"f{Frame}" };
         foreach (var (k, v) in Components) parts.Add($"{k}=[{v}]");
         var pos = new List<string>();
-        foreach (var (name, p) in Characters) pos.Add($"{name}@({P(p.x)},{P(p.y)},{P(p.z)})");
+        for (int i = 0; i < Characters.Count; i++)
+        {
+            var (name, p) = Characters[i];
+            pos.Add($"{name}@({P(p.x)},{P(p.y)},{P(p.z)})/{AngleAt(i)}");
+        }
         parts.Add($"pos=[{string.Join(" ", pos)}]");
         return string.Join(" ", parts);
     }
@@ -277,32 +295,44 @@ internal sealed class StateSync
         }
         bool sameLevel = host.HashOf("lvl") == local.HashOf("lvl") && host.HashOf("scenes") == local.HashOf("scenes");
 
-        // Positional corrections, applied as a delta so movement since that frame is preserved.
-        int corrected = 0;
+        // Positional corrections, applied as a delta so movement since that frame is preserved. Facing is set to the
+        // host's only if this character hasn't turned since that frame (a later turn came from synced input).
+        int corrected = 0, turned = 0;
         if (sameLevel)
         {
             var party = GameBridge.Party?.LeaderAndFollowers;
-            foreach (var (name, hostPos) in host.Characters)
+            for (int hi = 0; hi < host.Characters.Count; hi++)
             {
+                var (name, hostPos) = host.Characters[hi];
                 int li = local.Characters.FindIndex(c => c.name == name);
                 if (li < 0) { reasons.Add($"character {name} missing locally"); continue; }
                 var delta = hostPos - local.Characters[li].pos;
-                if (delta.sqrMagnitude < 0.0004f) continue; // < 2 cm
+                bool move = delta.sqrMagnitude >= 0.0004f; // >= 2 cm
                 if (delta.sqrMagnitude > 25f) { reasons.Add($"{name} off by {delta.magnitude:F1}m"); }
-                if (party == null) continue;
+                int hostAngle = host.AngleAt(hi), localAngle = local.AngleAt(li);
+                bool turn = hostAngle >= 0 && localAngle >= 0 && hostAngle != localAngle;
+                if ((!move && !turn) || party == null) continue;
                 for (int i = 0; i < party.Count; i++)
                 {
                     var c = party[i];
                     if (c == null || c.gameObject.name != name) continue;
-                    c.transform.position += delta;
-                    corrected++;
+                    if (move) { c.transform.position += delta; corrected++; }
+                    if (turn)
+                    {
+                        try
+                        {
+                            var look = c.lookDirectionController;
+                            if (look != null && look.CurrentLookAngle == localAngle) { look.SetAngle(hostAngle, true, true); turned++; }
+                        }
+                        catch { }
+                    }
                 }
             }
         }
-        if (corrected > 0)
+        if (corrected > 0 || turned > 0)
         {
-            Corrections += corrected;
-            Plugin.Log.LogInfo($"[sync] frame {host.Frame}: corrected {corrected} character position(s)");
+            Corrections += corrected + turned;
+            Plugin.Log.LogInfo($"[sync] frame {host.Frame}: corrected {corrected} character position(s), {turned} facing(s)");
         }
 
         if (reasons.Count > 0)

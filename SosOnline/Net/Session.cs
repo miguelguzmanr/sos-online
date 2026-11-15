@@ -34,7 +34,9 @@ internal sealed class Session
         public ulong Id;
         public int Slot = -1;
         public string Name = "";
+        /// <summary>Median of the last <see cref="RttKeep"/> round trips: one slow reply (e.g. right after connecting) doesn't move it.</summary>
         public float RttMs;
+        public readonly List<float> RttSamples = new();
         public double LastHeard;
         public bool Ready;
         /// <summary>Joined while a session was running: drops in at the next moment the game allows saving.</summary>
@@ -56,6 +58,10 @@ internal sealed class Session
         public bool ForceStage2;
         /// <summary>Its game diverged: it leaves on <see cref="LeavingAt"/> and drops in again with a reload in place.</summary>
         public bool Resyncing;
+        /// <summary>When this guest's recent re-syncs were requested (host clock), for <see cref="ResyncLimit"/>.</summary>
+        public readonly List<double> ResyncTimes = new();
+        /// <summary>Host clock: don't drop this guest in again before then (it kept going out of sync).</summary>
+        public double HoldUntil;
         /// <summary>Host: this guest's character was checked against the one it played before (since it last began playing).</summary>
         public bool CharacterChecked;
     }
@@ -154,7 +160,15 @@ internal sealed class Session
     /// <summary>Host: a pending joiner that drops in by catching up (Stage 3) rather than by a reload.</summary>
     private bool WantsCatchUp(Peer p) => CatchUpEnabled && !p.ForceStage2 && (p.CatchUp != CatchUpStep.None || _area.Valid);
 
-    private bool HasStage2Pending => _peers.Values.Any(p => p.Pending && !WantsCatchUp(p));
+    private bool HasStage2Pending => _peers.Values.Any(p => p.Pending && !WantsCatchUp(p) && Now >= p.HoldUntil);
+
+    /// <summary>
+    /// Re-syncs allowed in <see cref="ResyncWindow"/> seconds before the next drop-in waits <see cref="ResyncHold"/>
+    /// seconds. Without it, a difference that each reload brings back made the guest join and leave every few seconds
+    /// (2026-11-15).
+    /// </summary>
+    private const int ResyncLimit = 3;
+    private const double ResyncWindow = 120, ResyncHold = 60;
 
     /// <summary>Guest only: we were admitted mid-session and wait to drop in.</summary>
     public bool WaitingForResync { get; private set; }
@@ -320,12 +334,15 @@ internal sealed class Session
         return GameClock.NextBase(GameClock.Now + lead);
     }
 
+    private const int MinAutoDelay = 4;
+
     private int AutoDelay()
     {
-        // One-way latency plus a little jitter headroom, in 60 Hz frames.
+        // One-way latency plus a little jitter headroom, in 60 Hz frames. At least 4: on 2026-11-15 every drop-in at
+        // delay 3 (35 ms ping) went out of sync within seconds, and none at 5, 6 or 15 did. Cause not found yet.
         float rtt = _peers.Count == 0 ? 0 : _peers.Values.Max(p => p.RttMs);
         int frames = (int)Math.Ceiling((rtt * 0.5f + 25f) / (1000f / 60f));
-        return Math.Clamp(frames, 2, 15);
+        return Math.Clamp(frames, MinAutoDelay, 15);
     }
 
     public void EndSession()
@@ -686,6 +703,15 @@ internal sealed class Session
                 if (peer == null || peer.Pending || peer.Resyncing || Phase != Phase.Running) return;
                 Plugin.Log.LogWarning($"[resync] {peer.Name}: diverged ({reason}); dropping in again with a reload");
                 peer.Resyncing = true;
+                double now = Now;
+                peer.ResyncTimes.RemoveAll(t => now - t > ResyncWindow);
+                peer.ResyncTimes.Add(now);
+                if (peer.ResyncTimes.Count >= ResyncLimit)
+                {
+                    peer.HoldUntil = now + ResyncHold;
+                    Plugin.Log.LogWarning($"[resync] {peer.Name}: {peer.ResyncTimes.Count} re-syncs in {ResyncWindow:F0} s; next drop-in in {ResyncHold:F0} s");
+                    Toast.Show($"{peer.Name} keeps going out of sync. They drop in again in a minute. If it keeps happening, end the session and start again from the title screen.");
+                }
                 LeaveScheduled(peer);
                 break;
             }
@@ -925,8 +951,15 @@ internal sealed class Session
         if (peer == null) return;
         double sent = r.ReadDouble();
         float rtt = (float)((Now - sent) * 1000.0);
-        peer.RttMs = peer.RttMs <= 0 ? rtt : peer.RttMs * 0.8f + rtt * 0.2f;
+        peer.RttSamples.Add(rtt);
+        if (peer.RttSamples.Count > RttKeep) peer.RttSamples.RemoveAt(0);
+        var sorted = peer.RttSamples.OrderBy(x => x).ToList();
+        peer.RttMs = sorted[sorted.Count / 2];
     }
+
+    private const int RttKeep = 9;
+    /// <summary>Round trips needed before the input delay is picked from a peer's ping.</summary>
+    private const int RttForDelay = 3;
 
     private void DropPeer(ulong id, string why)
     {
@@ -1344,7 +1377,9 @@ internal sealed class Session
     private void UpdateSoloCoop()
     {
         if (!IsHost) return;
-        if (HostInGameplay && _peers.Count > 0 && ActionTable.Ready && _peers.Values.All(p => p.RttMs > 0))
+        // Wait for a few round trips: the first reply after connecting can be very slow (1630 ms on 2026-11-15), and
+        // the input delay picked from it stays for the whole session.
+        if (HostInGameplay && _peers.Count > 0 && ActionTable.Ready && _peers.Values.All(p => p.RttSamples.Count >= RttForDelay))
             StartFromGameplay();
         if (Phase != Phase.Running) { _hadGuests = false; return; }
         if (_peers.Count > 0) _hadGuests = true;
@@ -1622,7 +1657,7 @@ internal sealed class Session
                 // A joiner catching up would miss this reload: it comes in with it instead.
                 foreach (var p in _peers.Values.Where(p => p.Pending && p.CatchUp != CatchUpStep.None)) CancelCatchUp(p, "a reload in place is starting");
                 _joiners.Clear();
-                _joiners.AddRange(_peers.Values.Where(p => p.Pending).Select(p => p.Id));
+                _joiners.AddRange(_peers.Values.Where(p => p.Pending && Now >= p.HoldUntil).Select(p => p.Id));
                 // Guests can be up to Delay + 1 frames ahead of us; they get this before any input that takes them further.
                 _dropInSaveFrame = Engine.AppliedFrame + Engine.Delay + 3;
                 _dropInSlot = -1;
