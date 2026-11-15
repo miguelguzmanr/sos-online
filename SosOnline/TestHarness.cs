@@ -33,6 +33,8 @@ namespace SosOnline;
 ///   --sosonline-play=SLOT[a]      guest: first play save SLOT on its own (offline), then join (--sosonline-join);
 ///                                 host: play save SLOT with the lobby open (no --sosonline-start), friends join it there
 ///   --sosonline-rememberchar=ID   host: pretend each guest last played character ID ("last": the last party member)
+///   --sosonline-swapat=F          host: at frame F, check every guest's character as if it had just begun playing, with
+///                                 the last party member as the one it played before (a swap while a joiner catches up)
 ///   --sosonline-joinafter=S       with --sosonline-play: join S seconds after its own game is playable (default 10)
 ///   --sosonline-loadatjoin        every PC in the session: start a level load the frame before the first join frame
 ///   --sosonline-nocatchup         host: joiners always drop in by a reload in place (Stage 2), never by catching up

@@ -1389,6 +1389,7 @@ internal sealed class Session
 
     /// <summary>Host: the character each guest (by Steam id) last played. Given back when they rejoin.</summary>
     private readonly Dictionary<ulong, string> _lastCharacter = new();
+    private bool _swapTestDone;
 
     /// <summary>
     /// Host, every frame of a run: when a guest begins playing (the game hands it the next free character), give it
@@ -1399,6 +1400,17 @@ internal sealed class Session
     private void UpdateCharacters()
     {
         if (!IsHost || Phase != Phase.Running) return;
+        // Test: at this frame, act as if every guest had just begun playing and had last played the last party member.
+        if (TestHarness.TryArg("swapat", out var swapAt) && Engine.AppliedFrame >= int.Parse(swapAt) && !_swapTestDone)
+        {
+            _swapTestDone = true;
+            Plugin.Log.LogInfo($"[test] f{Engine.AppliedFrame} forcing a character check for every guest");
+            foreach (var peer in _peers.Values.Where(p => !p.Pending))
+            {
+                peer.CharacterChecked = false;
+                _lastCharacter[peer.Id] = GameBridge.LastPartyCharacter();
+            }
+        }
         foreach (var peer in _peers.Values)
         {
             if (peer.Pending || peer.LeavingAt >= 0) continue;

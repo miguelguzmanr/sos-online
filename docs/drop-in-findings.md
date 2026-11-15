@@ -232,7 +232,10 @@ Harness: `--sosonline-play` on the host plays a save with the lobby open; `--sos
 
 **Pause for everyone** (local pause screen). The local pause had made the game's own pause menu unreachable in free gameplay, and with it Assign Players, Return to title and the host's game Options. The entry closes the local screen and puts a pause press into this PC's next synced input, so the shared pause menu opens on every PC as before (tested: open on f1107–1110 and closed on every PC by the banner's 0.15 s poll; a joiner caught up across it; 0 differences). Calling `PauseManager.TryPauseAndShowAssignControllers` on a scheduled frame was tried first: it returned false on every PC.
 
-**Not tested:** everything Steam (lobby, invites, the invite popup, `OpenToFriends`' automatic lobby), a character swap while another joiner catches up, and a re-sync during a battle.
+| `tests/resync.sh` with `DIVERGE=1600 QUIT=5400 EXTRA="--sosonline-encounter=1500 --sosonline-bot"` (re-sync during a battle) | Found mid-battle at f1620 and f1650 (stats and combat HP); the guest left at f1657, mid-battle, its character back to the party AI; the bots finished the battle; it dropped in again by a reload at f3033, after the battle; 0 of 75 snapshots differ after |
+| `tests/dropin.sh` with `HOSTFLAGS=--sosonline-swapat=1500` (a character swap while the third player catches up) | The swap went out for f1505 (guest 1 given GARL on every PC); the host cancelled the joiner's catch-up the same frame; the joiner dropped in by a reload at f1783; guest 1 0 of 129, joiner 0 of 78 snapshots differ |
+
+**Not tested:** everything Steam (lobby, invites, the invite popup, `OpenToFriends`' automatic lobby).
 
 ## Tools added
 
