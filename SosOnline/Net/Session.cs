@@ -182,6 +182,14 @@ internal sealed class Session
     private int _dropInSlot = -1;
     private string _dropInLevel;
     private int _saveableFrames;
+    /// <summary>Host: last lockstep frame a battle was running (this run).</summary>
+    private int _lastBattleFrame = int.MinValue / 2;
+    /// <summary>
+    /// Frames out of battle before a drop-in autosave. Some battles come in rounds with short gaps where the game
+    /// allows saving (the Mooncradle training: about 2 s), and a drop-in saved in one of them would only be postponed
+    /// by the next round (2026-11-15).
+    /// </summary>
+    private const int BattleSettleFrames = 180;
 
     // Every PC: the party positions to restore once the in-place reload's level load is released.
     private PartySpawn _reloadSpawn;
@@ -1643,15 +1651,18 @@ internal sealed class Session
     private void UpdateDropIn()
     {
         if (!IsHost) return;
-        if (Phase != Phase.Running) { _dropIn = DropInStep.None; _joiners.Clear(); _saveableFrames = 0; return; }
+        if (Phase != Phase.Running) { _dropIn = DropInStep.None; _joiners.Clear(); _saveableFrames = 0; _lastBattleFrame = int.MinValue / 2; return; }
         _joiners.RemoveAll(id => !_peers.ContainsKey(id));
+        if (GameBridge.InBattle) _lastBattleFrame = Engine.AppliedFrame;
         switch (_dropIn)
         {
             case DropInStep.None:
             {
                 if (!HasStage2Pending) { _saveableFrames = 0; return; }
-                // Free gameplay where the game itself allows saving (no battle, cutscene or loading).
-                _saveableFrames = GameBridge.CanSaveNow ? _saveableFrames + 1 : 0;
+                // Free gameplay where the game itself allows saving (no battle, cutscene or loading), and no battle
+                // for a few seconds (battles in rounds).
+                bool settled = Engine.AppliedFrame - _lastBattleFrame >= BattleSettleFrames;
+                _saveableFrames = GameBridge.CanSaveNow && settled ? _saveableFrames + 1 : 0;
                 if (_saveableFrames < 30) return;
                 _saveableFrames = 0;
                 // A joiner catching up would miss this reload: it comes in with it instead.
@@ -2239,6 +2250,7 @@ internal sealed class Session
         _dropIn = DropInStep.None;
         _joiners.Clear();
         _saveableFrames = 0;
+        _lastBattleFrame = int.MinValue / 2;
         _reloadSpawn = null;
         _readyAnywhere = false;
         _autoJoin = false;
