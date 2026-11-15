@@ -18,7 +18,8 @@ public sealed class Plugin : BasePlugin
     public const string Guid = "sosonline.coop";
     public const string Version = "0.1.0";
 
-    internal static ManualLogSource Log;
+    // Static copy of BasePlugin.Log (an instance member) so every class can log; hides it on purpose.
+    internal static new ManualLogSource Log;
 
     public override void Load()
     {
