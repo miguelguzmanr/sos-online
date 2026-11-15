@@ -158,7 +158,43 @@ On by default; `--sosonline-nocatchup` forces Stage 2.
 - On the guest's PC that is its keyboard. On the host and the other guests, that player has no controllers, so the page is empty and ignores the guest's Back. Those PCs stayed in Options until the end of the test, while the guest's own PC closed it and went on to the host's main menu.
 - The game state stayed identical (0 snapshot differences): only the UI diverged. It would turn into a game-state divergence as soon as the stuck PCs' menus take input differently.
 - The same steps by the host stay in sync on all three PCs: they all show the General tab and close on the same frames.
-- Not fixed yet. Options holds per-PC settings (audio, video, controls) anyway, so the likely fix is to take it out of the synced game: see the independent-menus note in the plan.
+- Fixed: see §8. Outside battles and cutscenes the pause (and its Options) is local now; in a shared pause, Options is blocked for guests.
+
+## 8. Local pause screen (tier 1): done
+
+**What changed.** In free gameplay a pause opens on the player's own PC only, for the host too (`UI/LocalPause.cs`):
+- The pause press, and everything pressed while the screen is open, is replaced by neutral input before it is sent (the last stage of `Engine.LocalInputFilter`, after the test scripts). Every PC gets the same input, so the shared game never sees the pause and the world keeps running; the paused player's character stands still.
+- Buttons still held when the screen closes are kept out until released, so the closing press doesn't act in the game.
+- Free gameplay means no battle, cutscene (`SaveManager.CanSave`), loading, `PauseManager.pauseDisablers`, or shared pause or menu. Everywhere else the press goes to the game as before (shared pause), so cutscene skipping and the like still work.
+- The screen: Resume, Options, Leave session (guests) or End session (host), each leave with a confirmation page. Game-styled on the mod's own canvas.
+
+**"P2 is paused".** Others see it in the banner (`MenuStatus`) when no shared menu is open ("P1 and P2 are paused" for several). It comes from `Msg.PauseStatus` (any → host, host relays; display only, never input). A joiner gets the current ones on Welcome. Protocol version 7.
+
+**Leave and End session from the local screen.** They no longer run inside a synced menu, so the host picks the frame:
+- Guest: `Msg.LeaveRequest` → the host applies a slot leave on `AppliedFrame + Delay + 2` and sends `SlotLeft`, like a drop-out (logged for joiners).
+- Host: `Msg.EndAt` (frame, reason) to everyone; `LockstepEngine.EndAt` stops lockstep at the start of that frame on every PC. Pending joiners get `Stop`.
+- That frame is safe: a guest can't be past the frames whose System input the host has sent, and the message arrives before anything the host sends later.
+
+**Options (`UI/LocalOptions.cs`).** Master, music, sound effects, ambience (with environment), voices, brightness, display mode. Applied with the game's setters on `SaveManager.SaveData.optionsSaveData` (`ApplyAudio`, `ApplyVideo`) and written with `SaveManager.SaveOptions` when leaving the page or closing the screen.
+- Options files are now each PC's own: `SaveMirror` no longer sends `SOS_Options.sos` and never redirects it into the session copy. Before, a guest loaded the host's options (volumes, display, controls) at session start.
+- Left out: language and "Timed Hit HUD feedback" (they may change what the shared game shows or does), and the control mappings (the game's controls pages need its own Options screen).
+- Risk to watch: guests now keep their own language too. If text length or language ever drives game timing, that would diverge; nothing seen so far.
+
+**Shared pause, guest Options.** (Untested: see the table.) `PauseMenu.Options` is skipped when the UI player is a guest (synced state, so every PC skips it on the same frame); the guest gets a toast pointing to their own pause screen. Fixes the §7 desync where it can still happen (battles, cutscenes).
+
+**Tests** (scripts in `tests/scripts`, run with `tests/menu-status.sh`; set `HOSTSCRIPT`, `GUESTSCRIPT`, `EXTRA`):
+
+| Scripts | Result |
+|---|---|
+| `host-local-pause.txt` + `guest-local-pause.txt` | No `[menu]` lines on any PC; `[localpause]` open/close lines; others log and show "P1/P2 paused"; 0 snapshot differences |
+| `host-local-end.txt` + `guest-local-leave.txt` | Guest 1 leaves on f2454 on all three PCs; host and joiner stop on f2901; 0 differences up to there |
+| `host-local-pause.txt` + `guest-local-options.txt` | Only guest 1's own options file changes (master 10→8, brightness up); host's and joiner's unchanged; nothing in the session copy; 0 differences |
+| `host-battle-options.txt` / `host-walk.txt` + `guest-battle-options.txt`, `EXTRA=--sosonline-encounter=1500` | No pause menu opened at all during the battle, for the host (player or System channel) or the guest: the game seems to ignore `UI_Start` there. So the Options guard is in place but untested; it matters for cutscenes or wherever else a shared pause still opens. 0 differences |
+| `tests/dropin.sh`, `tests/dropin-two.sh` | Pass, 0 differences |
+
+Not covered: a joiner that catches up *after* a local-screen leave (the leave is in the area log like a drop-out, so it should replay); a leave or end while a joiner is mid-catch-up; changing display mode (only volumes and brightness were exercised). Test scripts mark a held key as repeating on every frame, so a held left/right in a script moves a setting several steps; hardware repeats at Rewired's interval.
+
+**Test games after a session ends:** `--sosonline-quit` counts lockstep frames, which stop at End session or Leave. The harness now counts the frames that were left in Unity frames (at least one second) and quits then.
 
 ## Tools added
 

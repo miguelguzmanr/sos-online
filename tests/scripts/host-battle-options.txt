@@ -1,0 +1,9 @@
+# Host walks; a battle starts at 1500 (--sosonline-encounter=1500). The host pauses (System channel: in battles only the
+# System player pauses) in the battle (a shared pause), opens
+# Options (the second entry), which stays allowed for the host, backs out and closes the pause menu.
+700 MoveVertical 60 -1
+1700 sys UI_Start 4
+1790 sys UIMoveVertical 6 -1
+1850 sys UI_Confirm 4
+1950 sys UI_Back 4
+2050 sys UI_Back 4

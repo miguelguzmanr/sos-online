@@ -4,6 +4,7 @@
 1230 MoveVertical 45 -1
 2200 UI_Start 4
 2290 UIMoveVertical 6 -1
+2320 UIMoveVertical 6 -1
 2350 UI_Confirm 4
 2420 UI_Confirm 4
 2500 UI_Back 4

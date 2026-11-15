@@ -424,6 +424,28 @@ internal static class NativeMenus
         }
     }
 
+    /// <summary>
+    /// Options from the shared pause (battles and cutscenes; elsewhere the pause is local, see <see cref="LocalPause"/>)
+    /// only for the host. A guest's controls page is built from the controllers assigned to that player on each PC, so
+    /// it is empty on every PC but the guest's and ignores the guest's Back there: the menus diverge (findings §7). The
+    /// UI player is synced game state, so every PC skips it on the same frame.
+    /// </summary>
+    [HarmonyPatch(typeof(PauseMenu), nameof(PauseMenu.Options))]
+    private static class P_PauseOptions
+    {
+        private static bool Prefix(PauseMenu __instance)
+        {
+            if (!NativeCode.Is<PauseMenu>(__instance) || Session.Instance.Phase != Phase.Running) return true;
+            int slot = -1;
+            try { slot = GameBridge.SlotOf(GameBridge.Coop?.GetUIInputsPlayer()); } catch { }
+            if (slot <= 0) return true;
+            Plugin.Log.LogInfo($"[menu] f{Session.Instance.Engine.AppliedFrame} Options from the shared pause blocked for P{slot + 1}");
+            if (slot == Session.Instance.LocalSlot)
+                Toast.Show("Options open from your own pause screen, outside battles and cutscenes.");
+            return false;
+        }
+    }
+
     private static bool _loggedPauseIds;
 
     private static string PickPauseAnchor(PauseMenu menu)

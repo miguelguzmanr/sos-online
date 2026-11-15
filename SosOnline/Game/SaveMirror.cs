@@ -9,7 +9,7 @@ namespace SosOnline.Game;
 /// <summary>
 /// Keeps every peer on the host's save data.
 ///
-/// Host: packs its save folder (index, slots, autosaves, options).
+/// Host: packs its save folder (index, slots, autosaves; options stay each PC's own).
 /// Guest: writes those files into &lt;saves&gt;/SosOnlineSession and redirects the game's file I/O there, then
 /// reloads SaveManager. The guest's own saves are never read or written while the mirror is active, and the
 /// in-game saves made during co-op land in the mirror folder (the host keeps the canonical copy).
@@ -46,9 +46,9 @@ internal static class SaveMirror
     public static List<(string name, byte[] data)> PackHostFiles()
     {
         var files = new List<(string, byte[])>();
-        // Slots, autosaves (Autosave_SOS_SaveSlotN.sos), index and options.
+        // Slots, autosaves (Autosave_SOS_SaveSlotN.sos) and index. Not the options: those stay each PC's own.
         foreach (var path in Directory.GetFiles(OwnDir, "*.sos"))
-            files.Add((Path.GetFileName(path), File.ReadAllBytes(path)));
+            if (!IsOptionsFile(path)) files.Add((Path.GetFileName(path), File.ReadAllBytes(path)));
         return files;
     }
 
@@ -99,9 +99,19 @@ internal static class SaveMirror
 
     public static bool ReloadDone => _reload == null || _reload.IsCompleted;
 
+    private static string _optionsName;
+
+    public static bool IsOptionsFile(string fileName)
+    {
+        if (_optionsName == null) { try { _optionsName = SaveManager.OPTIONS_FILENAME ?? ""; } catch { _optionsName = ""; } }
+        return _optionsName.Length > 0 && string.Equals(Path.GetFileNameWithoutExtension(fileName), Path.GetFileNameWithoutExtension(_optionsName), StringComparison.OrdinalIgnoreCase);
+    }
+
     private static string Redirect(string fileName)
     {
-        string folder = Active ? MirrorFolder : SandboxFolder;
+        // Options (volumes, display, controls) belong to each PC: never the host's copy, and a change made during a
+        // session goes to this PC's own file and stays after it.
+        string folder = Active && !IsOptionsFile(fileName) ? MirrorFolder : SandboxFolder;
         if (folder == null || string.IsNullOrEmpty(fileName)) return fileName;
         if (fileName.Contains(folder)) return fileName;
         if (Path.IsPathRooted(fileName))

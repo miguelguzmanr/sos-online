@@ -1,0 +1,8 @@
+# Player 2 joins and walks; a battle starts at 1500 (--sosonline-encounter=1500). Player 2 pauses in the battle (a shared
+# pause), picks Options (the second entry), which is blocked for guests, then closes the pause menu.
+1000 Join 6
+1150 MoveHorizontal 60 1
+1700 UI_Start 4
+1790 UIMoveVertical 6 -1
+1850 UI_Confirm 4
+1950 UI_Back 4

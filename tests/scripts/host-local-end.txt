@@ -1,0 +1,8 @@
+# Host walks, then ends the session for everyone from the local pause screen (End session, then confirm).
+700 MoveVertical 60 -1
+2700 UI_Start 4
+2750 UIMoveVertical 6 -1
+2780 UIMoveVertical 6 -1
+2800 UI_Confirm 4
+2850 UIMoveVertical 6 1
+2900 UI_Confirm 4

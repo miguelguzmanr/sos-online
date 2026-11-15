@@ -23,11 +23,11 @@ internal static class LocalPause
 {
     public static bool IsOpen { get; private set; }
 
-    private enum Page { Main, ConfirmLeave }
+    private enum Page { Main, Options, ConfirmLeave }
 
     private static Page _page;
     private static int _cursor;
-    private static int _start = -2, _confirm, _back, _vertical;
+    private static int _start = -2, _confirm, _back, _vertical, _horizontal;
 
     /// <summary>Actions held when the screen closed: kept out of the input until released, so they don't arrive as new presses.</summary>
     private static readonly HashSet<int> _held = new();
@@ -39,6 +39,7 @@ internal static class LocalPause
         _confirm = ActionTable.IndexOf("UI_Confirm");
         _back = ActionTable.IndexOf("UI_Back");
         _vertical = ActionTable.IndexOf("UIMoveVertical");
+        _horizontal = ActionTable.IndexOf("UIMoveHorizontal");
     }
 
     /// <summary>
@@ -94,11 +95,13 @@ internal static class LocalPause
     private static void Close(string why, InputSnapshot raw = null)
     {
         if (!IsOpen) return;
+        raw ??= _raw;
         IsOpen = false;
         _held.Clear();
         if (raw != null)
             for (int i = 0; i < raw.Bits.Length; i++)
                 if ((raw.Bits[i] & (ActionBits.Button | ActionBits.NegButton)) != 0 || raw.Axis[i] != 0) _held.Add(i);
+        LocalOptions.SaveIfChanged();
         Plugin.Log.LogInfo($"[localpause] f{Session.Instance.Engine.AppliedFrame} closed: {why}");
         Session.Instance.SetLocalPaused(false);
     }
@@ -128,54 +131,100 @@ internal static class LocalPause
     private static bool Down(InputSnapshot s, int action) => action >= 0 && (s.Bits[action] & ActionBits.ButtonDown) != 0;
     private static bool NegDown(InputSnapshot s, int action) => action >= 0 && (s.Bits[action] & ActionBits.NegButtonDown) != 0;
 
-    private static List<(string label, System.Action action)> Entries()
+    private sealed class Entry
+    {
+        public string Label;
+        public System.Func<string> Value;
+        public System.Action Action;
+        public System.Action<int> Change;
+    }
+
+    private static List<Entry> Entries()
     {
         var s = Session.Instance;
-        var list = new List<(string, System.Action)> { ("Resume", null) };
-        if (_page == Page.ConfirmLeave)
+        var list = new List<Entry>();
+        switch (_page)
         {
-            list.Clear();
-            list.Add((s.IsHost ? "End session for everyone" : "Leave session", () =>
-            {
-                if (s.IsHost) s.EndSessionScheduled("The host ended the co-op session");
-                else s.RequestLeave();
-            }));
-            list.Add(("Back", () => { _page = Page.Main; _cursor = 0; }));
-            return list;
+            case Page.ConfirmLeave:
+                list.Add(new Entry
+                {
+                    Label = s.IsHost ? "End session for everyone" : "Leave session",
+                    Action = () =>
+                    {
+                        if (s.IsHost) s.EndSessionScheduled("The host ended the co-op session");
+                        else s.RequestLeave();
+                        Close(s.IsHost ? "end session" : "leave session");
+                    },
+                });
+                list.Add(new Entry { Label = "Back", Action = () => GoTo(Page.Main, 2) });
+                break;
+            case Page.Options:
+                foreach (var (field, label) in LocalOptions.Rows)
+                {
+                    var f = field;
+                    list.Add(new Entry { Label = label, Value = () => LocalOptions.Value(f), Change = dir => LocalOptions.Change(f, dir) });
+                }
+                list.Add(new Entry { Label = "Back", Action = () => GoTo(Page.Main, 1) });
+                break;
+            default:
+                list.Add(new Entry { Label = "Resume", Action = () => Close("resume") });
+                if (LocalOptions.Available) list.Add(new Entry { Label = "Options", Action = () => GoTo(Page.Options, 0) });
+                list.Add(new Entry { Label = s.IsHost ? "End session" : "Leave session", Action = () => GoTo(Page.ConfirmLeave, 1) });
+                break;
         }
-        list.Add((s.IsHost ? "End session" : "Leave session", () => { _page = Page.ConfirmLeave; _cursor = 1; }));
         return list;
     }
+
+    private static void GoTo(Page page, int cursor)
+    {
+        if (_page == Page.Options) LocalOptions.SaveIfChanged();
+        _page = page;
+        _cursor = cursor;
+    }
+
+    private static InputSnapshot _raw;
 
     private static void Navigate(InputSnapshot raw)
     {
         var entries = Entries();
-        if (Down(raw, _start)) { Close("resume (pause)", raw); return; }
-        if (Down(raw, _back))
+        _raw = raw;
+        try
         {
-            if (_page == Page.Main) Close("resume (back)", raw);
-            else { _page = Page.Main; _cursor = 0; }
-            return;
+            if (Down(raw, _start)) { Close("resume (pause)"); return; }
+            if (Down(raw, _back))
+            {
+                if (_page == Page.Main) Close("resume (back)");
+                else GoTo(Page.Main, _page == Page.Options && LocalOptions.Available ? 1 : 0);
+                return;
+            }
+            if (Down(raw, _vertical)) _cursor = (_cursor + entries.Count - 1) % entries.Count;
+            if (NegDown(raw, _vertical)) _cursor = (_cursor + 1) % entries.Count;
+            var e = entries[Mathf.Clamp(_cursor, 0, entries.Count - 1)];
+            if (e.Change != null)
+            {
+                if (Down(raw, _horizontal) || Repeat(raw, _horizontal, false)) e.Change(1);
+                else if (NegDown(raw, _horizontal) || Repeat(raw, _horizontal, true)) e.Change(-1);
+            }
+            if (Down(raw, _confirm) && e.Action != null)
+            {
+                Plugin.Log.LogInfo($"[localpause] f{Session.Instance.Engine.AppliedFrame} chose {e.Label}");
+                e.Action();
+            }
         }
-        if (Down(raw, _vertical)) _cursor = (_cursor + entries.Count - 1) % entries.Count;
-        if (NegDown(raw, _vertical)) _cursor = (_cursor + 1) % entries.Count;
-        if (Down(raw, _confirm))
-        {
-            var (label, action) = entries[Mathf.Clamp(_cursor, 0, entries.Count - 1)];
-            Plugin.Log.LogInfo($"[localpause] f{Session.Instance.Engine.AppliedFrame} chose {label}");
-            if (action == null) { Close("resume", raw); return; }
-            bool confirming = _page == Page.ConfirmLeave;
-            action();
-            if (confirming && label != "Back") Close(label, raw);
-        }
+        finally { _raw = null; }
     }
+
+    /// <summary>A held direction repeats (Rewired's repeat state), so a slider can be swept by holding.</summary>
+    private static bool Repeat(InputSnapshot s, int action, bool negative) =>
+        action >= 0 && (s.Bits[action] & (negative ? ActionBits.NegRepeating : ActionBits.Repeating)) != 0
+        && (s.Bits[action] & (negative ? ActionBits.NegButtonDown : ActionBits.ButtonDown)) == 0;
 
     // ------------------------------------------------------------------ screen (canvas)
 
     private static Canvas _canvas;
     private static RectTransform _panel;
     private static TMPro.TextMeshProUGUI _title, _hint;
-    private static readonly List<(RectTransform row, UnityEngine.UI.Image cursor, TMPro.TextMeshProUGUI text)> _rows = new();
+    private static readonly List<(RectTransform row, UnityEngine.UI.Image cursor, TMPro.TextMeshProUGUI text, TMPro.TextMeshProUGUI value)> _rows = new();
     private static string _shown;
     private static RectTransform _separator2;
 
@@ -189,15 +238,13 @@ internal static class LocalPause
         if (!show) { _shown = null; return; }
 
         var entries = Entries();
-        string key = $"{_page}|{_cursor}|{string.Join("|", entries.ConvertAll(e => e.label))}";
+        string key = $"{_page}|{_cursor}|{string.Join("|", entries.ConvertAll(e => e.Label + "=" + e.Value?.Invoke()))}";
         if (key == _shown) return;
         _shown = key;
 
         var s = Session.Instance;
-        _title.text = _page == Page.Main ? "Paused" : s.IsHost ? "End the co-op session?" : "Leave the co-op session?";
-        _hint.text = GameUi.Drawable(_page == Page.Main
-            ? "Only you are paused. The game keeps running for everyone."
-            : s.IsHost ? "Everyone keeps playing on their own from here." : "Your character goes back to the party AI; the others keep playing.", true);
+        _title.text = Title(s);
+        _hint.text = GameUi.Drawable(Hint(s), true);
 
         while (_rows.Count < entries.Count) _rows.Add(Row(_rows.Count));
         for (int i = 0; i < _rows.Count; i++)
@@ -205,9 +252,11 @@ internal static class LocalPause
             bool on = i < entries.Count;
             _rows[i].row.gameObject.SetActive(on);
             if (!on) continue;
-            _rows[i].text.text = GameUi.Drawable(entries[i].label);
+            _rows[i].text.text = GameUi.Drawable(entries[i].Label);
+            string value = entries[i].Value?.Invoke();
+            _rows[i].value.text = string.IsNullOrEmpty(value) ? "" : GameUi.Drawable($"< {value} >");
             _rows[i].cursor.gameObject.SetActive(i == _cursor);
-            _rows[i].text.color = i == _cursor ? GameUi.TextMain : GameUi.TextSecondary;
+            _rows[i].text.color = _rows[i].value.color = i == _cursor ? GameUi.TextMain : GameUi.TextSecondary;
         }
         float y = Top + entries.Count * RowH + 2;
         GameUi.Place(_separator2, 6, y, W - 12, 6);
@@ -215,7 +264,21 @@ internal static class LocalPause
         _panel.sizeDelta = new Vector2(W, y + 11 + 22);
     }
 
-    private static (RectTransform, UnityEngine.UI.Image, TMPro.TextMeshProUGUI) Row(int i)
+    private static string Title(Session s) => _page switch
+    {
+        Page.Options => "Options",
+        Page.ConfirmLeave => s.IsHost ? "End the co-op session?" : "Leave the co-op session?",
+        _ => "Paused",
+    };
+
+    private static string Hint(Session s) => _page switch
+    {
+        Page.Options => "Left and right change a setting. Only this PC changes.",
+        Page.ConfirmLeave => s.IsHost ? "Everyone keeps playing on their own from here." : "Your character goes back to the party AI; the others keep playing.",
+        _ => "Only you are paused. The game keeps running for everyone.",
+    };
+
+    private static (RectTransform, UnityEngine.UI.Image, TMPro.TextMeshProUGUI, TMPro.TextMeshProUGUI) Row(int i)
     {
         var row = GameUi.Rect(_panel, "Row" + i);
         GameUi.Place(row, 6, Top + i * RowH, W - 12, RowH - 2);
@@ -225,7 +288,11 @@ internal static class LocalPause
         text.enableWordWrapping = false;
         GameUi.Stretch(text.rectTransform);
         text.rectTransform.offsetMin = new Vector2(Pad - 6, 0);
-        return (row, cursor, text);
+        var value = GameUi.Text(row, "Value", false, TMPro.TextAlignmentOptions.Right);
+        value.enableWordWrapping = false;
+        GameUi.Stretch(value.rectTransform);
+        value.rectTransform.offsetMax = new Vector2(-(Pad - 6), 0);
+        return (row, cursor, text, value);
     }
 
     private static void Build()
@@ -254,8 +321,13 @@ internal static class LocalPause
     {
         if (!IsOpen || GameUi.Ready) return;
         var entries = Entries();
-        var lines = new List<string> { _page == Page.Main ? "Paused (only you; the game keeps running)" : "Are you sure?" };
-        for (int i = 0; i < entries.Count; i++) lines.Add((i == _cursor ? "> " : "   ") + entries[i].label);
+        var s = Session.Instance;
+        var lines = new List<string> { Title(s), Hint(s) };
+        for (int i = 0; i < entries.Count; i++)
+        {
+            string value = entries[i].Value?.Invoke();
+            lines.Add((i == _cursor ? "> " : "   ") + entries[i].Label + (string.IsNullOrEmpty(value) ? "" : $": {value}"));
+        }
         string text = string.Join("\n", lines);
         _style ??= new GUIStyle(GUI.skin.box) { fontSize = 18, alignment = TextAnchor.MiddleLeft, padding = new RectOffset(20, 20, 12, 12) };
         float w = 420, h = _style.CalcHeight(new GUIContent(text), w) + 4;

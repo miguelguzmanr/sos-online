@@ -1,5 +1,7 @@
 # Handoff: local pause screen (tier 1) and the guest Options bug
 
+**Status: done.** See [drop-in-findings.md](drop-in-findings.md) §8 for what was built, the choices made (the host's pause is local too; battles, cutscenes and loading keep the shared pause; guests can't open Options from a shared pause) and the test results. The rest of this file is the original brief.
+
 Read first: [drop-in-findings.md](drop-in-findings.md) §7 (pause and menus online, the banner, the Options bug), then *Independent pause and menus* in [drop-in-plan.md](drop-in-plan.md). Branch `docs/drop-in-plan`, commit `ceb89c7`. Everything so far runs on loopback only.
 
 ## Goal

@@ -21,7 +21,8 @@ namespace SosOnline;
 ///   --sosonline-delay=N           fixed input delay in frames
 ///   --sosonline-script=FILE       scripted local input: "frame [sys] action holdFrames [axis]" per line
 ///   --sosonline-shots=F1,F2,...   screenshot at those lockstep frames
-///   --sosonline-quit=F            quit at lockstep frame F
+///   --sosonline-quit=F            quit at lockstep frame F (if lockstep stops before F: the remaining frames later, at
+///                                 least one second, counted in Unity frames)
 ///   --sosonline-reload=F          spike A: autosave at F, reload it in place at F+120 (every PC)
 ///   --sosonline-ff[=nocam]        spike C: uncapped frame rate, audio muted (and cameras off)
 ///   --sosonline-seed=N            fixed session seed (host)
@@ -137,8 +138,38 @@ internal static class TestHarness
     /// <summary>Called from the plugin's Update.</summary>
     private static bool _xrefDone, _connectedOnce;
 
+    private static bool _sawLockstep;
+    private static int _quitAtUnityFrame = -1;
+
+    /// <summary>
+    /// --sosonline-quit counts lockstep frames, which stop when the session ends (End session, Leave, a drop-out):
+    /// count the frames that were left in Unity frames instead, so the test still ends.
+    /// </summary>
+    private static void QuitAfterLockstep()
+    {
+        if (_quitFrame < 0) return;
+        var engine = Session.Instance.Engine;
+        if (engine.Running) { _sawLockstep = true; _quitAtUnityFrame = -1; return; }
+        if (!_sawLockstep) return;
+        if (_quitAtUnityFrame < 0)
+        {
+            int left = Math.Max(60, _quitFrame - engine.Frame);
+            _quitAtUnityFrame = Time.frameCount + left;
+            Plugin.Log.LogInfo($"[test] lockstep stopped at frame {engine.Frame}; quitting in {left} frames");
+            return;
+        }
+        if (Time.frameCount < _quitAtUnityFrame) return;
+        Plugin.Log.LogInfo("[test] quitting after the session ended");
+        _stateLog?.Flush();
+        SpikeB.Close();
+        FastForward.Close();
+        Application.Quit();
+        _quitFrame = -1;
+    }
+
     public static void Update()
     {
+        QuitAfterLockstep();
         if (!_xrefDone && Args.ContainsKey("xref") && Time.frameCount > 60) { _xrefDone = true; XrefProbe.Run(); Application.Quit(); }
         if (Args.ContainsKey("uitest")) UiTest();
         if (Args.Count == 0 || _autoDone) return;

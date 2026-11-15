@@ -125,7 +125,7 @@ Not done yet:
 - Real Steam P2P (sending the log in 600-frame blocks is untested over the relay).
 - Physics steps: the game's fixed step is 0.02 s against 1/60 s frames, so one frame in six has no physics step, and which one depends on when each PC's clock started. Identical in every run measured; not forced.
 
-## Independent pause and menus (proposal, not started)
+## Independent pause and menus (tier 1 done)
 
 **Today.** A pause or menu opens in the shared game, stops it for everyone, and only its opener can move in it. A banner now says who and which menu.
 
@@ -141,7 +141,7 @@ Not done yet:
 
 **Must stay shared:** saving, return to title, Assign Players, dialogues, cutscenes and battle menus (battle commands are already turns of the shared game).
 
-**Suggested start:** tier 1.
+**Status:** tier 1 done (findings §8). Next: tier 2.
 
 ## Order of work
 

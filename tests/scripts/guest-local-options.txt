@@ -1,0 +1,18 @@
+# Player 2 joins and walks, then opens Options in the local pause screen: master volume down two steps,
+# brightness up one, back to the pause screen and resume.
+1000 Join 6
+1150 MoveHorizontal 60 1
+1230 MoveVertical 45 -1
+2200 UI_Start 4
+2260 UIMoveVertical 6 -1
+2300 UI_Confirm 4
+2340 UIMoveHorizontal 6 -1
+2370 UIMoveHorizontal 6 -1
+2400 UIMoveVertical 6 -1
+2420 UIMoveVertical 6 -1
+2440 UIMoveVertical 6 -1
+2460 UIMoveVertical 6 -1
+2480 UIMoveVertical 6 -1
+2510 UIMoveHorizontal 1 1
+2600 UI_Back 4
+2650 UI_Back 4
