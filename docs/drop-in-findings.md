@@ -276,6 +276,13 @@ Two PCs over Steam (host at 1920×1080, guest at 2560×1440), build `d9d6210`, a
 - **Also fixed:** Unity's EventSystem stops processing UI input while the game window isn't focused, and the game's pop-up questions are answered through it. A player alt-tabbed to chat would never see an answer on their PC. During lockstep the EventSystem is kept focused (`InputOverride.KeepUiFocus`).
 - **Also fixed:** after returning to the title screen, the Online menu failed to open (`NullReferenceException`): it still held buttons from the previous title screen. Destroyed buttons are now dropped before reuse.
 
+**Battles: the PCs disagree on whose turn it is (fifth session, v0.1.39, logs sent with the new button).**
+- In one run the first battle stayed in sync for about 1,300 frames (every impact's owner and verdict identical on both PCs). A later battle split: P1's attack landed at f7297 on the host and not on the guest.
+- In the next run, at the first attack, the host ran Valere's attack bound to Rewired player 0 (P1, impact f3581) while the guest ran it about 20 frames later bound to player 1 (P2, impact f3600). Valere moved on the host from f3540, the guest stayed put.
+- So on the same turn, one PC let P1 act and the other waited for P2. That matches the morning's report ("they used Valere instead of Zale"). In co-op battles a "current player" picks the next action (`EncounterController.SetCurrentPlayer`, `AdvancePlayers`), and the PCs' bookkeeping of it differs now and then, with identical inputs. Cause not found yet.
+- **Added:** `Lockstep/CombatTrace.cs` logs the turn decisions with the frame (`[combat] … current player`, `selected`, `turn`, `players advance`, `<character> answers to player N`), so the next occurrence shows the first frame where the PCs differ.
+- **Also found:** the log zip had no `Player.log`. The game doesn't write it where `Application.persistentDataPath` points, so the path needs checking.
+
 **Protocol 10:** snapshots carry each character's facing (9) and the game's pause flag (10).
 
 **Open:**
