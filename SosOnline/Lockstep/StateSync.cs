@@ -282,6 +282,9 @@ internal sealed class StateSync
         else _pendingHost[host.Frame] = host;
     }
 
+    /// <summary>Metres a character may differ in a battle before it counts as out of sync (nothing is corrected there).</summary>
+    private const float BattleTolerance = 0.5f;
+
     private void Compare(StateSnapshot host, StateSnapshot local)
     {
         if (host.Loading || local.Loading) { SkippedLoading++; return; }
@@ -298,7 +301,21 @@ internal sealed class StateSync
         // Positional corrections, applied as a delta so movement since that frame is preserved. Facing is set to the
         // host's only if this character hasn't turned since that frame (a later turn came from synced input).
         int corrected = 0, turned = 0;
-        if (sameLevel)
+        // Not in battles: there characters move along the game's own attack paths, and a difference means the PCs
+        // are at different points of the battle, not drift (in-sync battles need 0 corrections). Moving a character
+        // mid-attack broke the guest's battle and its game crashed soon after (2026-11-15). Report it instead.
+        bool battle = local.Get("combat") is string c0 && c0 != "off" || GameBridge.InBattle;
+        if (sameLevel && battle)
+        {
+            foreach (var (name, hostPos) in host.Characters)
+            {
+                int li = local.Characters.FindIndex(c => c.name == name);
+                if (li < 0) { reasons.Add($"character {name} missing locally"); continue; }
+                float off = (hostPos - local.Characters[li].pos).magnitude;
+                if (off > BattleTolerance) reasons.Add($"{name} off by {off:F1}m in battle");
+            }
+        }
+        else if (sameLevel)
         {
             var party = GameBridge.Party?.LeaderAndFollowers;
             for (int hi = 0; hi < host.Characters.Count; hi++)
