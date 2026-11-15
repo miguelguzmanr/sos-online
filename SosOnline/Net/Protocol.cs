@@ -34,11 +34,14 @@ internal enum Msg : byte
     CaughtUp = 27,    // joiner → host (Stage 3): replayed up to the live session
     Merge = 28,       // host → all (Stage 3): merge frame, slot that joins on it
     CatchUpFailed = 29, // joiner → host (Stage 3): the replay diverged; use a reload (Stage 2)
+    PauseStatus = 30, // any → host, host → all: slot, paused on its own PC (local pause screen; display only, never input)
+    LeaveRequest = 31, // guest → host: leave the session (chosen in the local pause screen)
+    EndAt = 32,       // host → all: frame on which lockstep ends, reason (host chose End session in the local pause screen)
 }
 
 internal static class Protocol
 {
-    public const int Version = 6;
+    public const int Version = 7;
 
     public static (BinaryWriter w, MemoryStream ms) Begin(Msg type)
     {

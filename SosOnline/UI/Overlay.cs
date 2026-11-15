@@ -36,6 +36,7 @@ internal static class Overlay
         if (toggle) SetOpen(!Open);
         MenuStatus.Update();
         CatchUpScreen.Update();
+        LocalPause.Update();
 
         if (Open && Time.unscaledTime >= _nextFriendRefresh && Session.Instance.Role == Role.None && !Session.Instance.UsingUdp)
         {
@@ -86,6 +87,7 @@ internal static class Overlay
         CatchUpScreen.OnGUI();
         if (s.Phase == Phase.Running && !s.CatchingUp) DrawHud(s);
         MenuStatus.OnGUI();
+        LocalPause.OnGUI();
         if (!Open)
         {
             return;

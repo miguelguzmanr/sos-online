@@ -1,0 +1,7 @@
+# Host walks, pauses locally and resumes, then pauses again while player 2 is paused, and resumes.
+700 MoveVertical 60 -1
+1100 UI_Start 4
+1300 UI_Start 4
+1400 MoveVertical 60 1
+2250 UI_Start 4
+2700 UI_Back 4

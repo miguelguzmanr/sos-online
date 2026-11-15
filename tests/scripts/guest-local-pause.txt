@@ -1,0 +1,10 @@
+# Player 2 joins and walks, then opens the local pause screen: down to Leave session, Back on the confirmation, then resumes.
+1000 Join 6
+1150 MoveHorizontal 60 1
+1230 MoveVertical 45 -1
+2200 UI_Start 4
+2290 UIMoveVertical 6 -1
+2350 UI_Confirm 4
+2420 UI_Confirm 4
+2500 UI_Back 4
+2560 MoveHorizontal 40 -1

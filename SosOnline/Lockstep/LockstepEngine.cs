@@ -74,6 +74,20 @@ internal sealed class LockstepEngine
         _leaveFrame[slot] = Math.Min(_leaveFrame[slot], frame);
     }
 
+    private int _endFrame = int.MaxValue;
+    private Action _onEnd;
+
+    /// <summary>
+    /// Runs <paramref name="onEnd"/> (which stops lockstep) at the start of <paramref name="frame"/>, before anything of
+    /// that frame runs: every peer ends after the same last frame.
+    /// </summary>
+    public void EndAt(int frame, Action onEnd)
+    {
+        if (frame < Frame) frame = Frame;
+        _endFrame = frame;
+        _onEnd = onEnd;
+    }
+
     public bool InSessionAt(int slot, int frame) => Occupied[slot] && frame >= _joinFrame[slot] && frame < _leaveFrame[slot];
 
     /// <summary>
@@ -166,6 +180,8 @@ internal sealed class LockstepEngine
         Delay = Math.Max(1, delay);
         Frame = StartFrame = startFrame;
         RngFrameOffset = 0;
+        _endFrame = int.MaxValue;
+        _onEnd = null;
         for (int i = 0; i < _leaveFrame.Length; i++) { _leaveFrame[i] = int.MaxValue; _joinFrame[i] = 0; }
         _frames.Clear();
         _times.Clear();
@@ -282,6 +298,15 @@ internal sealed class LockstepEngine
         if (!Running) return;
 
         if (Frame >= _leaveFrame[LocalSlot]) { Stop("left the session"); LeftSession?.Invoke(); return; }
+
+        if (Frame >= _endFrame)
+        {
+            var end = _onEnd;
+            _endFrame = int.MaxValue;
+            _onEnd = null;
+            end?.Invoke();
+            if (!Running) return;
+        }
 
         if (Hold != null && Hold()) return;
 

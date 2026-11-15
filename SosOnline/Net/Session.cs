@@ -118,6 +118,8 @@ internal sealed class Session
     public ulong HostId { get; private set; }
     public int LocalSlot { get; private set; }
     public readonly string[] SlotName = new string[InputOverride.SlotCount];
+    /// <summary>Slots whose player has their local pause screen open (display only: the banner's "P2 is paused").</summary>
+    public readonly bool[] SlotPaused = new bool[InputOverride.SlotCount];
     public readonly ulong[] SlotPeer = new ulong[InputOverride.SlotCount];
 
     public readonly LockstepEngine Engine = new();
@@ -588,6 +590,8 @@ internal sealed class Session
                 SlotName[slot] = name;
                 SendWelcome(peer);
                 BroadcastRoster();
+                for (int s = 0; s < InputOverride.SlotCount; s++)
+                    if (SlotPaused[s]) SendPauseStatus(peer.Id, s, true);
                 Status = peer.Pending ? $"{name} is joining (player {slot + 1})…" : $"{name} joined (player {slot + 1}).";
                 Toast.Show(Status);
                 Plugin.Log.LogInfo($"[session] {name} joined as slot {slot} (mod {modVersion})");
@@ -636,6 +640,18 @@ internal sealed class Session
                 break;
             case Msg.Bye:
                 if (peer != null) DropPeer(from, "left");
+                break;
+            case Msg.PauseStatus:
+            {
+                int slot = r.ReadByte();
+                bool paused = r.ReadBoolean();
+                if (peer == null || slot != peer.Slot) return;
+                OnPauseStatus(slot, paused);
+                break;
+            }
+            case Msg.LeaveRequest:
+                if (peer == null || peer.Pending || Phase != Phase.Running) return;
+                LeaveScheduled(peer);
                 break;
         }
     }
@@ -804,6 +820,22 @@ internal sealed class Session
                 ApplySlotLeave(leftSlot, leftFrame);
                 break;
             }
+            case Msg.PauseStatus:
+            {
+                int slot = r.ReadByte();
+                bool paused = r.ReadBoolean();
+                if (slot != LocalSlot) OnPauseStatus(slot, paused);
+                break;
+            }
+            case Msg.EndAt:
+            {
+                int at = r.ReadInt32();
+                string reason = r.ReadString();
+                if (Phase != Phase.Running) break;
+                if (CatchingUp || at < Engine.Frame) { StopLockstep(reason); break; }
+                Engine.EndAt(at, () => EndSessionDeterministic(reason));
+                break;
+            }
             case Msg.Bye:
                 SetError("The host closed the session.");
                 if (Phase == Phase.Running) StopLockstep("host left");
@@ -855,7 +887,7 @@ internal sealed class Session
         Plugin.Log.LogInfo($"[session] {peer.Name} {why}");
         if (IsHost)
         {
-            if (peer.Slot > 0) { SlotPeer[peer.Slot] = 0; SlotName[peer.Slot] = null; }
+            if (peer.Slot > 0) { SlotPeer[peer.Slot] = 0; SlotName[peer.Slot] = null; OnPauseStatus(peer.Slot, false); }
             if (Phase == Phase.Running && !peer.Pending && peer.LeavingAt < 0 && Engine.Occupied[peer.Slot])
             {
                 // Everyone has (or will get through us) this guest's input up to the last frame we received, and
@@ -920,7 +952,9 @@ internal sealed class Session
         Engine.LocalInputFilter = (frame, channel, snap) =>
         {
             if (channel == LocalSlot) snap = AutoJoin(frame, snap);
-            return TestHarness.Filter != null ? TestHarness.Filter(frame, channel, snap) : snap;
+            if (TestHarness.Filter != null) snap = TestHarness.Filter(frame, channel, snap);
+            // Last: a scripted pause press must reach the local pause screen too.
+            return LocalPause.Filter(frame, channel, snap);
         };
         Engine.Stalled = OnStalled;
         Engine.LeftSession = OnLeftSession;
@@ -963,6 +997,8 @@ internal sealed class Session
 
     private void AfterLockstep()
     {
+        LocalPause.Reset();
+        Array.Clear(SlotPaused);
         if (_catchUp != null) { EndCatchUpFastForward(); _catchUp = null; }
         _releaseFrames.Clear();
         _entryFrame = -1;
@@ -1198,7 +1234,7 @@ internal sealed class Session
         if (slot <= 0 || !Engine.Running) return;
         if (IsHost && !fromInput) _area.LogRoster(frame, slot, false);
         Engine.SetLeaveFrame(slot, frame);
-        Engine.Schedule(frame, () => GameBridge.MakeLeave(slot));
+        Engine.Schedule(frame, () => { GameBridge.MakeLeave(slot); SlotPaused[slot] = false; });
         Plugin.Log.LogInfo($"[session] slot {slot} leaves at frame {frame}");
     }
 
@@ -1216,6 +1252,91 @@ internal sealed class Session
             var peer = _peers.Values.FirstOrDefault(p => p.Slot == slot);
             if (peer != null) peer.LeavingAt = frame;
         }
+    }
+
+    // ------------------------------------------------------------------ local pause screen
+
+    /// <summary>This PC's local pause screen opened or closed: tell the others (display only).</summary>
+    public void SetLocalPaused(bool paused)
+    {
+        if (Phase != Phase.Running) return;
+        SlotPaused[LocalSlot] = paused;
+        if (IsHost) { foreach (var peer in _peers.Values) SendPauseStatus(peer.Id, LocalSlot, paused); }
+        else SendPauseStatus(HostId, LocalSlot, paused);
+    }
+
+    private void OnPauseStatus(int slot, bool paused)
+    {
+        if (slot < 0 || slot >= InputOverride.SlotCount || SlotPaused[slot] == paused) return;
+        SlotPaused[slot] = paused;
+        Plugin.Log.LogInfo($"[localpause] f{Engine.AppliedFrame} P{slot + 1} {(paused ? "paused" : "resumed")} on their PC");
+        if (IsHost)
+            foreach (var peer in _peers.Values)
+                if (peer.Slot != slot) SendPauseStatus(peer.Id, slot, paused);
+    }
+
+    private void SendPauseStatus(ulong to, int slot, bool paused)
+    {
+        var (w, ms) = Protocol.Begin(Msg.PauseStatus);
+        w.Write((byte)slot);
+        w.Write(paused);
+        Send(to, ms, true);
+    }
+
+    /// <summary>
+    /// The first frame the host can schedule for every PC: no guest has run it when the message arrives. A guest
+    /// can't be past the frames whose System input the host has sent (up to AppliedFrame + Delay + 1), and reliable
+    /// ordering delivers the message before anything the host sends later.
+    /// </summary>
+    private int FirstSafeFrame => Engine.AppliedFrame + Engine.Delay + 2;
+
+    /// <summary>Guest: "Leave session" in the local pause screen. The host picks the frame (deterministic for everyone).</summary>
+    public void RequestLeave()
+    {
+        if (IsHost || Phase != Phase.Running) return;
+        Plugin.Log.LogInfo($"[localpause] f{Engine.AppliedFrame} asking the host to leave");
+        var (w, ms) = Protocol.Begin(Msg.LeaveRequest);
+        Send(HostId, ms, true);
+    }
+
+    /// <summary>Host: a guest asked to leave. Same as a drop-out, on a frame every PC can still schedule.</summary>
+    private void LeaveScheduled(Peer peer)
+    {
+        if (peer.LeavingAt >= 0 || !Engine.Occupied[peer.Slot]) return;
+        int frame = Math.Max(FirstSafeFrame, peer.LastInputFrame + 1);
+        peer.LeavingAt = frame;
+        ApplySlotLeave(peer.Slot, frame);
+        foreach (var other in _peers.Values)
+        {
+            var (w, ms) = Protocol.Begin(Msg.SlotLeft);
+            w.Write(peer.Slot);
+            w.Write(frame);
+            Send(other.Id, ms, true);
+        }
+    }
+
+    /// <summary>Host: "End session" in the local pause screen. Every PC stops lockstep on the same frame.</summary>
+    public void EndSessionScheduled(string reason)
+    {
+        if (!IsHost || Phase != Phase.Running) return;
+        int frame = FirstSafeFrame;
+        Plugin.Log.LogInfo($"[localpause] ending the session at f{frame}");
+        foreach (var peer in _peers.Values)
+        {
+            if (peer.Pending)
+            {
+                // Not in the live run yet: nothing to keep in step with.
+                var (ws, mss) = Protocol.Begin(Msg.Stop);
+                ws.Write(reason);
+                Send(peer.Id, mss, true);
+                continue;
+            }
+            var (w, ms) = Protocol.Begin(Msg.EndAt);
+            w.Write(frame);
+            w.Write(reason);
+            Send(peer.Id, ms, true);
+        }
+        Engine.EndAt(frame, () => EndSessionDeterministic(reason));
     }
 
     /// <summary>Our own slot reached its leave frame: keep playing solo from here.</summary>
@@ -1876,6 +1997,8 @@ internal sealed class Session
         LocalSlot = 0;
         Array.Clear(SlotPeer);
         Array.Clear(SlotName);
+        Array.Clear(SlotPaused);
+        LocalPause.Reset();
         if (!UsingUdp && SteamApi.Available)
         {
             SteamApi.SetRichPresence("status", "");
