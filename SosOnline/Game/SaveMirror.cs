@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using HarmonyLib;
 using UnityEngine;
 
@@ -43,12 +44,31 @@ internal static class SaveMirror
     public static string SaveDir => Application.persistentDataPath;
     public static string MirrorDir => Path.Combine(SaveDir, MirrorFolder);
 
-    public static List<(string name, byte[] data)> PackHostFiles()
+    public const string IndexFile = "SOS_SaveDataIndex.sos";
+
+    /// <summary>File name of save slot <paramref name="slot"/> (or of its autosave).</summary>
+    public static string SlotFile(int slot, bool auto) => auto ? $"Autosave_SOS_SaveSlot{slot}.sos" : $"SOS_SaveSlot{slot}.sos";
+
+    /// <summary>
+    /// The host's save files a session needs: the index and the slots named in <paramref name="only"/> (all slots when
+    /// null, or when one of them isn't on disk under the expected name).
+    /// </summary>
+    public static List<(string name, byte[] data)> PackHostFiles(ICollection<string> only = null)
     {
+        if (only != null && only.Any(n => !File.Exists(Path.Combine(OwnDir, n))))
+        {
+            Plugin.Log.LogWarning($"[saves] {string.Join(", ", only)} not all found; sending every slot");
+            only = null;
+        }
         var files = new List<(string, byte[])>();
         // Slots, autosaves (Autosave_SOS_SaveSlotN.sos) and index. Not the options: those stay each PC's own.
         foreach (var path in Directory.GetFiles(OwnDir, "*.sos"))
-            if (!IsOptionsFile(path)) files.Add((Path.GetFileName(path), File.ReadAllBytes(path)));
+        {
+            string name = Path.GetFileName(path);
+            if (IsOptionsFile(path)) continue;
+            if (only != null && name != IndexFile && !only.Contains(name)) continue;
+            files.Add((name, File.ReadAllBytes(path)));
+        }
         return files;
     }
 

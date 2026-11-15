@@ -21,7 +21,7 @@ internal enum Msg : byte
     Stop = 14,        // host → all: end lockstep (back to independent play)
     Bye = 15,         // leaving the session
     Chat = 16,        // short status text
-    ResyncRequest = 17, // guest → host
+    ResyncRequest = 17, // guest → host: reason (this guest diverged; it leaves and drops in again by a reload)
     SlotLeft = 18,    // host → guests: slot, first frame without that slot
     DropInSave = 19,  // host → guests in the session: autosave on this frame (drop-in)
     Loaded = 20,      // guest → host: load sequence, frame this PC reached the end of level loading
@@ -37,11 +37,12 @@ internal enum Msg : byte
     PauseStatus = 30, // any → host, host → all: slot, paused on its own PC (local pause screen; display only, never input)
     LeaveRequest = 31, // guest → host: leave the session (chosen in the local pause screen)
     EndAt = 32,       // host → all: frame on which lockstep ends, reason (host chose End session in the local pause screen)
+    AssignCharacter = 33, // host → all: frame, slot, character id (a rejoining guest gets its character back)
 }
 
 internal static class Protocol
 {
-    public const int Version = 7;
+    public const int Version = 8;
 
     public static (BinaryWriter w, MemoryStream ms) Begin(Msg type)
     {

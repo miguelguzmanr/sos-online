@@ -201,6 +201,82 @@ internal static class GameBridge
         return -1;
     }
 
+    // ---------------------------------------------------------------- characters
+
+    private static string IdOf(ISinglePlayerPlusCharacter c)
+    {
+        try { return c?.CharacterDefinitionId?.characterId ?? ""; } catch { return ""; }
+    }
+
+    /// <summary>Character id ("Valere", …) the slot's co-op player controls, or "" when it controls none.</summary>
+    public static string CharacterOf(int slot)
+    {
+        try { return IdOf(CoopPlayer(slot)?.AssignedCharacter); } catch { return ""; }
+    }
+
+    /// <summary>The party member that slot <paramref name="slot"/> could be given: in the party and nobody else's.</summary>
+    private static ISinglePlayerPlusCharacter FreeCharacter(int slot, string characterId)
+    {
+        var party = Party?.LeaderAndFollowers;
+        if (party == null || string.IsNullOrEmpty(characterId)) return null;
+        ISinglePlayerPlusCharacter found = null;
+        for (int i = 0; i < party.Count; i++)
+        {
+            var c = party[i] == null ? null : new ISinglePlayerPlusCharacter(party[i].Pointer);
+            if (IdOf(c) == characterId) { found = c; break; }
+        }
+        if (found == null) return null;
+        for (int s = 0; s < Lockstep.InputOverride.SlotCount; s++)
+            if (s != slot && IsPlaying(s) && CharacterOf(s) == characterId) return null;
+        // The leader is the first player's.
+        if (IdOf(new ISinglePlayerPlusCharacter(party[0].Pointer)) == characterId) return null;
+        return found;
+    }
+
+    public static bool CanAssignCharacter(int slot, string characterId)
+    {
+        try { return FreeCharacter(slot, characterId) != null; } catch { return false; }
+    }
+
+    /// <summary>
+    /// Gives slot <paramref name="slot"/>'s co-op player the character <paramref name="characterId"/> if it is still
+    /// free. Runs on the same lockstep frame on every PC (the checks read synced game state).
+    /// </summary>
+    public static void AssignCharacter(int slot, string characterId)
+    {
+        try
+        {
+            var player = CoopPlayer(slot);
+            var target = FreeCharacter(slot, characterId);
+            if (player == null || !player.Playing || target == null)
+            {
+                Plugin.Log.LogInfo($"[characters] slot {slot}: {characterId} not free any more; keeping {CharacterOf(slot)}");
+                return;
+            }
+            var coop = Coop;
+            coop?.BeginBatchCharacterAssignation();
+            try
+            {
+                player.UnassignCharacter();
+                player.AssignCharacter(target);
+            }
+            finally { coop?.EndBatchCharacterAssignation(); }
+            Plugin.Log.LogInfo($"[characters] slot {slot} now plays {CharacterOf(slot)}");
+        }
+        catch (Exception e) { Plugin.Log.LogWarning($"[characters] assigning {characterId} to slot {slot} failed: {e.Message}"); }
+    }
+
+    /// <summary>Test helper: the id of the last party member.</summary>
+    public static string LastPartyCharacter()
+    {
+        try
+        {
+            var party = Party?.LeaderAndFollowers;
+            return party == null || party.Count == 0 ? "" : IdOf(new ISinglePlayerPlusCharacter(party[party.Count - 1].Pointer));
+        }
+        catch { return ""; }
+    }
+
     // ---------------------------------------------------------------- level / saving
 
     public static LevelManager Levels => SafeInstance<LevelManager>();

@@ -40,11 +40,14 @@ internal static class NativeMenus
 
     private static bool _popupOpen;
 
-    /// <summary>The game's generic popup: a message, up to two choices; onAnswer(index), -1 for cancel.</summary>
-    public static void Popup(string message, string yes, string no, Action<int> onAnswer)
+    /// <summary>
+    /// The game's generic popup: a message, up to two choices; onAnswer(index), -1 for cancel. False when it can't
+    /// open now (another one is open, or the UI isn't up).
+    /// </summary>
+    public static bool Popup(string message, string yes, string no, Action<int> onAnswer)
     {
         var ui = Manager<UIManager>.instance;
-        if (ui == null || _popupOpen) return;
+        if (ui == null || _popupOpen) return false;
         try
         {
             var p = new GenericPopupScreenParams();
@@ -67,16 +70,18 @@ internal static class NativeMenus
             };
             ui.InstantiateViewAsync(Il2CppType.Of<GenericPopupScreen>(), EScreenLayers.MODAL, p.Cast<IViewParams>(), true,
                 AnimatorUpdateMode.UnscaledTime, done);
+            return true;
         }
         catch (Exception e)
         {
             _popupOpen = false;
             Plugin.Log.LogError($"[menu] popup failed: {e}");
+            return false;
         }
     }
 
     private static void Confirm(string message, string yes, Action onYes, string no = "Back", Action onNo = null) =>
-        Popup(message, yes, no, i => { if (i == 0) onYes?.Invoke(); else onNo?.Invoke(); });
+        _ = Popup(message, yes, no, i => { if (i == 0) onYes?.Invoke(); else onNo?.Invoke(); });
 
     // ================================================================== title screen
 
@@ -369,6 +374,8 @@ internal static class NativeMenus
                 else yield return ("Leave session", () => s.Leave());
                 break;
         }
+        if (!s.InSession || s.IsHost)
+            yield return ($"Open to friends: {(Settings.OpenToFriends ? "on" : "off")}", () => { Settings.OpenToFriends = !Settings.OpenToFriends; ShowPage(MainPage); });
         yield return ("Back", () => CloseSubmenu(true));
     }
 
@@ -484,13 +491,13 @@ internal static class NativeMenus
         }
         if (!s.InSession)
         {
-            Confirm("Co-op sessions start from the title screen, so everyone begins from the same save.\nHost now and invite friends while you head back?",
-                "Host", () => s.Host());
+            Confirm("Open your game to friends?\nA Steam lobby stays open while you play, and friends who join drop in right here.",
+                "Open to friends", () => { Settings.OpenToFriends = true; s.Host(); });
             return;
         }
         if (s.IsHost && !s.UsingUdp)
-            Popup(StatusText(s) + "\nReturn to the title screen to start playing together.", "Invite friends", "Close session",
-                i => { if (i == 0) s.InviteFriends(); else if (i == 1) s.Leave(); });
+            Popup(StatusText(s) + "\nFriends who join drop in right here.", "Invite friends", "Close session",
+                i => { if (i == 0) s.InviteFriends(); else if (i == 1) { Settings.OpenToFriends = false; s.Leave(); } });
         else
             Confirm(StatusText(s), s.IsHost ? "Close session" : "Leave session", () => s.Leave());
     }

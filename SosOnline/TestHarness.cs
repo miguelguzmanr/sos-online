@@ -21,6 +21,7 @@ namespace SosOnline;
 ///   --sosonline-delay=N           fixed input delay in frames
 ///   --sosonline-script=FILE       scripted local input: "frame [sys] action holdFrames [axis]" per line
 ///   --sosonline-shots=F1,F2,...   screenshot at those lockstep frames
+///   --sosonline-quitruns=N        with --sosonline-quit: once lockstep has stopped, quit only after N runs have ended
 ///   --sosonline-quit=F            quit at lockstep frame F (if lockstep stops before F: the remaining frames later, at
 ///                                 least one second, counted in Unity frames)
 ///   --sosonline-reload=F          spike A: autosave at F, reload it in place at F+120 (every PC)
@@ -29,7 +30,9 @@ namespace SosOnline;
 ///   --sosonline-stateevery=N      state snapshot interval in frames (default 30)
 ///   --sosonline-hpdiverge=F       at lockstep frame F, lower the first party member's HP by 1 on this PC only
 ///   --sosonline-noclock           each PC keeps its own game clock (no session clock, finding 8)
-///   --sosonline-play=SLOT[a]      guest: first play save SLOT on its own (offline), then join (--sosonline-join)
+///   --sosonline-play=SLOT[a]      guest: first play save SLOT on its own (offline), then join (--sosonline-join);
+///                                 host: play save SLOT with the lobby open (no --sosonline-start), friends join it there
+///   --sosonline-rememberchar=ID   host: pretend each guest last played character ID ("last": the last party member)
 ///   --sosonline-joinafter=S       with --sosonline-play: join S seconds after its own game is playable (default 10)
 ///   --sosonline-loadatjoin        every PC in the session: start a level load the frame before the first join frame
 ///   --sosonline-nocatchup         host: joiners always drop in by a reload in place (Stage 2), never by catching up
@@ -140,6 +143,8 @@ internal static class TestHarness
 
     private static bool _sawLockstep;
     private static int _quitAtUnityFrame = -1;
+    private static int _runsEnded;
+    private static bool _runEndCounted;
 
     /// <summary>
     /// --sosonline-quit counts lockstep frames, which stop when the session ends (End session, Leave, a drop-out):
@@ -149,8 +154,22 @@ internal static class TestHarness
     {
         if (_quitFrame < 0) return;
         var engine = Session.Instance.Engine;
-        if (engine.Running) { _sawLockstep = true; _quitAtUnityFrame = -1; return; }
-        if (!_sawLockstep) return;
+        if (engine.Running)
+        {
+            if (!_sawLockstep) _sawLockstep = true;
+            _quitAtUnityFrame = -1;
+            _runEndCounted = false;
+            return;
+        }
+        // Never in a session (a joiner that found no host): give up after a few minutes.
+        if (!_sawLockstep)
+        {
+            if (Time.realtimeSinceStartup > 300) { Plugin.Log.LogWarning("[test] no session after 300 s; quitting"); Application.Quit(); _quitFrame = -1; }
+            return;
+        }
+        if (!_runEndCounted) { _runEndCounted = true; _runsEnded++; }
+        // --sosonline-quitruns=N: a host that goes back to solo keeps going until N runs have ended.
+        if (Args.TryGetValue("quitruns", out var qr) && _runsEnded < int.Parse(qr)) return;
         if (_quitAtUnityFrame < 0)
         {
             int left = Math.Max(60, _quitFrame - engine.Frame);
@@ -175,6 +194,8 @@ internal static class TestHarness
         if (Args.Count == 0 || _autoDone) return;
         var session = Session.Instance;
 
+        // A host with --sosonline-play plays its own game, with the lobby open (Stage 1: friends join it there).
+        if (Args.ContainsKey("host") && Args.ContainsKey("play") && !_hostPlaying) _hostPlaying = OwnGameDone();
         if (Args.ContainsKey("host") && !session.InSession && !_connectedOnce) { _connectedOnce = true; session.Host(); }
         if (Args.TryGetValue("join", out var hostPort) && !session.InSession && !_connectedOnce && OwnGameDone()) { _connectedOnce = true; session.JoinUdp(ushort.Parse(hostPort)); }
 
@@ -198,6 +219,7 @@ internal static class TestHarness
     }
 
     private static double _ownGameSince = -1, _ownGamePlayableSince = -1;
+    private static bool _hostPlaying;
 
     /// <summary>
     /// --sosonline-play: the guest plays its own game before joining (drop-in from gameplay rather than from the

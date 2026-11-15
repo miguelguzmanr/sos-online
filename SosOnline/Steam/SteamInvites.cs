@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Runtime.InteropServices;
 using System.Text;
 using HarmonyLib;
@@ -38,18 +39,52 @@ internal static class SteamInvites
     /// <summary>Called every frame; joins a pending invite once it is safe to.</summary>
     public static void Update()
     {
-        if (_pendingLobby == 0 || !GameBridge.AtTitleScreen) return;
+        if (_pendingLobby == 0 || _asking) return;
+        // From the title screen at once; from gameplay once the player confirmed (Stage 1: join from anywhere).
+        if (!GameBridge.AtTitleScreen && !_confirmed)
+        {
+            if (!GameBridge.Booted) return;
+            if (Session.Instance.Phase == Phase.Running)
+            {
+                // A popup is a game view: opened on this PC only, it would put this PC out of step with the session.
+                UI.Toast.Show("Co-op invite: leave this co-op session first (pause screen), then accept it again.");
+                _pendingLobby = 0;
+                return;
+            }
+            Ask();
+            return;
+        }
         if (!SteamApi.TryInit()) return;
+        if (Session.Instance.InSession) Session.Instance.Leave();
         ulong lobby = _pendingLobby;
         _pendingLobby = 0;
+        _confirmed = false;
         Session.Instance.JoinLobby(lobby, "your friend's session");
+    }
+
+    private static bool _asking, _confirmed;
+
+    /// <summary>One confirmation, then the mod leaves this game for the player: the drop-in replaces it in place.</summary>
+    private static void Ask()
+    {
+        var s = Session.Instance;
+        string mine = s.InSession && s.IsHost && s.Peers.Any()
+            ? "\nThe friends playing with you go back to their own games."
+            : "";
+        _asking = UI.NativeMenus.Popup($"Join your friend's game?\nYour own game stops here: anything since your last save is lost.{mine}",
+            "Join", "Not now", i =>
+            {
+                _asking = false;
+                if (i == 0) { _confirmed = true; Plugin.Log.LogInfo("[invite] confirmed: joining from gameplay"); }
+                else { _pendingLobby = 0; Plugin.Log.LogInfo("[invite] declined"); }
+            }); // not opened (another popup is up): asked again next frame
     }
 
     private static void OnLobbyRequest(ulong lobby)
     {
-        if (lobby == 0) return;
+        if (lobby == 0 || lobby == Session.Instance.LobbyId) return;
         _pendingLobby = lobby;
-        if (!GameBridge.AtTitleScreen) UI.Toast.Show("Co-op invite accepted. Return to the title screen to join.");
+        _confirmed = false;
     }
 
     private static ulong ParseConnect(string connect)

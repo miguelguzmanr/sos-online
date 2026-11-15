@@ -29,6 +29,7 @@ public sealed class Plugin : BasePlugin
             harmony.PatchAll(typeof(Plugin).Assembly);
             ClassInjector.RegisterTypeInIl2Cpp<OnlineBehaviour>();
             AddComponent<OnlineBehaviour>();
+            Settings.Bind(Config);
             TestHarness.Init();
             GameClock.Install();
             if (TestHarness.TraceEnabled) Diagnostics.InstallTrace(harmony);
@@ -43,6 +44,25 @@ public sealed class Plugin : BasePlugin
         {
             Log.LogError($"Failed to initialize: {e}");
         }
+    }
+}
+
+/// <summary>The player's settings (BepInEx/config/sosonline.coop.cfg).</summary>
+internal static class Settings
+{
+    private static BepInEx.Configuration.ConfigEntry<bool> _openToFriends;
+
+    public static void Bind(BepInEx.Configuration.ConfigFile config)
+    {
+        _openToFriends = config.Bind("Online", "OpenToFriends", false,
+            "Keep a Steam lobby open while you play, so friends can join your game from Steam at any time.");
+    }
+
+    /// <summary>A Steam lobby is open whenever this PC plays its own game; friends join from Steam, no hosting step.</summary>
+    public static bool OpenToFriends
+    {
+        get => _openToFriends?.Value ?? false;
+        set { if (_openToFriends != null) _openToFriends.Value = value; }
     }
 }
 

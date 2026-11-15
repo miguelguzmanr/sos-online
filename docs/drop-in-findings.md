@@ -196,6 +196,42 @@ Not covered: a joiner that catches up *after* a local-screen leave (the leave is
 
 **Test games after a session ends:** `--sosonline-quit` counts lockstep frames, which stop at End session or Leave. The harness now counts the frames that were left in Unity frames (at least one second) and quits then.
 
+## 9. Stage 1: done on loopback
+
+**Open to friends** (`Settings.OpenToFriends`, `BepInEx/config/sosonline.coop.cfg`; a toggle in the title screen's Online menu, and the pause menu's Online entry offers it). While on, a Steam lobby opens whenever this PC plays its own game (`Session.AutoOpen`), with no hosting step.
+
+**Solo to co-op** (`Session.UpdateSoloCoop`). A friend connects while the host plays its own game (lobby open, no lockstep):
+- Once the friend's ping is measured, lockstep starts right there with the host alone (frame 0, no load), and the friend is queued like any joiner (`Welcome` sent again with `Pending`).
+- The friend drops in through the existing paths: a reload in place (Stage 2), or a catch-up (Stage 3) once the host has entered an area since.
+- The host's input runs `Delay` frames late from then on, as in any session.
+
+**Co-op to solo.** When the last guest has left (leave, drop-out), the host stops lockstep and keeps playing; the lobby stays open. The next friend starts a new run. A new run clears the area log entirely (`AreaLog.Clear`): its roster changes counted frames of the old run, and a joiner replaying them diverged (found by the test below).
+
+**Re-sync on desync.** A guest whose state check fails twice (`StateSync.Desynced`) sends `ResyncRequest`; the host makes it leave on a frame every PC can reach, then queues it again (`ForceStage2`), and it drops in by a reload in place. Nobody else stops.
+
+**Characters.** The host remembers each guest's character by Steam id (`_lastCharacter`). When the guest begins playing again with another one (the game hands out the next free character), the host schedules `Msg.AssignCharacter` on a safe frame and every PC calls `UnassignCharacter` + `AssignCharacter` there, if that character is still free (not the leader, nobody else's). The area log is invalidated and running catch-ups cancelled, since a replay can't reproduce it.
+- **Not done: a direct `SinglePlayerPlusPlayer.Join` on a scheduled frame.** The synced Join press stays. A press is input, so a Stage 3 replay reproduces it for free; a direct call would have to be logged for every kind of join (start, reload in place, merge) to keep catch-up working. The press's slowness (finding 4) is cosmetic.
+
+**Only the session's slot is sent** (`SaveMirror.PackHostFiles(only)`): the index plus the slot or autosave in use (2 files in the tests instead of the whole folder). If a name isn't found on disk, everything is sent as before.
+
+**Join from a Steam invite while playing** (`SteamInvites`): one confirmation popup ("Join your friend's game? Your own game stops here…"), then the mod leaves this PC's session if any and joins; the drop-in replaces this PC's game in place. Not offered while this PC is in a running co-op session (a popup there would be a game view on one PC only); the toast asks to leave first.
+
+**Fixed along the way:**
+- A joiner could be stuck in the drop-in queue forever: when the party changed area during a reload drop-in, the joiner stayed on the stale joiner list, which also blocked the catch-up the new area made possible. The list is now cleared when the drop-in starts over.
+- A PC whose own game stood still for a while (a save loading while it boots) dropped its peers as timed out right after. Time the game stood still is no longer counted as anyone's silence.
+
+**Tests:**
+
+| Script | Result |
+|---|---|
+| `tests/stage1.sh` (host plays its own save; A joins, gets GARL back with `--sosonline-rememberchar=last`, leaves from the pause screen; host back to solo; B joins later) | Co-op starts from the host's game twice; A dropped in by a reload, B by a catch-up; both handed GARL on every PC; 2 save files sent; A 0 of 26 snapshots differ, B 0 of 70 |
+| `tests/resync.sh` (guest's HP lowered by 1 on its PC at f1500) | Found at f1530 and f1560; left at f1567; dropped in again at f1729; 0 of 59 snapshots differ after |
+| `tests/dropin.sh`, `tests/dropin-two.sh`, local pause (`menu-status.sh`) | Pass: 0 differences, 0 corrections |
+
+Harness: `--sosonline-play` on the host plays a save with the lobby open; `--sosonline-quitruns=N` keeps a host that goes back to solo running until N runs have ended; a test game that never gets into a session quits after 300 s.
+
+**Not tested:** everything Steam (lobby, invites, the invite popup, `OpenToFriends`' automatic lobby), a character swap while another joiner catches up, and a re-sync during a battle.
+
 ## Tools added
 
 | Script / flag | Use |

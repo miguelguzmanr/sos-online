@@ -85,6 +85,17 @@ internal sealed class AreaLog
         return list;
     }
 
+    /// <summary>A new lockstep run starts: its frames count from its own start, so nothing of the old run applies.</summary>
+    public void Clear(string reason)
+    {
+        Invalidate(reason);
+        L = -1;
+        _frames.Clear();
+        SaveFiles.Clear();
+        Snapshots.Clear();
+        Roster.Clear();
+    }
+
     public void Invalidate(string reason)
     {
         if (Valid) Plugin.Log.LogInfo($"[catchup] area log from f{L} invalid: {reason}");
