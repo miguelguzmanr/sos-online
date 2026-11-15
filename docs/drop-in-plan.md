@@ -28,6 +28,7 @@ Spike instructions are in [drop-in-spikes.md](drop-in-spikes.md).
 | 5 | **The reload is manual and timer-driven.** Wall-clock waits (0.5 s, 2 s), guests must already be on the title screen, and the host must start a session from the title screen. | `Session.UpdateDropIn`, `Session.StartFromSave` |
 | 6 | **No loading barrier.** Levels finish loading 1–2 frames apart on different PCs. | README, *Not yet verified* |
 | 7 | **The whole save folder is sent on every start**, including slots the session doesn't use. | `Game/SaveMirror.PackHostFiles` |
+| 8 | **Live sessions drift around battles** (found by Stage 0's state hash). In a two-instance battle the guest corrects all party positions on every snapshot, and facing and enemy positions differ by small amounts afterwards. The likely cause is the game's absolute `Time.time`: timed-input windows are absolute times, and each PC's clock started at a different moment. Spike B shows the same one-frame hit timing between a live run and a replay. | `Lockstep/StateSync.cs`, spike B results |
 
 Finding 1 also means the README's "N of N snapshots identical" results prove less than they read: they confirm scenes and party positions only.
 
@@ -82,6 +83,15 @@ Gated by **spikes B and C**.
 
 Done when: a third instance joins two that are walking around, and the two never pause.
 
+## Status (2026-11-15)
+
+- **Stage 0: done.** Real state hash, loading barrier (`Lockstep/LoadBarrier.cs`), Steam connection loss and a 2 s silent-peer drop. Steam's connection-loss path is untested (no second Steam account here); the 2 s drop is tested on loopback.
+- **Spike A: pass.** Stage 2 is possible.
+- **Spike B: partial.** The save reproduces the entry state. Live play and replay both drift in battles (finding 8).
+- **Spike C: pass with cameras off** (about 16× real time).
+- **Stage 1: not started.** The plan's own risk table asks for a real two-account Steam test first.
+- **Stages 2 and 3: not started.**
+
 ## Order of work
 
 1. Stage 0.
@@ -103,4 +113,5 @@ Done when: a third instance joins two that are walking around, and the two never
 | A save does not reproduce the live state (spike B fails) | No Stage 3 | Stage 2 is the end state: a short fade for everyone |
 | In-place load leaves stale managers or co-op state (spike A fails) | No Stage 2 | Keep the title-screen route, automated and hidden behind an overlay |
 | Real Steam P2P has never run end to end | Everything | Test two real accounts before Stage 1 UI work |
-| A richer state hash costs frame time | Stutter every 30 frames | Hash a rotating subset per interval; measure in Stage 0 |
+| A richer state hash costs frame time | Stutter every 30 frames | Measured: 3.4 ms average, 25.6 ms worst, every 30 frames. Acceptable for now |
+| Absolute game time differs between PCs (finding 8) | Small drift in battles today; a replaying joiner can never match the host exactly | Make game time identical on every PC at lockstep start (patch the time source the game reads), or keep correcting from the host's snapshot, extended beyond party positions |

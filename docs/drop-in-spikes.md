@@ -241,3 +241,39 @@ For Stage 2:
 - Inputs a player makes between the reload and the fix-up are undone for their character. Either block movement until the fix-up, or apply it on the release frame.
 - `--sosonline-reload` and `--sosonline-reloadpos` remain as regression tests.
 
+### Spike B — save vs live state (2026-11-15): partial
+
+Setup differs from the instructions in three ways, all scripted in `tests/spike-b.sh`:
+- No save had to be prepared. Slot 0 starts at the Forbidden Cavern entrance; run A walks out to the world map and back in, so the **third** level load is the area entry (`--sosonline-entryload=3`). The cavern's enemies don't patrol, so the battle is started by `--sosonline-encounterat=700` on both runs, on frame L + 700.
+- L is the loading barrier's release frame for the entry load. The release is decided a few frames ahead, so B knows L_B before it captures the inputs for that frame. C came on L itself in every run (`C=f1104 (L+0)`), so nothing changes between L and the autosave.
+- B needs A's save index (`SOS_SaveDataIndex.sos`) next to the autosave, or the game reports the autosave slot as missing. Both are copied into B's sandbox (`--sosonline-sandboxfile`). Both runs use the same `--sosonline-seed`, and B reseeds the RNG as on A's frame L_A + k.
+
+Result over 3,896 frames from L (walk, battle, after):
+
+| Run | Identical until | First difference |
+|---|---|---|
+| 1 | L+1859 | `combat` for 1 frame: Luslug_A 13 HP on A, 14 on B (a hit applied one frame apart), identical again after |
+| 2 (`--sosonline-trace`) | L+1120 | `combat` at L+1121, the same kind of one-frame hit timing; then positions, facing, NPCs |
+| 3 (exact party positions transferred at L) | L+1859 | as run 1, then a follower 8 cm off after the battle (L+1903), facing (L+1928), NPCs (L+1975) |
+| 4 (`--sosonline-trace`) | L+1903 | follower position after the battle |
+
+- The save reproduces the area-entry state: every component is identical at L and for the next 1,120 to 1,900 frames, including the first half of the battle. Party positions agree to the bit: the transfer at L corrected 0.0 on every axis.
+- What differs is battle timing, by one frame, at varying points from run to run, with knock-on differences after it. The trace shows identical decisions on the same frames, but the game's timed-input windows are absolute `Time.time` values: `afterEnd=56.265` on A against `43.175` on B. A replaying joiner cannot share the host's time base.
+- **This is not specific to the save.** The same check on a normal live two-instance session with a battle (`--sosonline-encounter=1500 --sosonline-bot`) also reports `party differs` at frame 1740 and `npcs differs` at 2040, and the guest corrects all three party positions on every snapshot during the battle. The old snapshot couldn't see either.
+
+Against the pass condition (every component identical for 3,000 frames including the battle) this is a fail. Against the question it was meant to answer (does the save reproduce live state) it is a pass. What blocks Stage 3 is the same drift that live sessions already have; see the plan's new finding 8.
+
+### Spike C — replay speed (2026-11-15): pass (cameras off)
+
+Run B replayed with `--sosonline-ff`, snapshots every 30 frames (every frame costs about 3.4 ms and caps the speed near 300 fps):
+
+| | Free roaming | Battle | Loading |
+|---|---|---|---|
+| Cameras on | 147–156 fps (2.5×) | 143–145 fps (2.4×) | 218–444 fps |
+| Cameras off | 1,008 fps (16.8×) | 984 fps (16.4×) | 1,325–1,572 fps |
+
+- Correctness: with cameras off and snapshots every frame, B matches A up to L+1120 and first differs on the battle hit at L+1121. Unaccelerated runs also diverged on that hit (run 2), so neither fast-forwarding nor disabling the cameras adds visible divergence of its own. No battle-free run longer than 1,120 frames was tested.
+- Loading takes the same wall-clock time, so it spans many more frames (5,768 frames at 1,325 fps). Lining up on L absorbs that.
+- Rule for Stage 3: catch-up time = frames since area entry ÷ (speed − 60), since the session keeps moving. At about 1,000 fps with cameras off, a 60 s cut-off covers about 56,000 frames, or 15 minutes since the area entry. With cameras on (150 fps) it covers 5,400 frames, or 90 s.
+- Not handled: the joiner's screen during catch-up (cameras off means a static frame or an overlay), and the game's own visibility callbacks (`ObjectBecameVisible`) while cameras are off. Neither showed up in the comparison, but a battle-free run longer than 1,120 frames would confirm it.
+
