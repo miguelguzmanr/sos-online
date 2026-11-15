@@ -960,14 +960,35 @@ internal sealed class Session
         Leave();
     }
 
-    /// <summary>Host: a guest has sent nothing for a while; let the others continue without them.</summary>
+    /// <summary>Silence after which the host drops a guest that holds up the simulation.</summary>
+    public const int SilentPeerDropMs = 2000;
+
+    /// <summary>
+    /// The engine is waiting for input. Host: drop a missing guest at once if the transport reports the connection
+    /// lost, otherwise after <see cref="SilentPeerDropMs"/> of silence; the others continue without them.
+    /// Guest: stop at once if the connection to the host is lost.
+    /// </summary>
     private void OnStalled(List<int> missing, long waitedMs)
     {
-        if (!IsHost || waitedMs < 6000) return;
+        if (!IsHost)
+        {
+            if (Transport != null && Transport.IsLost(HostId))
+            {
+                SetError("Lost connection to the host.");
+                StopLockstep("host lost");
+            }
+            return;
+        }
         foreach (int slot in missing)
         {
             var peer = _peers.Values.FirstOrDefault(p => p.Slot == slot && !p.Pending);
-            if (peer != null) DropPeer(peer.Id, "lost connection");
+            if (peer == null) continue;
+            bool lost = Transport != null && Transport.IsLost(peer.Id);
+            if (lost || waitedMs >= SilentPeerDropMs)
+            {
+                Plugin.Log.LogInfo($"[session] dropping slot {slot} after {waitedMs} ms ({(lost ? "connection lost" : "silent")})");
+                DropPeer(peer.Id, "lost connection");
+            }
         }
     }
 

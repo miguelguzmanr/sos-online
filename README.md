@@ -59,7 +59,7 @@ It is a BepInEx 6 (IL2CPP) plugin. The game ships Steamworks (`steam_api64.dll`,
 |---|---|
 | Pause menu → **Online** → **Leave session** | The menu is driven by synced input, so every PC runs the choice on the same frame. The player's inputs already sent are still used; the slot is empty from frame + delay + 1, on every PC. |
 | Quitting, or the title-screen **Leave** | The host picks the leave frame: the first frame after the last input it received from them, which it has already forwarded to everyone. It broadcasts that frame. |
-| Crash or lost connection | The host notices after 6 s without input from that player, then does the same as above. |
+| Crash or lost connection | The host notices at once when Steam reports the connection lost, or after 2 s without input from that player, then does the same as above. |
 
 - On the leave frame, every PC calls the game's own `SinglePlayerPlusPlayer.Leave()`, and their character goes back to the party AI.
 - The leaver keeps playing solo on their copy of the host's save.
@@ -86,7 +86,7 @@ It is a BepInEx 6 (IL2CPP) plugin. The game ships Steamworks (`steam_api64.dll`,
 | Scenario | Result |
 |---|---|
 | Guest leaves | Applied on frame 905; the host keeps playing alone. |
-| Guest process killed | The host drops the slot after 6 s and keeps playing. |
+| Guest process killed | The host drops the slot after 2 s and keeps playing. |
 | Synced pause-menu leave | Applied on frame 905 on both PCs. |
 | Third player joins mid-session | Admitted as waiting; the reload carried the autosave (5 files). All three play, and the 81 snapshots after the reload are identical on all three PCs. |
 | Assign Players | Opened online; P2's cursor took the P1 column. After confirm, on both PCs the guest drives P1/Zale and the host P2/Valere. The screen closes through the game's own path; all 57 snapshots match. |

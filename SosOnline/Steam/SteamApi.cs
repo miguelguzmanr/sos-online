@@ -37,6 +37,7 @@ internal static unsafe class SteamApi
     [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)][return: MarshalAs(UnmanagedType.I1)] private static extern bool SteamAPI_ISteamNetworkingMessages_AcceptSessionWithUser(IntPtr self, NetIdentity* identity);
     [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)][return: MarshalAs(UnmanagedType.I1)] private static extern bool SteamAPI_ISteamNetworkingMessages_CloseSessionWithUser(IntPtr self, NetIdentity* identity);
     [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)] private static extern void SteamAPI_SteamNetworkingMessage_t_Release(IntPtr message);
+    [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)] private static extern int SteamAPI_ISteamNetworkingMessages_GetSessionConnectionInfo(IntPtr self, NetIdentity* identity, IntPtr connectionInfo, IntPtr quickStatus);
 
     // --- Lobbies / call results ---
     [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)] private static extern IntPtr SteamAPI_SteamMatchmaking_v009();
@@ -214,6 +215,21 @@ internal static unsafe class SteamApi
                 result.Add((id, FriendName(id), info.LobbyId));
         }
         return result;
+    }
+
+    /// <summary>
+    /// Whether Steam considers the messaging session with <paramref name="steamId"/> dead
+    /// (ESteamNetworkingConnectionState ClosedByPeer = 4 or ProblemDetectedLocally = 5).
+    /// </summary>
+    public static bool SessionLost(ulong steamId)
+    {
+        var self = _messages;
+        if (self == IntPtr.Zero) return false;
+        var identity = new NetIdentity { Type = IdentityTypeSteamId, Size = 8, SteamId = steamId };
+        int state;
+        try { state = SteamAPI_ISteamNetworkingMessages_GetSessionConnectionInfo(self, &identity, IntPtr.Zero, IntPtr.Zero); }
+        catch { return false; }
+        return state == 4 || state == 5;
     }
 
     public static bool Send(ulong steamId, byte[] data, int length, bool reliable, int channel)

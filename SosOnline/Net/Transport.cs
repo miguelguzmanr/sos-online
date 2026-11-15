@@ -14,6 +14,8 @@ internal interface ITransport : IDisposable
     void Send(ulong peer, byte[] data, int length, bool reliable);
     void Poll(Action<ulong, byte[]> onMessage);
     void Disconnect(ulong peer);
+    /// <summary>The transport knows the peer is gone (connection closed or failed), without waiting for silence.</summary>
+    bool IsLost(ulong peer);
 }
 
 /// <summary>Steam Networking Messages (relayed through Valve's network, NAT-traversal handled by Steam).</summary>
@@ -30,6 +32,8 @@ internal sealed class SteamTransport : ITransport
     public void Poll(Action<ulong, byte[]> onMessage) => SteamApi.Receive(Channel, onMessage);
 
     public void Disconnect(ulong peer) => SteamApi.Close(peer);
+
+    public bool IsLost(ulong peer) => SteamApi.SessionLost(peer);
 
     public void Dispose() { }
 }
@@ -137,6 +141,9 @@ internal sealed class UdpTransport : ITransport
     }
 
     public void Disconnect(ulong peer) => _peers.Remove(peer);
+
+    /// <summary>Loopback UDP has no connection state; a lost peer shows up as silence.</summary>
+    public bool IsLost(ulong peer) => false;
 
     public void Dispose() => _socket.Dispose();
 }
