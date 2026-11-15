@@ -41,6 +41,23 @@ internal static class InputOverride
         if (advance) AdvanceHold();
     }
 
+    /// <summary>
+    /// Called every frame. Unity's EventSystem stops processing UI input while the game window isn't focused, and
+    /// the game's pop-up questions are answered through it. A player alt-tabbed to chat would then never see the
+    /// answer on their PC while everyone else's game went on. During lockstep the input comes from the session,
+    /// not this window, so the EventSystem always counts as focused.
+    /// </summary>
+    public static void KeepUiFocus()
+    {
+        if (!Active) return;
+        try
+        {
+            var es = UnityEngine.EventSystems.EventSystem.current;
+            if (es != null && !es.m_HasFocus) es.m_HasFocus = true;
+        }
+        catch { }
+    }
+
     // ---------------- Hold durations ----------------
     // Rewired's GetButtonTimePressed & co. measure how long each PC's own controllers have held a button, so a hold
     // made by a remote player never advanced on this PC: the game's "overwrite this save?" question, confirmed by a

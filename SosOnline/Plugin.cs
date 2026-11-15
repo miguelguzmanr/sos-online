@@ -85,6 +85,7 @@ public sealed class OnlineBehaviour : MonoBehaviour
         {
             if (!ActionTable.Ready) ActionTable.TryBuild();
             Session.Instance.Update();
+            InputOverride.KeepUiFocus();
             SessionLogs.Update();
             Overlay.Update();
             NativeMenus.Update();

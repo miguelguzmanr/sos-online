@@ -212,7 +212,7 @@ Not covered: a joiner that catches up *after* a local-screen leave (the leave is
 **Characters.** The host remembers each guest's character by Steam id (`_lastCharacter`). When the guest begins playing again with another one (the game hands out the next free character), the host schedules `Msg.AssignCharacter` on a safe frame and every PC calls `UnassignCharacter` + `AssignCharacter` there, if that character is still free (not the leader, nobody else's). The area log is invalidated and running catch-ups cancelled, since a replay can't reproduce it.
 - **Not done: a direct `SinglePlayerPlusPlayer.Join` on a scheduled frame.** The synced Join press stays. A press is input, so a Stage 3 replay reproduces it for free; a direct call would have to be logged for every kind of join (start, reload in place, merge) to keep catch-up working. The press's slowness (finding 4) is cosmetic.
 
-**Only the session's slot is sent** (`SaveMirror.PackHostFiles(only)`): the index plus the slot or autosave in use (2 files in the tests instead of the whole folder). If a name isn't found on disk, everything is sent as before.
+**Only the session's slot is sent:** reverted on 2026-11-15, see §10. The whole save folder is sent again: the game's save screens must show the same slots on every PC.
 
 **Join from a Steam invite while playing** (`SteamInvites`): one confirmation popup ("Join your friend's game? Your own game stops here…"), then the mod leaves this PC's session if any and joins; the drop-in replaces this PC's game in place. Not offered while this PC is in a running co-op session (a popup there would be a game view on one PC only); the toast asks to leave first.
 
@@ -270,6 +270,11 @@ Two PCs over Steam (host at 1920×1080, guest at 2560×1440), build `d9d6210`, a
 **Battle desync in the same session.** The PCs matched for 200 frames while the battle waited for a command. Then Zale, the guest's own character, started his attack on the host's PC but not on the guest's. This is consistent with the hold-time getters above (an attack input cooldown would read "never pressed" for a controller that isn't on that PC). Expected to be fixed by them; confirm in the next battle.
 
 **Guest crashes after a re-sync in a battle.** Twice the guest's game stopped within 1 to 2 s of leaving the run in the middle of a battle for a re-sync (15:39:00 and 16:32:14). No error in the mod's or BepInEx's log. Needs the game's `Player.log` from one of these crashes.
+
+**Saving still diverged (fourth session, build `173b4f3`).** P1 saved into slot 1. The host's question closed and its menu closed, but the guest's game stayed paused (`pause differs (local [on])`, caught at once by the new check). Every re-sync reload came back paused too. The guest had no save in slot 1: since §9's change, guests only received the index and the slot in use, so the save screens showed different slots and the game asked different questions on each PC.
+- **Fix:** the whole save folder is mirrored again (every slot, every autosave, the index; about 15 KB each).
+- **Also fixed:** Unity's EventSystem stops processing UI input while the game window isn't focused, and the game's pop-up questions are answered through it. A player alt-tabbed to chat would never see an answer on their PC. During lockstep the EventSystem is kept focused (`InputOverride.KeepUiFocus`).
+- **Also fixed:** after returning to the title screen, the Online menu failed to open (`NullReferenceException`): it still held buttons from the previous title screen. Destroyed buttons are now dropped before reuse.
 
 **Protocol 10:** snapshots carry each character's facing (9) and the game's pause flag (10).
 

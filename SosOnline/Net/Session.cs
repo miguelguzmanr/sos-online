@@ -262,7 +262,7 @@ internal sealed class Session
         if (!ActionTable.Ready) { SetError("Input system not ready yet."); return; }
         _startSlot = slotIndex;
         _startAuto = autoSave;
-        int fileCount = SendSaveFiles(_peers.Values, false, only: new[] { SaveMirror.SlotFile(slotIndex, autoSave) });
+        int fileCount = SendSaveFiles(_peers.Values, false);
         Phase = Phase.AwaitingReady;
         Status = $"Sending save data ({fileCount} files)…";
         Plugin.Log.LogInfo($"[session] start requested from slot {slotIndex} auto={autoSave}, {fileCount} files to {_peers.Count} guest(s)");
@@ -273,11 +273,13 @@ internal sealed class Session
     /// Mirrors the host's save folder to <paramref name="peers"/>. <paramref name="inPlace"/>: they apply it wherever
     /// they are (drop-in) instead of waiting for the title screen.
     /// </summary>
-    private int SendSaveFiles(IEnumerable<Peer> peers, bool inPlace, List<(string name, byte[] data)> replace = null, ICollection<string> only = null)
+    private int SendSaveFiles(IEnumerable<Peer> peers, bool inPlace, List<(string name, byte[] data)> replace = null)
     {
         _transferId++;
-        // Only the slot the session plays from (plus the index): not the whole save folder.
-        var files = SaveMirror.PackHostFiles(only ?? replace?.Select(f => f.name).ToList());
+        // The whole save folder, every slot: the game's save screens must look the same on every PC. With only the
+        // session's slot, saving into a slot the guest's copy didn't have asked "overwrite?" on the host only, and one
+        // PC was left in the save menu (2026-11-15).
+        var files = SaveMirror.PackHostFiles();
         if (replace != null)
             foreach (var (name, data) in replace)
             {
@@ -1698,7 +1700,7 @@ internal sealed class Session
                     _dropIn = DropInStep.None;
                     return;
                 }
-                int files = SendSaveFiles(_joiners.Select(id => _peers[id]), true, only: new[] { SaveMirror.SlotFile(_dropInSlot, true) });
+                int files = SendSaveFiles(_joiners.Select(id => _peers[id]), true);
                 Plugin.Log.LogInfo($"[dropin] autosave slot {_dropInSlot} done at f{Engine.AppliedFrame}; sent {files} files to {_joiners.Count} joiner(s)");
                 _dropIn = DropInStep.Sending;
                 break;

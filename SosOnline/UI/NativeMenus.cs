@@ -199,6 +199,9 @@ internal static class NativeMenus
         {
             var template = _title.optionsButton;
             var container = template.transform.parent;
+            // The title screen is rebuilt when the game returns to it: buttons made for the old one are gone.
+            _entries.RemoveAll(b => !Alive(b) || b.transform.parent != container);
+            _hiddenOriginals.RemoveAll(go => !Alive(go));
             if (!SubmenuOpen)
             {
                 _hiddenOriginals.Clear();
@@ -300,6 +303,13 @@ internal static class NativeMenus
         return false;
     }
 
+    /// <summary>Not destroyed (a C# null check misses destroyed Unity objects).</summary>
+    private static bool Alive(Object o)
+    {
+        try { return o != null && o.GetInstanceID() != 0 && o; }
+        catch { return false; }
+    }
+
     private static void Select(Selectable s)
     {
         if (s == null) return;
@@ -316,7 +326,7 @@ internal static class NativeMenus
         if (!SubmenuOpen) return;
         SubmenuOpen = false;
         _currentPage = null;
-        foreach (var b in _entries) SetActive(b?.gameObject, false);
+        foreach (var b in _entries) if (Alive(b)) SetActive(b.gameObject, false);
         foreach (var go in _hiddenOriginals) SetActive(go, true);
         _hiddenOriginals.Clear();
         if (_status != null) SetActive(_status.gameObject, false);
