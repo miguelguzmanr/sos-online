@@ -22,6 +22,7 @@ namespace SosOnline;
 ///   --sosonline-script=FILE       scripted local input: "frame [sys] action holdFrames [axis]" per line
 ///   --sosonline-shots=F1,F2,...   screenshot at those lockstep frames
 ///   --sosonline-quit=F            quit at lockstep frame F
+///   --sosonline-reload=F          spike A: autosave at F, reload it in place at F+120 (every PC)
 ///   --sosonline-stateevery=N      state snapshot interval in frames (default 30)
 ///   --sosonline-hpdiverge=F       at lockstep frame F, lower the first party member's HP by 1 on this PC only
 /// Every state snapshot is also appended to BepInEx/SosOnline/state-&lt;id&gt;.log for offline comparison.
@@ -256,9 +257,90 @@ internal static class TestHarness
 
     private static bool At(string flag, int frame) => Args.TryGetValue(flag, out var v) && int.TryParse(v, out int f) && f == frame;
 
+    private static bool _wasLoading = true;
+    private static string _lastLevel = "";
+    private static readonly bool[] _wasPlaying = new bool[InputOverride.SlotCount];
+    private static int _reloadSlot = -1;
+    private static Vector3? _reloadPos;
+    private static int _reloadAngle = -1;
+
+    /// <summary>Logs level-loading and co-op playing transitions with their lockstep frames.</summary>
+    private static void TrackTransitions(int frame)
+    {
+        bool loading = GameBridge.LoadingLevel;
+        if (loading != _wasLoading)
+        {
+            string lvl = GameBridge.CurrentLevelId;
+            Plugin.Log.LogInfo($"[load] f{frame} loading={loading} level={lvl}{(lvl != _lastLevel ? " (changed)" : "")}");
+            if (!loading) _lastLevel = lvl;
+            _wasLoading = loading;
+        }
+        for (int s = 0; s < InputOverride.SlotCount; s++)
+        {
+            bool p = GameBridge.IsPlaying(s);
+            if (p != _wasPlaying[s]) { Plugin.Log.LogInfo($"[load] f{frame} P{s + 1} playing={p}"); _wasPlaying[s] = p; }
+        }
+    }
+
+    private static readonly List<(string name, Vector3 pos)> _reloadParty = new();
+
+    /// <summary>
+    /// --sosonline-reload=F: spike A. Autosave at F; at F+120 reload it in place. With --sosonline-reloadpos the
+    /// party respawns where it stands at F+120, and at F+240 every member is put back on its own position.
+    /// </summary>
+    private static void ReloadSpike(int frame)
+    {
+        if (!Args.TryGetValue("reload", out var v) || !int.TryParse(v, out int f)) return;
+        bool restore = Args.ContainsKey("reloadpos");
+        if (frame == f)
+        {
+            _reloadSlot = GameBridge.AutoSave();
+            Plugin.Log.LogInfo($"[reload] f{frame} autosave -> slot {_reloadSlot}, leader at {GameBridge.Party?.Leader?.transform.position}");
+        }
+        if (frame == f + 120)
+        {
+            if (GameBridge.Saving) Plugin.Log.LogError($"[reload] f{frame} still saving");
+            Vector3? spawn = null;
+            int angle = -1;
+            _reloadParty.Clear();
+            var leader = GameBridge.Party?.Leader;
+            if (restore && leader != null)
+            {
+                spawn = leader.transform.position;
+                try { angle = leader.lookDirectionController.CurrentLookAngle; } catch { }
+                var list = GameBridge.Party.LeaderAndFollowers;
+                for (int i = 0; i < list.Count; i++)
+                    if (list[i] != null) _reloadParty.Add((list[i].gameObject.name, list[i].transform.position));
+            }
+            Plugin.Log.LogInfo($"[reload] f{frame} reloading slot {_reloadSlot} in place, spawn {(spawn.HasValue ? spawn.Value.ToString() : "checkpoint")}");
+            if (_reloadSlot >= 0 && GameBridge.ReloadInPlace(_reloadSlot, true, spawn, angle)) Session.Instance.RearmAutoJoin();
+        }
+        if (restore && frame == f + 240 && _reloadParty.Count > 0)
+        {
+            if (GameBridge.LoadingLevel) { Plugin.Log.LogError($"[reload] f{frame} still loading, positions not restored"); return; }
+            var list = GameBridge.Party?.LeaderAndFollowers;
+            if (list == null) return;
+            var moved = new List<string>();
+            for (int i = 0; i < list.Count; i++)
+            {
+                var c = list[i];
+                if (c == null) continue;
+                foreach (var (name, pos) in _reloadParty)
+                    if (name == c.gameObject.name)
+                    {
+                        moved.Add($"{name} {(c.transform.position - pos).magnitude:F2}m");
+                        c.transform.position = pos;
+                    }
+            }
+            Plugin.Log.LogInfo($"[reload] f{frame} restored positions: {string.Join(", ", moved)}");
+        }
+    }
+
     public static void OnFrame(int frame)
     {
         var session = Session.Instance;
+        TrackTransitions(frame);
+        ReloadSpike(frame);
         if (At("leave", frame)) { Plugin.Log.LogInfo($"[test] leaving at {frame}"); session.Leave(); }
         if (At("kill", frame)) { Plugin.Log.LogInfo($"[test] killing process at {frame}"); System.Diagnostics.Process.GetCurrentProcess().Kill(); }
         if (At("pauseleave", frame)) { Plugin.Log.LogInfo($"[test] synced pause-menu leave of P2 at {frame}"); session.LeaveSlotDeterministic(1); }

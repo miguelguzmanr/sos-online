@@ -29,10 +29,17 @@ internal static class XrefProbe
 
     public static void Run()
     {
+        const BindingFlags all = BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.DeclaredOnly;
         foreach (var (type, name) in Targets)
-            foreach (var m in type.GetMethods(BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.DeclaredOnly).Where(x => x.Name == name))
+        {
+            // Coroutines and lambdas compile to nested classes (e.g. _WaitAndContinueGame_d__12.MoveNext): scan those too.
+            var methods = type.GetMethods(all).Where(x => x.Name == name).Select(m => (label: $"{type.Name}.{name}", m)).ToList();
+            foreach (var nested in type.GetNestedTypes(BindingFlags.Public | BindingFlags.NonPublic).Where(n => n.Name.Contains(name)))
+                methods.AddRange(nested.GetMethods(all).Where(x => x.Name == "MoveNext" || x.Name.StartsWith("_" + name) || x.Name.Contains("b__"))
+                    .Select(m => (label: $"{type.Name}.{nested.Name}.{m.Name}", m)));
+            foreach (var (label, m) in methods)
             {
-                Plugin.Log.LogInfo($"[xref] scanning {type.Name}.{name}");
+                Plugin.Log.LogInfo($"[xref] scanning {label}");
                 try
                 {
                     var code = NativeCode.CodeOf(m);
@@ -41,9 +48,10 @@ internal static class XrefProbe
                         .Where(n => n.Count > 0)
                         .Select(n => n.Count == 1 ? n[0] : $"{n[0]}(+{n.Count - 1} folded)")
                         .Distinct();
-                    Plugin.Log.LogInfo($"[xref] {type.Name}.{name}({m.GetParameters().Length}) -> {string.Join(", ", calls)}");
+                    Plugin.Log.LogInfo($"[xref] {label}({m.GetParameters().Length}) -> {string.Join(", ", calls)}");
                 }
-                catch (Exception e) { Plugin.Log.LogInfo($"[xref] {type.Name}.{name}: {e.Message}"); }
+                catch (Exception e) { Plugin.Log.LogInfo($"[xref] {label}: {e.Message}"); }
             }
+        }
     }
 }

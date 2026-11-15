@@ -915,6 +915,15 @@ internal sealed class Session
         }
     }
 
+    /// <summary>Starts the auto-join again (after an in-place reload removed the co-op players).</summary>
+    public void RearmAutoJoin()
+    {
+        if (LocalSlot <= 0) return;
+        _autoJoin = true;
+        _nextJoinTry = 0;
+        _joinTries = 0;
+    }
+
     /// <summary>
     /// Guests press the game's own co-op Join for themselves once the game is playable (through synced input, so
     /// every peer sees the same join). Retries until the game reports the player as playing.

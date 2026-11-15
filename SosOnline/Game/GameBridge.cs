@@ -248,6 +248,44 @@ internal static class GameBridge
         catch (Exception e) { Plugin.Log.LogWarning($"AutoSave failed: {e.Message}"); return -1; }
     }
 
+    /// <summary>
+    /// Spike A: loads autosave <paramref name="slotIndex"/> from gameplay, without the title screen. Restores the
+    /// managers from the slot (SaveManager.onSaveSlotLoaded), then loads the slot's checkpoint level behind the
+    /// game's own transition. Runs on the same lockstep frame on every peer.
+    /// </summary>
+    public static bool ReloadInPlace(int slotIndex, bool autoSave = true, Vector3? spawnAt = null, int orientation = -1)
+    {
+        try
+        {
+            var saves = Saves;
+            var levels = Levels;
+            if (saves == null || levels == null) { Plugin.Log.LogError("ReloadInPlace: managers missing"); return false; }
+            var slot = autoSave ? saves.GetAutoSaveSlot(slotIndex) : saves.GetSaveSlot(slotIndex);
+            if (slot == null) { Plugin.Log.LogError($"ReloadInPlace: slot {slotIndex} (auto={autoSave}) not found"); return false; }
+            var cp = slot.checkpointData;
+            Plugin.Log.LogInfo($"[reload] slot {slotIndex}: level {cp?.level?.levelDefinitionGuid} savepoint {cp?.savepointId} pos {cp?.position} entrance {slot.lastUsedEntranceId}");
+            saves.LoadSaveSlotAndSetLastIndex(slot);
+            var init = new GameplayLevelInitializerParams
+            {
+                SavepointId = cp.savepointId,
+                isBoat = cp.isBoat,
+                playerOrientation = orientation >= 0 ? orientation : cp.playerOrientation,
+                spawnPosition = spawnAt ?? cp.position,
+                spawnPositionSet = true,
+            };
+            var loading = new LevelLoading
+            {
+                levelToLoad = cp.level,
+                showTransition = true,
+                removeTransitionWhenDone = true,
+                initializerParams = init,
+            };
+            levels.LoadLevel(loading);
+            return true;
+        }
+        catch (Exception e) { Plugin.Log.LogError($"ReloadInPlace failed: {e}"); return false; }
+    }
+
     /// <summary>Leaves gameplay for the title screen, like "Return to title" in the pause menu.</summary>
     public static bool ReturnToTitle()
     {
