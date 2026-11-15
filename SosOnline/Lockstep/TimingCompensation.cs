@@ -148,8 +148,8 @@ internal static class TimingCompensation
             EQTEResult mine = channel >= 0 && channel < InputOverride.SlotCount ? Grade(channel, impact) : game;
             grades.Add((p, mine));
             if (mine != game) changed = true;
-            if (TestHarness.TraceEnabled)
-                Plugin.Log.LogInfo($"[timing] attack impact f{impact.Frame} player {p.id}: game={game} graded={mine}");
+            // Always logged (a few lines per battle): comparing both PCs' logs shows whether a battle desync came from timing.
+            Plugin.Log.LogInfo($"[timing] attack impact f{impact.Frame} judged f{Engine.AppliedFrame} player {p.id}: game={game} graded={mine}");
         }
         if (!changed) return result;
         foreach (var (p, v) in grades)
@@ -242,14 +242,17 @@ internal static class TimingCompensation
             bool gameSaid = current != null && current.owner != null && current.IsSuccess();
             BlockChecks++;
             if (success && usedFrame > hit) Engine.Consume(usedFrame, channel, _interact); // don't replay the block late
-            if (success == gameSaid) return;
+            if (success == gameSaid)
+            {
+                Plugin.Log.LogInfo($"[timing] block at f{hit} by player {owner.id}: {(success ? "success" : "fail")} (press at f{usedFrame})");
+                return;
+            }
 
             var verdict = success ? EQTEResult.SuccessBeforeEvent : EQTEResult.FailDidNoPress;
             var replaced = TeamQTEResult.GetPooledInstance(owner, verdict);
             __result = replaced;
             if (success) BlockUpgrades++; else BlockDowngrades++;
-            if (TestHarness.TraceEnabled)
-                Plugin.Log.LogInfo($"[timing] block at f{hit} by player {owner.id}: game={(gameSaid ? "success" : "fail")} → {verdict} (press at f{usedFrame}, origin f{usedFrame - delay})");
+            Plugin.Log.LogInfo($"[timing] block at f{hit} by player {owner.id}: game={(gameSaid ? "success" : "fail")} → {verdict} (press at f{usedFrame}, origin f{usedFrame - delay})");
         }
         catch (Exception e)
         {

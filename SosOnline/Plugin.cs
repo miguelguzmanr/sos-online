@@ -37,6 +37,7 @@ public sealed class Plugin : BasePlugin
             if (TestHarness.TryArg("tracecalls", out var traceClasses)) Diagnostics.InstallCallTrace(harmony, traceClasses);
             if (TestHarness.TryArg("dashprobe", out _)) Diagnostics.InstallDashProbe(harmony);
             TimingCompensation.Install(harmony);
+            DeterministicRandom.Install(harmony);
             NativeCode.AuditPatches(harmony, Guid);
             SteamInvites.ParseCommandLine();
             Log.LogInfo($"Sea of Stars Online Co-op {SessionLogs.Build} loaded. Press F8 in game. Logs: {SessionLogs.Folder}");
