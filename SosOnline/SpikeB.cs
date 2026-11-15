@@ -73,6 +73,19 @@ internal static class SpikeB
             _replayBytes = File.ReadAllBytes(rep);
             _replayPath = rep;
         }
+        // The recording run writes its game clock at the entry load's release; the replay starts its clock there too.
+        var clockFile = Path.Combine(TestHarness.OutDir, "spike-b-clock.txt");
+        Net.Session.ReleaseClock = (seq, timeBase) =>
+        {
+            if (seq != _entryLoad) return timeBase;
+            if (_record != null) File.WriteAllText(clockFile, timeBase.ToString("R", System.Globalization.CultureInfo.InvariantCulture));
+            if (Replaying && File.Exists(clockFile))
+            {
+                timeBase = double.Parse(File.ReadAllText(clockFile), System.Globalization.CultureInfo.InvariantCulture);
+                Plugin.Log.LogInfo($"[spikeb] clock at L = {timeBase:R}, as recorded");
+            }
+            return timeBase;
+        };
         Net.Session.LoadReleaseScheduled += (seq, frame) =>
         {
             if (seq != _entryLoad) return;

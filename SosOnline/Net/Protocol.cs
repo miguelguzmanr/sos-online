@@ -28,11 +28,17 @@ internal enum Msg : byte
     LoadRelease = 21, // host → guests: load sequence, frame on which every PC ends the level loading
     DropInReload = 22, // host → guests in the session: join frame, autosave slot, joining slots, party positions
     DropIn = 23,      // host → joiner: seed, delay, join frame, roster, slot→player map, autosave slot, party positions
+    DropInAbort = 24, // host → joiner: the party was loading a level or in a battle on the join frame; wait again
+    CatchUp = 25,     // host → joiner (Stage 3): seed, delay, area entry frame L, load seq, clock, roster, player map, playing, save slot, party
+    InputLog = 26,    // host → joiner (Stage 3): a block of logged frames since L
+    CaughtUp = 27,    // joiner → host (Stage 3): replayed up to the live session
+    Merge = 28,       // host → all (Stage 3): merge frame, slot that joins on it
+    CatchUpFailed = 29, // joiner → host (Stage 3): the replay diverged; use a reload (Stage 2)
 }
 
 internal static class Protocol
 {
-    public const int Version = 4;
+    public const int Version = 5;
 
     public static (BinaryWriter w, MemoryStream ms) Begin(Msg type)
     {

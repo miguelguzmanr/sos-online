@@ -221,6 +221,12 @@ internal static class GameBridge
     /// </summary>
     public static bool Booted => !LoadingLevel && CurrentLevelId != "";
 
+    /// <summary>A battle is running.</summary>
+    public static bool InBattle
+    {
+        get { try { return Combat?.IsAnEncounterRunning() ?? false; } catch { return false; } }
+    }
+
     /// <summary>In free gameplay where the game itself would allow saving (no battle, cutscene or loading).</summary>
     public static bool CanSaveNow
     {

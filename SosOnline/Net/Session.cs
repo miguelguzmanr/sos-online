@@ -43,7 +43,38 @@ internal sealed class Session
         public int LastInputFrame = -1;
         /// <summary>Leaving at this frame (deterministic leave); removed once the session is past it.</summary>
         public int LeavingAt = -1;
+        /// <summary>How far this guest's game clock was ahead of ours when it reported ready (seconds).</summary>
+        public double ClockLead;
+        /// <summary>Stage 3 progress for a pending joiner.</summary>
+        public CatchUpStep CatchUp;
+        /// <summary>Area entry frame the joiner's catch-up files are from.</summary>
+        public int CatchUpL = -1;
+        public double CatchUpSince;
+        /// <summary>Catch-up isn't possible for this joiner (it failed, or was cancelled): reload in place instead.</summary>
+        public bool ForceStage2;
     }
+
+    private enum CatchUpStep { None, Files, Running }
+
+    /// <summary>Stage 3 (catch-up by replay) is tried before a reload in place. --sosonline-nocatchup turns it off.</summary>
+    public bool CatchUpEnabled = true;
+
+    // Host: the current area's entry save and input log.
+    private readonly AreaLog _area = new();
+    // Every PC: the frame of a load release whose area entry autosave is still to be taken (end of that frame).
+    private int _entryFrame = -1;
+
+    /// <summary>Joiner catching up (Stage 3).</summary>
+    private sealed class CatchUpState
+    {
+        public int L, Seq, Total;
+        public PartySpawn Party;
+        public List<int> Playing;
+        public bool Held, Live, Ff;
+        public int LiveChecks;
+        public double Since, NextToast;
+    }
+    private CatchUpState _catchUp;
 
     public ITransport Transport { get; private set; }
     public bool UsingUdp { get; private set; }
@@ -82,6 +113,11 @@ internal sealed class Session
 
     public IEnumerable<string> PendingNames => _peers.Values.Where(p => p.Pending).Select(p => p.Name);
     public bool HasPending => _peers.Values.Any(p => p.Pending);
+
+    /// <summary>Host: a pending joiner that drops in by catching up (Stage 3) rather than by a reload.</summary>
+    private bool WantsCatchUp(Peer p) => CatchUpEnabled && !p.ForceStage2 && (p.CatchUp != CatchUpStep.None || _area.Valid);
+
+    private bool HasStage2Pending => _peers.Values.Any(p => p.Pending && !WantsCatchUp(p));
 
     /// <summary>Guest only: we were admitted mid-session and wait to drop in.</summary>
     public bool WaitingForResync { get; private set; }
@@ -178,10 +214,16 @@ internal sealed class Session
     /// Mirrors the host's save folder to <paramref name="peers"/>. <paramref name="inPlace"/>: they apply it wherever
     /// they are (drop-in) instead of waiting for the title screen.
     /// </summary>
-    private int SendSaveFiles(IEnumerable<Peer> peers, bool inPlace)
+    private int SendSaveFiles(IEnumerable<Peer> peers, bool inPlace, List<(string name, byte[] data)> replace = null)
     {
         _transferId++;
         var files = SaveMirror.PackHostFiles();
+        if (replace != null)
+            foreach (var (name, data) in replace)
+            {
+                files.RemoveAll(f => f.name == name);
+                files.Add((name, data));
+            }
         foreach (var peer in peers)
         {
             peer.Ready = false;
@@ -208,6 +250,7 @@ internal sealed class Session
 
         int seed = TestHarness.TryArg("seed", out var fixedSeed) ? int.Parse(fixedSeed) : new System.Random().Next();
         int delay = ConfiguredDelay > 0 ? ConfiguredDelay : AutoDelay();
+        double timeBase = NextClockBase(_peers.Values);
         var occupied = new bool[InputOverride.SlotCount];
         for (int s = 0; s < occupied.Length; s++) occupied[s] = SlotPeer[s] != 0;
 
@@ -219,11 +262,23 @@ internal sealed class Session
             w.Write(_startSlot);
             w.Write(_startAuto);
             foreach (bool o in occupied) w.Write(o);
+            w.Write(timeBase);
             Send(peer.Id, ms, true);
         }
         int saveSlot = _startSlot;
         bool auto = _startAuto;
-        BeginLockstep(seed, delay, occupied, 0, null, () => GameBridge.EnterGameFromSlot(saveSlot, auto));
+        BeginLockstep(seed, delay, occupied, 0, null, timeBase, () => GameBridge.EnterGameFromSlot(saveSlot, auto));
+    }
+
+    /// <summary>
+    /// Host: a session clock base that moves no PC's game time backwards (<paramref name="peers"/> reported their
+    /// clocks when they got ready).
+    /// </summary>
+    private static double NextClockBase(IEnumerable<Peer> peers)
+    {
+        double lead = 0;
+        foreach (var p in peers) lead = Math.Max(lead, p.ClockLead);
+        return GameClock.NextBase(GameClock.Now + lead);
     }
 
     private int AutoDelay()
@@ -355,6 +410,8 @@ internal sealed class Session
         }
 
         UpdateDropIn();
+        UpdateCatchUpHost();
+        UpdateCatchUpJoiner();
         if (IsHost && Phase == Phase.Running) TryReleaseLoad();
         if (IsHost && Phase == Phase.Running)
             foreach (var peer in _peers.Values.Where(p => p.LeavingAt >= 0 && Engine.AppliedFrame >= p.LeavingAt).ToList())
@@ -375,6 +432,7 @@ internal sealed class Session
             _awaitingMirrorReload = false;
             var (w, ms) = Protocol.Begin(Msg.Ready);
             w.Write(_transferId);
+            w.Write(GameClock.Now);
             Send(HostId, ms, true);
             Status = _readyAnywhere ? "Save data received. Dropping in…" : "Save data received. Waiting for host…";
         }
@@ -508,6 +566,7 @@ internal sealed class Session
             case Msg.Ready:
                 if (peer == null) return;
                 if (r.ReadInt32() == _transferId) peer.Ready = true;
+                peer.ClockLead = r.ReadDouble() - GameClock.Now;
                 TryBeginLockstep();
                 break;
             case Msg.Input:
@@ -524,7 +583,8 @@ internal sealed class Session
             }
             case Msg.Loaded:
             {
-                if (peer == null) return;
+                // A joiner catching up replays loads the session finished long ago.
+                if (peer == null || peer.Pending) return;
                 int seq = r.ReadInt32();
                 int at = r.ReadInt32();
                 ReportLoaded(peer.Slot, seq, at);
@@ -532,6 +592,15 @@ internal sealed class Session
             }
             case Msg.Hash:
                 // Guests also run the comparison themselves; this is for the host's log.
+                break;
+            case Msg.CaughtUp:
+                if (peer != null && peer.Pending && peer.CatchUp == CatchUpStep.Running) MergeCaughtUp(peer, r.ReadInt32());
+                break;
+            case Msg.CatchUpFailed:
+                if (peer == null || !peer.Pending) return;
+                Plugin.Log.LogWarning($"[catchup] {peer.Name}: replay diverged ({r.ReadString()}); reloading in place instead");
+                peer.CatchUp = CatchUpStep.None;
+                peer.ForceStage2 = true;
                 break;
             case Msg.Bye:
                 if (peer != null) DropPeer(from, "left");
@@ -612,11 +681,48 @@ internal sealed class Session
                 bool auto = r.ReadBoolean();
                 var occupied = new bool[InputOverride.SlotCount];
                 for (int s = 0; s < occupied.Length; s++) occupied[s] = r.ReadBoolean();
-                BeginLockstep(seed, delay, occupied, 0, null, () => GameBridge.EnterGameFromSlot(slot, auto));
+                double timeBase = r.ReadDouble();
+                BeginLockstep(seed, delay, occupied, 0, null, timeBase, () => GameBridge.EnterGameFromSlot(slot, auto));
                 break;
             }
             case Msg.DropIn:
                 OnDropIn(r);
+                break;
+            case Msg.CatchUp:
+                OnCatchUp(r);
+                break;
+            case Msg.InputLog:
+                if (!Engine.Running) break;
+                foreach (var (logFrame, channels) in AreaLog.ReadFrames(r)) Engine.OnRemoteFrame(logFrame, channels);
+                break;
+            case Msg.Merge:
+            {
+                int at = r.ReadInt32();
+                int slot = r.ReadInt32();
+                if (!Engine.Running) break;
+                Engine.AddSlot(slot, at);
+                Engine.Schedule(at, () => GameBridge.RegisterSlotPlayers(new[] { slot }));
+                if (slot == LocalSlot && _catchUp != null)
+                {
+                    Plugin.Log.LogInfo($"[catchup] merging at f{at} (replayed {_catchUp.Total} frames in {Now - _catchUp.Since:F1} s)");
+                    EndCatchUpFastForward();
+                    _catchUp = null;
+                    _autoJoin = true;
+                    _autoJoinFrom = at + 1;
+                    _nextJoinTry = 0;
+                    _joinTries = 0;
+                    Status = "Co-op running.";
+                    Toast.Show("You're in. Joining the party…");
+                }
+                break;
+            }
+            case Msg.DropInAbort:
+                if (Phase != Phase.Running) break;
+                Plugin.Log.LogInfo($"[dropin] postponed by the host at f{Engine.AppliedFrame}");
+                StopLockstep("drop-in postponed");
+                WaitingForResync = true;
+                Status = "The party is loading or in a battle. You'll drop in in a moment…";
+                Toast.Show(Status);
                 break;
             case Msg.DropInSave:
             {
@@ -631,9 +737,10 @@ internal sealed class Session
                 var slots = new List<int>();
                 for (int n = r.ReadInt32(); n > 0; n--) slots.Add(r.ReadInt32());
                 var spawn = r.ReadBoolean() ? PartySpawn.Read(r) : null;
+                double timeBase = r.ReadDouble();
                 if (!Engine.Running) break;
                 foreach (int s in slots) Engine.AddSlot(s, at);
-                ScheduleReloadInPlace(at, saveSlot, spawn, slots);
+                ScheduleReloadInPlace(at, saveSlot, spawn, slots, timeBase);
                 break;
             }
             case Msg.Input:
@@ -651,7 +758,8 @@ internal sealed class Session
             {
                 int seq = r.ReadInt32();
                 int at = r.ReadInt32();
-                ScheduleLoadRelease(seq, at);
+                double timeBase = r.ReadDouble();
+                ScheduleLoadRelease(seq, at, timeBase);
                 break;
             }
             case Msg.Stop:
@@ -750,9 +858,10 @@ internal sealed class Session
     /// <summary>
     /// Starts lockstep on this PC. A new run starts on frame 0; a drop-in starts on the join frame
     /// <paramref name="startFrame"/>, with the slot → player mapping the session already uses
-    /// (<paramref name="playerIndex"/>). <paramref name="enterGame"/> runs on the start frame.
+    /// (<paramref name="playerIndex"/>). <paramref name="enterGame"/> runs on the start frame, after the session clock
+    /// is set to <paramref name="timeBase"/> (NaN: <paramref name="enterGame"/> sets it).
     /// </summary>
-    private void BeginLockstep(int seed, int delay, bool[] occupied, int startFrame, int[] playerIndex, Action enterGame)
+    private void BeginLockstep(int seed, int delay, bool[] occupied, int startFrame, int[] playerIndex, double timeBase, Action enterGame)
     {
         GameBridge.LockTime();
         Application.runInBackground = true;
@@ -783,6 +892,8 @@ internal sealed class Session
         };
         Engine.Stalled = OnStalled;
         Engine.LeftSession = OnLeftSession;
+        _releaseFrames.Clear();
+        _entryFrame = -1;
         _autoJoin = LocalSlot > 0;
         // After a title-screen start the game needs a moment before Join works; a drop-in waits for its load instead.
         _autoJoinFrom = startFrame == 0 ? 240 : startFrame + 1;
@@ -791,6 +902,7 @@ internal sealed class Session
         _reloadSpawn = null;
         WaitingForResync = false;
         Engine.Start(LocalSlot, IsHost, occupied, delay, seed, startFrame);
+        Engine.Hold = HoldFrame;
         if (playerIndex != null)
         {
             Array.Copy(playerIndex, GameBridge.SlotPlayerIndex, GameBridge.SlotPlayerIndex.Length);
@@ -802,6 +914,7 @@ internal sealed class Session
             var slots = new List<int>();
             for (int s = 0; s < occupied.Length; s++) if (occupied[s]) slots.Add(s);
             GameBridge.RegisterSlotPlayers(slots);
+            if (!double.IsNaN(timeBase)) GameClock.SetBase(timeBase, startFrame);
             enterGame();
         });
         Phase = Phase.Running;
@@ -818,6 +931,16 @@ internal sealed class Session
 
     private void AfterLockstep()
     {
+        if (_catchUp != null) { EndCatchUpFastForward(); _catchUp = null; }
+        _releaseFrames.Clear();
+        _entryFrame = -1;
+        // A load held at the barrier would never end otherwise.
+        if (_heldSeq >= 0)
+        {
+            Plugin.Log.LogInfo($"[barrier] lockstep stopped while load {_heldSeq} was held: releasing it");
+            _heldSeq = -1;
+            LoadBarrier.Release();
+        }
         GameBridge.UnlockTime();
         try { GameBridge.Input?.AutoAssignUnassignedControllers(); } catch { }
         if (InSession) Phase = Phase.Lobby;
@@ -854,7 +977,15 @@ internal sealed class Session
 
     private void OnFrameApplied(int frame)
     {
+        if (_catchUp != null && frame == _catchUp.L) CatchUpEntry(frame);
+        if (frame == _entryFrame)
+        {
+            _entryFrame = -1;
+            AreaLog.SaveAtEntry(frame, IsHost, IsHost ? _area : null, Engine);
+        }
+        if (IsHost) _area.OnFrame(frame, InputOverride.Current);
         var snap = Sync.OnFrame(frame);
+        if (snap != null && IsHost && _area.L >= 0 && frame >= _area.L) _area.Snapshots.Add(snap);
         if (snap != null)
         {
             TestHarness.OnSnapshot(snap);
@@ -865,6 +996,18 @@ internal sealed class Session
                     snap.Write(w);
                     Send(peer.Id, ms, true);
                 }
+        }
+        if (_catchUp != null && Sync.Desynced)
+        {
+            // The replay doesn't reproduce the live game: give up on catching up, the host reloads in place instead.
+            Plugin.Log.LogWarning($"[catchup] f{frame} replay diverged: {Sync.LastDesyncReason}");
+            var (w, ms) = Protocol.Begin(Msg.CatchUpFailed);
+            w.Write(Sync.LastDesyncReason ?? "");
+            Send(HostId, ms, true);
+            StopLockstep("catch-up diverged");
+            WaitingForResync = true;
+            Status = "Catching up failed. You'll drop in with a short reload instead…";
+            return;
         }
         if (Sync.Desynced && _desyncNotifiedFrame < 0)
         {
@@ -903,6 +1046,16 @@ internal sealed class Session
         _heldSeq = seq;
         _heldSince = frame;
         Plugin.Log.LogInfo($"[barrier] load {seq} reached its end at f{frame}, held");
+        if (_catchUp != null)
+        {
+            // Catching up: the session released this load long ago; its release frame is already scheduled here.
+            if (!_catchUp.Held && seq == _catchUp.Seq)
+            {
+                _catchUp.Held = true;
+                Plugin.Log.LogInfo($"[catchup] area entry save loaded in {Now - _catchUp.Since:F1} s; replaying from f{_catchUp.L}");
+            }
+            return true;
+        }
         if (IsHost) ReportLoaded(LocalSlot, seq, frame);
         else
         {
@@ -937,26 +1090,40 @@ internal sealed class Session
             // Guests can run at most Delay + 1 frames ahead of the host's applied frame (they need its system input),
             // and they receive this message before any input that would take them past the release frame.
             int release = now + Engine.Delay + 3;
+            double timeBase = GameClock.BaseIn(release - now);
             Plugin.Log.LogInfo($"[barrier] load {seq}: reached at {string.Join(", ", bySlot.OrderBy(kv => kv.Key).Select(kv => $"P{kv.Key + 1} f{kv.Value}"))}; release at f{release}");
-            foreach (var peer in _peers.Values.Where(p => !p.Pending))
+            foreach (var peer in _peers.Values.Where(p => !p.Pending || p.CatchUp == CatchUpStep.Running))
             {
                 var (w, ms) = Protocol.Begin(Msg.LoadRelease);
                 w.Write(seq);
                 w.Write(release);
+                w.Write(timeBase);
                 Send(peer.Id, ms, true);
             }
             _loadReports.Remove(seq);
-            ScheduleLoadRelease(seq, release);
+            ScheduleLoadRelease(seq, release, timeBase);
         }
     }
 
     /// <summary>(load sequence, release frame) whenever a load's release is scheduled on this PC.</summary>
     public static event Action<int, int> LoadReleaseScheduled;
 
-    private void ScheduleLoadRelease(int seq, int frame)
+    /// <summary>
+    /// Optional: (load sequence, clock base the host picked) → the clock base to use. A run that replays another
+    /// run's inputs adopts that run's clock at the area entry (spike B; Stage 3's joiner does the same).
+    /// </summary>
+    public static Func<int, double, double> ReleaseClock;
+
+    /// <summary>
+    /// Load <paramref name="seq"/> ends on <paramref name="frame"/> on every PC, and every PC's game clock reads
+    /// <paramref name="timeBase"/> from that frame on.
+    /// </summary>
+    private void ScheduleLoadRelease(int seq, int frame, double timeBase)
     {
         if (!Engine.Running) return;
+        if (ReleaseClock != null) timeBase = ReleaseClock(seq, timeBase);
         LoadReleaseScheduled?.Invoke(seq, frame);
+        _releaseFrames[frame] = seq;
         if (frame < Engine.Frame)
         {
             LoadBarrierLateReleases++;
@@ -970,8 +1137,13 @@ internal sealed class Session
                 return;
             }
             _heldSeq = -1;
+            _releaseFrames.Remove(frame);
             Plugin.Log.LogInfo($"[barrier] load {seq} released at f{frame} (held {frame - _heldSince} frames)");
+            GameClock.SetBase(timeBase, frame + Engine.RngFrameOffset);
             LoadBarrier.Release();
+            // Every PC autosaves at the end of this frame: a later joiner can catch up from here (Stage 3).
+            _entryFrame = frame;
+            if (IsHost) _area.OnLoadReleased(seq, frame, timeBase);
             if (_reloadSpawn != null)
             {
                 // The game re-forms the followers around the leader as the level starts; put them back after it.
@@ -988,6 +1160,7 @@ internal sealed class Session
     private void ApplySlotLeave(int slot, int frame)
     {
         if (slot <= 0 || !Engine.Running) return;
+        _area.Invalidate("a player left");
         Engine.SetLeaveFrame(slot, frame);
         Engine.Schedule(frame, () => GameBridge.MakeLeave(slot));
         Plugin.Log.LogInfo($"[session] slot {slot} leaves at frame {frame}");
@@ -1073,11 +1246,13 @@ internal sealed class Session
         {
             case DropInStep.None:
             {
-                if (!HasPending) { _saveableFrames = 0; return; }
+                if (!HasStage2Pending) { _saveableFrames = 0; return; }
                 // Free gameplay where the game itself allows saving (no battle, cutscene or loading).
                 _saveableFrames = GameBridge.CanSaveNow ? _saveableFrames + 1 : 0;
                 if (_saveableFrames < 30) return;
                 _saveableFrames = 0;
+                // A joiner catching up would miss this reload: it comes in with it instead.
+                foreach (var p in _peers.Values.Where(p => p.Pending && p.CatchUp != CatchUpStep.None)) CancelCatchUp(p, "a reload in place is starting");
                 _joiners.Clear();
                 _joiners.AddRange(_peers.Values.Where(p => p.Pending).Select(p => p.Id));
                 // Guests can be up to Delay + 1 frames ahead of us; they get this before any input that takes them further.
@@ -1160,6 +1335,9 @@ internal sealed class Session
         int at = Engine.AppliedFrame + Engine.Delay + 3;
         var spawn = GameBridge.CaptureParty();
         var slots = _joiners.Select(id => _peers[id].Slot).OrderBy(s => s).ToList();
+        _area.Invalidate("a player joined");
+        // Everyone's clock moves to one base on the join frame; the joiners' clocks came from their own game.
+        double timeBase = NextClockBase(_joiners.Select(id => _peers[id]));
 
         // Everyone already playing: add the slots and reload in place on the join frame.
         foreach (var peer in _peers.Values.Where(p => !p.Pending))
@@ -1171,6 +1349,7 @@ internal sealed class Session
             foreach (int s in slots) w.Write(s);
             w.Write(spawn != null);
             spawn?.Write(w);
+            w.Write(timeBase);
             Send(peer.Id, ms, true);
         }
 
@@ -1191,6 +1370,7 @@ internal sealed class Session
             w.Write(_dropInSlot);
             w.Write(spawn != null);
             spawn?.Write(w);
+            w.Write(timeBase);
             Send(id, ms, true);
 
             foreach (var (frame, ch) in Engine.BufferedFrom(at).OrderBy(f => f.frame).ToList())
@@ -1203,7 +1383,7 @@ internal sealed class Session
             peer.LastInputFrame = at + Engine.Delay - 1;
         }
 
-        ScheduleReloadInPlace(at, _dropInSlot, spawn, slots);
+        ScheduleReloadInPlace(at, _dropInSlot, spawn, slots, timeBase);
         BroadcastRoster();
         string names = string.Join(", ", _joiners.Select(id => _peers[id].Name));
         Status = $"{names} joined.";
@@ -1223,24 +1403,66 @@ internal sealed class Session
         for (int s = 0; s < playerIndex.Length; s++) playerIndex[s] = r.ReadInt32();
         int saveSlot = r.ReadInt32();
         var spawn = r.ReadBoolean() ? PartySpawn.Read(r) : null;
+        double timeBase = r.ReadDouble();
         if (Phase == Phase.Running) return;
         _awaitingMirrorReload = false;
         Plugin.Log.LogInfo($"[dropin] joining at f{at}, reload slot {saveSlot}, spawn {spawn}");
-        BeginLockstep(seed, delay, occupied, at, playerIndex, () => ReloadInPlace(at, saveSlot, spawn));
+        BeginLockstep(seed, delay, occupied, at, playerIndex, double.NaN, () => ReloadInPlace(at, saveSlot, spawn, timeBase));
     }
 
     /// <summary>Every PC already in the session: on the join frame, register the new slots and reload in place.</summary>
-    private void ScheduleReloadInPlace(int at, int saveSlot, PartySpawn spawn, List<int> newSlots)
+    private void ScheduleReloadInPlace(int at, int saveSlot, PartySpawn spawn, List<int> newSlots, double timeBase)
     {
+        // Test: a level load in progress on the join frame (the party walked through a door, say). Once per run.
+        if (TestHarness.TryArg("loadatjoin", out _) && !_loadAtJoinDone)
+        {
+            _loadAtJoinDone = true;
+            Engine.Schedule(at - 1, () =>
+            {
+                Plugin.Log.LogInfo($"[test] f{at - 1} starting a level load before the join frame");
+                GameBridge.ReloadInPlace(saveSlot, true, spawn?.Leader, spawn?.Angle ?? -1);
+            });
+        }
         Engine.Schedule(at, () =>
         {
+            // The same state on every PC already in, so they all decide the same way. The joiner reloads anyway; it
+            // is told to stop and wait.
+            if (GameBridge.LoadingLevel || GameBridge.InBattle)
+            {
+                PostponeDropIn(at, newSlots);
+                return;
+            }
             GameBridge.RegisterSlotPlayers(newSlots);
-            ReloadInPlace(at, saveSlot, spawn);
+            ReloadInPlace(at, saveSlot, spawn, timeBase);
         });
     }
 
-    private void ReloadInPlace(int frame, int saveSlot, PartySpawn spawn)
+    private static bool _loadAtJoinDone;
+
+    /// <summary>
+    /// Every PC already in, on the join frame: a level load or a battle is running, so the autosave can't be
+    /// reloaded now (it may also be of another area). The joining slots leave again on this frame; the host puts the
+    /// joiners back in the queue and the drop-in starts over with a fresh autosave.
+    /// </summary>
+    private void PostponeDropIn(int at, List<int> slots)
     {
+        Plugin.Log.LogWarning($"[dropin] f{at} {(GameBridge.LoadingLevel ? "a level load" : "a battle")} is running: join of slot(s) {string.Join(",", slots)} postponed");
+        foreach (int s in slots) Engine.SetLeaveFrame(s, at);
+        if (!IsHost) return;
+        foreach (var peer in _peers.Values.Where(p => slots.Contains(p.Slot)))
+        {
+            peer.Pending = true;
+            peer.Ready = false;
+            peer.LastInputFrame = -1;
+            var (w, ms) = Protocol.Begin(Msg.DropInAbort);
+            Send(peer.Id, ms, true);
+        }
+        Toast.Show($"{string.Join(", ", _peers.Values.Where(p => slots.Contains(p.Slot)).Select(p => p.Name))} joins after this.");
+    }
+
+    private void ReloadInPlace(int frame, int saveSlot, PartySpawn spawn, double timeBase)
+    {
+        GameClock.SetBase(timeBase, frame);
         if (GameBridge.Saving) Plugin.Log.LogError($"[dropin] f{frame} still saving");
         if (GameBridge.LoadingLevel) Plugin.Log.LogWarning($"[dropin] f{frame} a level load is in progress");
         // Co-op players are not in the save, and they survive an in-place load: guests already playing would keep
@@ -1287,6 +1509,280 @@ internal sealed class Session
         if (join >= 0) snap.Bits[join] |= ActionBits.Button | ActionBits.ButtonDown;
         Plugin.Log.LogInfo($"[session] auto-join press for slot {LocalSlot} at frame {frame}");
         return snap;
+    }
+
+    // ------------------------------------------------------------------ catch-up (Stage 3)
+
+    /// <summary>Frames on which a load is released (→ load seq). A frame doesn't run before its load is held here.</summary>
+    private readonly Dictionary<int, int> _releaseFrames = new();
+
+    /// <summary>
+    /// The engine doesn't advance while this is true:
+    /// <list type="bullet">
+    /// <item>a joiner's area-entry save is still loading (frame L must be the frame that load ends on);</item>
+    /// <item>a load is released on the next frame and hasn't reached its end here yet. Only a joiner replaying
+    /// uncapped gets there: everyone else reported the end before the host picked the frame.</item>
+    /// </list>
+    /// </summary>
+    private bool HoldFrame()
+    {
+        if (_catchUp != null && !_catchUp.Held) return true;
+        return _releaseFrames.TryGetValue(Engine.Frame, out int seq) && _heldSeq != seq && GameBridge.LoadingLevel;
+    }
+
+    /// <summary>
+    /// Host, every frame: joiners that can catch up get the area entry save, then the input log since then, then the
+    /// live inputs like everyone else. Nobody already playing waits for them.
+    /// </summary>
+    private void UpdateCatchUpHost()
+    {
+        if (!IsHost || Phase != Phase.Running) return;
+        double now = Now;
+        foreach (var peer in _peers.Values.ToList())
+        {
+            if (!peer.Pending) continue;
+            switch (peer.CatchUp)
+            {
+                case CatchUpStep.None:
+                    if (!WantsCatchUp(peer) || _dropIn != DropInStep.None || _joiners.Contains(peer.Id)) break;
+                    peer.CatchUp = CatchUpStep.Files;
+                    peer.CatchUpL = _area.L;
+                    peer.CatchUpSince = now;
+                    int files = SendSaveFiles(new[] { peer }, true, _area.SaveFiles);
+                    Status = $"{peer.Name} is catching up…";
+                    Toast.Show($"{peer.Name} is joining. Keep playing.");
+                    Plugin.Log.LogInfo($"[catchup] {peer.Name}: catching up from the area entry at f{_area.L} ({Engine.AppliedFrame - _area.L} frames ago); sent {files} files");
+                    break;
+
+                case CatchUpStep.Files:
+                    if (!_area.Valid || _area.L != peer.CatchUpL)
+                    {
+                        // A new area (or a roster change) since the files were sent: start over from what is there now.
+                        Plugin.Log.LogInfo($"[catchup] {peer.Name}: area log changed ({_area.InvalidReason}); starting over");
+                        peer.CatchUp = CatchUpStep.None;
+                        break;
+                    }
+                    if (!peer.Ready)
+                    {
+                        if (now - peer.CatchUpSince > CatchUpTimeoutS) CancelCatchUp(peer, "the save transfer took too long");
+                        break;
+                    }
+                    SendCatchUp(peer);
+                    peer.CatchUp = CatchUpStep.Running;
+                    break;
+
+                case CatchUpStep.Running:
+                    if (now - peer.CatchUpSince > CatchUpTimeoutS) CancelCatchUp(peer, "catching up took too long");
+                    break;
+            }
+        }
+    }
+
+    /// <summary>A catch-up that hasn't merged after this long (seconds, from the save transfer) falls back to Stage 2.</summary>
+    private const double CatchUpTimeoutS = 120;
+
+    /// <summary>Host: stop a joiner's catch-up; it drops in by a reload in place (Stage 2) instead.</summary>
+    private void CancelCatchUp(Peer peer, string why)
+    {
+        Plugin.Log.LogInfo($"[catchup] {peer.Name}: cancelled, {why}");
+        if (peer.CatchUp == CatchUpStep.Running)
+        {
+            var (w, ms) = Protocol.Begin(Msg.DropInAbort);
+            Send(peer.Id, ms, true);
+        }
+        peer.CatchUp = CatchUpStep.None;
+        peer.ForceStage2 = true;
+        peer.Ready = false;
+    }
+
+    /// <summary>Host: the joiner has the area entry save. Send it where to start, and every input since.</summary>
+    private void SendCatchUp(Peer peer)
+    {
+        var (w, ms) = Protocol.Begin(Msg.CatchUp);
+        w.Write(Engine.Seed);
+        w.Write(Engine.Delay);
+        w.Write(_area.L);
+        w.Write(_area.Seq);
+        w.Write(_area.ClockBase);
+        foreach (bool o in _area.Occupied) w.Write(o);
+        foreach (int p in _area.PlayerIndex) w.Write(p);
+        w.Write(_area.Playing.Count);
+        foreach (int s in _area.Playing) w.Write(s);
+        w.Write(_area.SaveSlot);
+        _area.Party.Write(w);
+        w.Write(Engine.AppliedFrame);
+        Send(peer.Id, ms, true);
+
+        int blocks = 0;
+        for (int f = _area.L; f <= _area.LastFrame; f += InputLogBlock)
+        {
+            var (bw, bms) = Protocol.Begin(Msg.InputLog);
+            _area.WriteFrames(bw, f, Math.Min(InputLogBlock, _area.LastFrame - f + 1));
+            Send(peer.Id, bms, true);
+            blocks++;
+        }
+        // The host's state along the way, so the joiner finds a divergence while it replays, not after it joined.
+        foreach (var snap in _area.Snapshots)
+        {
+            var (sw, sms) = Protocol.Begin(Msg.Snapshot);
+            snap.Write(sw);
+            Send(peer.Id, sms, true);
+        }
+        // Frames not applied yet: whatever input has arrived for them. Later input is relayed to the joiner as usual.
+        foreach (var (frame, ch) in Engine.BufferedFrom(Engine.AppliedFrame + 1).OrderBy(f => f.frame).ToList())
+            for (int s = 0; s < InputOverride.SlotCount; s++)
+            {
+                if (ch[s] == null || s == peer.Slot) continue;
+                SendInputTo(peer.Id, frame, s, ch[s], s == LocalSlot ? ch[InputOverride.SystemChannel] : null);
+            }
+        Plugin.Log.LogInfo($"[catchup] {peer.Name}: start at f{_area.L}, {_area.FrameCount} logged frames in {blocks} blocks, {_area.Snapshots.Count} snapshots, live at f{Engine.AppliedFrame}");
+    }
+
+    /// <summary>Frames per input log message.</summary>
+    private const int InputLogBlock = 600;
+
+    /// <summary>Host: the joiner replayed up to the live session. It joins on a frame a little ahead, on every PC.</summary>
+    private void MergeCaughtUp(Peer peer, int joinerFrame)
+    {
+        int at = Engine.AppliedFrame + Engine.Delay + 3;
+        foreach (var p in _peers.Values.Where(p => !p.Pending || p == peer))
+        {
+            var (w, ms) = Protocol.Begin(Msg.Merge);
+            w.Write(at);
+            w.Write(peer.Slot);
+            Send(p.Id, ms, true);
+        }
+        Engine.AddSlot(peer.Slot, at);
+        int slot = peer.Slot;
+        Engine.Schedule(at, () => GameBridge.RegisterSlotPlayers(new[] { slot }));
+        peer.Pending = false;
+        peer.CatchUp = CatchUpStep.None;
+        peer.LastInputFrame = at + Engine.Delay - 1;
+        _area.Invalidate("a player joined");
+        BroadcastRoster();
+        Status = $"{peer.Name} joined.";
+        Toast.Show($"{peer.Name} joined.");
+        Plugin.Log.LogInfo($"[catchup] {peer.Name} caught up (at f{joinerFrame}, {Now - peer.CatchUpSince:F1} s after the transfer started); joins as slot {slot} at f{at}");
+    }
+
+    /// <summary>
+    /// Joiner: start lockstep on the area entry frame L, behind the session. The area entry save loads first (the
+    /// engine waits); then the logged inputs replay as fast as this PC can go, and the live ones follow.
+    /// </summary>
+    private void OnCatchUp(BinaryReader r)
+    {
+        int seed = r.ReadInt32();
+        int delay = r.ReadInt32();
+        int L = r.ReadInt32();
+        int seq = r.ReadInt32();
+        double clockBase = r.ReadDouble();
+        var occupied = new bool[InputOverride.SlotCount];
+        for (int s = 0; s < occupied.Length; s++) occupied[s] = r.ReadBoolean();
+        var playerIndex = new int[InputOverride.SlotCount];
+        for (int s = 0; s < playerIndex.Length; s++) playerIndex[s] = r.ReadInt32();
+        var playing = new List<int>();
+        for (int n = r.ReadInt32(); n > 0; n--) playing.Add(r.ReadInt32());
+        int saveSlot = r.ReadInt32();
+        var party = PartySpawn.Read(r);
+        int live = r.ReadInt32();
+        if (Phase == Phase.Running) return;
+        _awaitingMirrorReload = false;
+        Plugin.Log.LogInfo($"[catchup] start at f{L} (load {seq}, clock {clockBase:R}), {live - L} frames behind; save slot {saveSlot}, playing {string.Join(",", playing.Select(s => $"P{s + 1}"))}, party {party}");
+
+        BeginLockstep(seed, delay, occupied, L, playerIndex, double.NaN, () => { });
+        _autoJoin = false; // not in the session until the merge
+        _catchUp = new CatchUpState { L = L, Seq = seq, Party = party, Playing = playing, Since = Now, Total = live - L };
+        // The save's load is load <seq> of the session's count; it ends on frame L, as it did for everyone.
+        _loadSeq = seq - 1;
+        ScheduleLoadRelease(seq, L, clockBase);
+        Status = "Catching up with the party…";
+        Toast.Show(Status);
+        if (!GameBridge.ReloadInPlace(saveSlot, true, party.Leader, party.Angle))
+        {
+            var (w, ms) = Protocol.Begin(Msg.CatchUpFailed);
+            w.Write("could not load the area entry save");
+            Send(HostId, ms, true);
+            StopLockstep("catch-up failed");
+            WaitingForResync = true;
+        }
+    }
+
+    /// <summary>Joiner, on frame L after the load's release: what the save doesn't hold, as on the host then.</summary>
+    private void CatchUpEntry(int frame)
+    {
+        string moved = GameBridge.RestoreParty(_catchUp.Party);
+        foreach (int s in _catchUp.Playing)
+        {
+            var p = GameBridge.CoopPlayer(s);
+            try { if (p != null && !p.Playing) p.Join(); }
+            catch (Exception e) { Plugin.Log.LogWarning($"[catchup] Join P{s + 1} failed: {e.Message}"); }
+        }
+        Plugin.Log.LogInfo($"[catchup] f{frame} entry: positions {moved}; co-op players {string.Join(",", _catchUp.Playing.Select(s => $"P{s + 1}={GameBridge.IsPlaying(s)}"))}");
+    }
+
+    /// <summary>Joiner, every frame: fast-forward while behind; tell the host once this PC runs with the session.</summary>
+    private void UpdateCatchUpJoiner()
+    {
+        var c = _catchUp;
+        if (c == null || !c.Held || !Engine.Running) return;
+        int behind = Engine.NewestKnownFrame - Engine.AppliedFrame;
+        if (!c.Live && behind > 30 && !c.Ff) StartCatchUpFastForward();
+        if (c.Ff) KeepCamerasOff();
+        double now = Now;
+        if (!c.Live && now >= c.NextToast)
+        {
+            c.NextToast = now + 1;
+            int total = Math.Max(1, Engine.NewestKnownFrame - c.L);
+            Toast.Show($"Catching up with the party… {Math.Clamp(100 * (Engine.AppliedFrame - c.L) / total, 0, 100)}%");
+        }
+        if (c.Live) return;
+        // Caught up: no more than the input delay (plus a frame or two in flight) behind the host, and the last check
+        // against the host's state agreed.
+        if (behind <= Engine.Delay + 2 && Sync.DesyncStreak == 0) c.LiveChecks++;
+        else c.LiveChecks = 0;
+        if (c.LiveChecks < 30) return;
+        c.Live = true;
+        EndCatchUpFastForward();
+        Plugin.Log.LogInfo($"[catchup] caught up at f{Engine.AppliedFrame} after {now - c.Since:F1} s ({Sync.Checks} state checks, {Sync.Corrections} corrections)");
+        var (w, ms) = Protocol.Begin(Msg.CaughtUp);
+        w.Write(Engine.AppliedFrame);
+        Send(HostId, ms, true);
+    }
+
+    private readonly List<Camera> _ffCameras = new();
+    private int _ffCameraCheck;
+
+    /// <summary>Uncapped frame rate, no rendering, no sound (spike C: about 16× real time).</summary>
+    private void StartCatchUpFastForward()
+    {
+        if (_catchUp == null || _catchUp.Ff) return;
+        _catchUp.Ff = true;
+        QualitySettings.vSyncCount = 0;
+        Application.targetFrameRate = -1;
+        try { AkSoundEngine.SetOutputVolume(0, 0f); } catch (Exception e) { Plugin.Log.LogWarning($"[catchup] mute failed: {e.Message}"); }
+        _ffCameraCheck = 0;
+        KeepCamerasOff();
+        Plugin.Log.LogInfo($"[catchup] fast-forwarding from f{Engine.AppliedFrame}");
+    }
+
+    private void KeepCamerasOff()
+    {
+        // Levels loaded during the replay bring their own cameras.
+        if (_ffCameraCheck-- > 0) return;
+        _ffCameraCheck = 30;
+        foreach (var cam in Camera.allCameras)
+            if (cam != null && cam.enabled) { cam.enabled = false; _ffCameras.Add(cam); }
+    }
+
+    private void EndCatchUpFastForward()
+    {
+        if (_catchUp == null || !_catchUp.Ff) return;
+        _catchUp.Ff = false;
+        foreach (var cam in _ffCameras) if (cam != null) cam.enabled = true;
+        _ffCameras.Clear();
+        Application.targetFrameRate = 60; // lockstep's cap (GameBridge.LockTime)
+        try { AkSoundEngine.SetOutputVolume(0, 1f); } catch { }
+        Plugin.Log.LogInfo($"[catchup] fast-forward off at f{Engine.AppliedFrame}");
     }
 
     // ------------------------------------------------------------------ helpers

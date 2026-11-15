@@ -27,6 +27,14 @@ namespace SosOnline;
 ///   --sosonline-seed=N            fixed session seed (host)
 ///   --sosonline-stateevery=N      state snapshot interval in frames (default 30)
 ///   --sosonline-hpdiverge=F       at lockstep frame F, lower the first party member's HP by 1 on this PC only
+///   --sosonline-noclock           each PC keeps its own game clock (no session clock, finding 8)
+///   --sosonline-play=SLOT[a]      guest: first play save SLOT on its own (offline), then join (--sosonline-join)
+///   --sosonline-joinafter=S       with --sosonline-play: join S seconds after its own game is playable (default 10)
+///   --sosonline-loadatjoin        every PC in the session: start a level load the frame before the first join frame
+///   --sosonline-nocatchup         host: joiners always drop in by a reload in place (Stage 2), never by catching up
+///   --sosonline-tracecalls=C[.M],...  log calls to those game classes (or methods) with the lockstep frame
+///   --sosonline-fixedlog=F1,F2    log the physics steps run in each lockstep frame from F1 to F2
+///   --sosonline-dashprobe         log the battle-entry dash anticipation timers each frame (finding 8)
 /// Every state snapshot is also appended to BepInEx/SosOnline/state-&lt;id&gt;.log for offline comparison.
 /// </summary>
 /// <summary>Per-instance copy of this plugin's log lines (several test instances share BepInEx's log file).</summary>
@@ -86,6 +94,8 @@ internal static class TestHarness
             foreach (var f in shots.Split(',', StringSplitOptions.RemoveEmptyEntries)) Shots.Add(int.Parse(f));
         Args.TryGetValue("script", out _scriptPath);
         if (Args.ContainsKey("nocomp")) TimingCompensation.Enabled = false;
+        if (Args.ContainsKey("noclock")) GameClock.Enabled = false;
+        if (Args.ContainsKey("nocatchup")) Session.Instance.CatchUpEnabled = false;
         if (Args.TryGetValue("botoffset", out var bo)) CombatBot.ImpactOffset = int.Parse(bo);
         if (Args.TryGetValue("stateevery", out var se)) StateSync.Interval = Math.Max(1, int.Parse(se));
 
@@ -135,7 +145,7 @@ internal static class TestHarness
         var session = Session.Instance;
 
         if (Args.ContainsKey("host") && !session.InSession && !_connectedOnce) { _connectedOnce = true; session.Host(); }
-        if (Args.TryGetValue("join", out var hostPort) && !session.InSession && !_connectedOnce) { _connectedOnce = true; session.JoinUdp(ushort.Parse(hostPort)); }
+        if (Args.TryGetValue("join", out var hostPort) && !session.InSession && !_connectedOnce && OwnGameDone()) { _connectedOnce = true; session.JoinUdp(ushort.Parse(hostPort)); }
 
         if (_startSlot != null && session.IsHost && session.Phase == Phase.Lobby)
         {
@@ -154,6 +164,37 @@ internal static class TestHarness
             }
             else _titleSince = -1;
         }
+    }
+
+    private static double _ownGameSince = -1, _ownGamePlayableSince = -1;
+
+    /// <summary>
+    /// --sosonline-play: the guest plays its own game before joining (drop-in from gameplay rather than from the
+    /// title screen). True once it has played for --sosonline-joinafter seconds (always true without the flag).
+    /// </summary>
+    private static bool OwnGameDone()
+    {
+        if (!Args.TryGetValue("play", out var slotArg)) return true;
+        double now = Time.realtimeSinceStartupAsDouble;
+        if (_ownGameSince < 0)
+        {
+            if (!GameBridge.AtTitleScreen) { _titleSince = -1; return false; }
+            if (_titleSince < 0) _titleSince = now;
+            if (now - _titleSince < 4) return false;
+            _ownGameSince = now;
+            bool auto = slotArg.EndsWith("a");
+            int slot = int.Parse(slotArg.TrimEnd('a'));
+            Plugin.Log.LogInfo($"[test] playing own game from slot {slot} auto={auto} before joining");
+            GameBridge.EnterGameFromSlot(slot, auto);
+            return false;
+        }
+        bool playable = GameBridge.Booted && !GameBridge.AtTitleScreen && GameBridge.Party?.Leader != null;
+        if (!playable) { _ownGamePlayableSince = -1; return false; }
+        if (_ownGamePlayableSince < 0) { _ownGamePlayableSince = now; Plugin.Log.LogInfo($"[test] own game playable, level {GameBridge.CurrentLevelId}"); }
+        double after = Args.TryGetValue("joinafter", out var ja) ? double.Parse(ja, CultureInfo.InvariantCulture) : 10;
+        if (now - _ownGamePlayableSince < after) return false;
+        Plugin.Log.LogInfo($"[test] joining from own game (leader at {GameBridge.Party?.Leader?.transform.position})");
+        return true;
     }
 
     public static bool TraceEnabled => Args.ContainsKey("trace");
@@ -293,6 +334,19 @@ internal static class TestHarness
         }
     }
 
+    private static int _lastFixedSteps = -1;
+
+    /// <summary>--sosonline-fixedlog=FROM,TO: physics steps run in each lockstep frame from FROM to TO.</summary>
+    private static void LogFixedSteps(int frame)
+    {
+        if (!Args.TryGetValue("fixedlog", out var v)) return;
+        var range = v.Split(',');
+        int steps = _lastFixedSteps < 0 ? -1 : OnlineBehaviour.FixedSteps - _lastFixedSteps;
+        _lastFixedSteps = OnlineBehaviour.FixedSteps;
+        if (frame >= int.Parse(range[0]) && frame <= int.Parse(range[1]))
+            Plugin.Log.LogInfo($"[fixed] f{frame} {steps} step(s)");
+    }
+
     private static PartySpawn _reloadParty;
 
     /// <summary>
@@ -326,6 +380,7 @@ internal static class TestHarness
     {
         var session = Session.Instance;
         TrackTransitions(frame);
+        LogFixedSteps(frame);
         ReloadSpike(frame);
         SpikeB.OnFrame(frame);
         FastForward.OnFrame(frame);

@@ -27,6 +27,7 @@
     <Reference Include="$(BepInExCore)\BepInEx.Unity.IL2CPP.dll" Private="false" />
     <Reference Include="$(BepInExCore)\BepInEx.Unity.Common.dll" Private="false" />
     <Reference Include="$(BepInExCore)\0Harmony.dll" Private="false" />
+    <Reference Include="$(BepInExCore)\MonoMod.RuntimeDetour.dll" Private="false" />
     <Reference Include="$(BepInExCore)\Il2CppInterop.Runtime.dll" Private="false" />
     <Reference Include="$(BepInExCore)\Il2CppInterop.Common.dll" Private="false" />
 
@@ -42,6 +43,7 @@
     <Reference Include="$(Interop)\Rewired_Core.dll" Private="false" />
     <Reference Include="$(Interop)\AK.Wwise.Unity.API.dll" Private="false" />
     <Reference Include="$(Interop)\Sabotage.Core.dll" Private="false" />
+    <Reference Include="$(Interop)\Sabotage.StateMachine.dll" Private="false" />
     <Reference Include="$(Interop)\Sabotage.Platform.dll" Private="false" />
     <Reference Include="$(Interop)\Sabotage.Localization.dll" Private="false" />
     <Reference Include="$(Interop)\Facepunch.Steamworks.Win64.dll" Private="false" />

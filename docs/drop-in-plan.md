@@ -3,6 +3,7 @@
 Goal: joining and leaving a co-op session should feel like Divinity: Original Sin 2 or Baldur's Gate 3. A friend joins a game in progress from Steam, the players already in it are barely interrupted, and nobody visits the title screen.
 
 Spike instructions are in [drop-in-spikes.md](drop-in-spikes.md).
+Findings from finishing Stage 2 and building Stage 3, and the Stage 3 handoff: [drop-in-findings.md](drop-in-findings.md).
 
 ## Where the mod stands
 
@@ -28,7 +29,7 @@ Spike instructions are in [drop-in-spikes.md](drop-in-spikes.md).
 | 5 | **The reload is manual and timer-driven.** Wall-clock waits (0.5 s, 2 s), guests must already be on the title screen, and the host must start a session from the title screen. | `Session.UpdateDropIn`, `Session.StartFromSave` |
 | 6 | **No loading barrier.** Levels finish loading 1–2 frames apart on different PCs. | README, *Not yet verified* |
 | 7 | **The whole save folder is sent on every start**, including slots the session doesn't use. | `Game/SaveMirror.PackHostFiles` |
-| 8 | **Live sessions drift around battles** (found by Stage 0's state hash). In a two-instance battle the guest corrects all party positions on every snapshot, and facing and enemy positions differ by small amounts afterwards. The likely cause is the game's absolute `Time.time`: timed-input windows are absolute times, and each PC's clock started at a different moment. Spike B shows the same one-frame hit timing between a live run and a replay. | `Lockstep/StateSync.cs`, spike B results |
+| 8 | **Live sessions drift around battles** (found by Stage 0's state hash). In a two-instance battle the guest corrects all party positions on every snapshot, and facing and enemy positions differ by small amounts afterwards. **Fixed:** each PC's own clock. The party's dash into a battle times its 0.1 s anticipation with `smoothDeltaTime` (Unity's average of that PC's recent frame times) against absolute `Time.time`; six frames make exactly 0.1 s, so float rounding ended it on frame 6 on one PC and frame 7 on the other. `GameClock` makes every time getter read the same on every PC. | `Lockstep/GameClock.cs` |
 
 Finding 1 also means the README's "N of N snapshots identical" results prove less than they read: they confirm scenes and party positions only.
 
@@ -87,15 +88,42 @@ Done when: a third instance joins two that are walking around, and the two never
 
 - **Stage 0: done.** Real state hash, loading barrier (`Lockstep/LoadBarrier.cs`), Steam connection loss and a 2 s silent-peer drop. Steam's connection-loss path is untested (no second Steam account here); the 2 s drop is tested on loopback.
 - **Spike A: pass.** Stage 2 is possible.
-- **Spike B: partial.** The save reproduces the entry state. Live play and replay both drift in battles (finding 8).
+- **Spike B: pass** since the shared game clock (finding 8): the replay is bit-identical to the recording for all 3,898 frames from the area entry, 1,383 of them in battle.
 - **Spike C: pass with cameras off** (about 16× real time).
 - **Stage 1: not started.** The plan's own risk table asks for a real two-account Steam test first.
 - **Stage 2: done (loopback).** `Session.UpdateDropIn`: autosave on an agreed frame, files to the joiner, then a join frame on which every PC, joiner included, reloads in place with the party's positions. The engine adds slots mid-run (`LockstepEngine.AddSlot`, `Start(startFrame)`). Measured in three-instance runs: 92–95 frames (about 1.6 s) from the join frame to the release, guests playing 5 frames later, the joiner's state identical to the host's from then on. Also takes in two Stage 1 items: joiners queue for the first saveable moment (no area-change wait, no "let them in now"), and nothing is rejected during a drop-in.
   - Co-op players are not in the save and survive an in-place load, so every PC makes the guests leave on the join frame and they rejoin by synced Join press.
   - A guest that is still booting must not drop in (or start a session): the boot sequence later loads the title screen on top of the game. Guests now report ready only once `GameBridge.Booted`.
   - A save older than 5 s when the joiners are ready is replaced by a fresh one.
-  - Not handled: a level load in progress on the join frame; joining from a guest's own gameplay is untested.
-- **Stage 3: not started.**
+  - A level load or battle running on the join frame: every PC already in sees it on that frame and postpones; the joining slot leaves again on the same frame, the joiner stops and waits, and the drop-in starts over with a fresh autosave (`--sosonline-loadatjoin`: postponed at f1911, joined at f2155, joiner identical to the host afterwards).
+  - Joining from a guest's own gameplay: tested (`--sosonline-play`). The joiner's game is replaced in place; identical to the host afterwards.
+- **Finding 8: fixed** (`Lockstep/GameClock.cs`). Live two-instance battle: 0 corrections and 0 mismatches in 121 snapshots (was 10 corrections and 2 mismatches).
+- **Stage 3: working (loopback), on by default, falls back to Stage 2.** See *Stage 3 status* below.
+
+### Stage 3 status
+
+How it runs:
+- On every load release (frame L) every PC autosaves. The host keeps a copy of that save, what the save doesn't hold (party positions, game clock, slot → player map, co-op players playing), every frame's inputs and its state snapshots from L on (`Net/AreaLog.cs`).
+- A joiner gets that save, starts lockstep on frame L behind everyone (the engine holds until the save has loaded), replays the log uncapped with cameras and audio off, and then follows the live inputs as an observer. It checks every host snapshot on the way.
+- Once it runs within the input delay of the session, the host picks a merge frame; every PC adds the slot there and the joiner presses Join. Nobody already playing reloads or waits.
+- Falls back to Stage 2 when: no valid log (the entry save wasn't allowed, a player joined or left since L, more than 54,000 frames since L), the replay diverges from a host snapshot, it takes over 120 s, or a Stage 2 drop-in starts meanwhile.
+- A frame on which a load is released doesn't run before that load has reached its end on this PC (a joiner replaying uncapped would otherwise get there first).
+
+Measured (three loopback instances, `tests/dropin.sh`):
+
+| Case | Result |
+|---|---|
+| Joiner during free roaming | 1,420 frames replayed, caught up 3.6 s after starting (1.8 s of it loading the save); merged; P3 playing 6 frames later. Joiner identical to the host in all 129 snapshots; guest 1 likewise. |
+| Area entry after P2 was playing | The joiner's first catch-up was overtaken by a level load and restarted from the new entry; P2 joined on the joiner at L; identical in all 129 snapshots. |
+| Joiner arrives during a battle | The replay crossed the battle start; merged and took P3 mid-battle; identical in all 129 snapshots. |
+| Joiner from its own game | Same as from the title screen: 1,491 frames in 3.3 s, identical. |
+| Divergence injected during the replay (`--sosonline-hpdiverge`) | Found at the next two host snapshots (f630, f660), mid-replay; fell back to Stage 2 and joined at f2060; identical afterwards. |
+
+Not done yet:
+- Replaying a roster change (a join or leave since L) instead of falling back.
+- The catch-up screen: cameras are off, so the joiner sees a frozen frame and a progress toast.
+- Real Steam P2P (sending the log in 600-frame blocks is untested over the relay).
+- Physics steps: the game's fixed step is 0.02 s against 1/60 s frames, so one frame in six has no physics step, and which one depends on when each PC's clock started. Identical in every run measured; not forced.
 
 ## Order of work
 
@@ -119,4 +147,5 @@ Done when: a third instance joins two that are walking around, and the two never
 | In-place load leaves stale managers or co-op state (spike A fails) | No Stage 2 | Keep the title-screen route, automated and hidden behind an overlay |
 | Real Steam P2P has never run end to end | Everything | Test two real accounts before Stage 1 UI work |
 | A richer state hash costs frame time | Stutter every 30 frames | Measured: 3.4 ms average, 25.6 ms worst, every 30 frames. Acceptable for now |
-| Absolute game time differs between PCs (finding 8) | Small drift in battles today; a replaying joiner can never match the host exactly | Make game time identical on every PC at lockstep start (patch the time source the game reads), or keep correcting from the host's snapshot, extended beyond party positions |
+| Absolute game time differs between PCs (finding 8) | Small drift in battles; a replaying joiner can never match the host exactly | Done: `GameClock` hooks Unity's time getters (time, unscaled time, smoothDeltaTime, frameCount) and re-bases them on every load release |
+| Physics step phase differs between PCs | A `FixedUpdate` on different frames on different PCs | Not seen yet. If it shows up: align the phase on a load release (one frame with an adjusted fixed step) |

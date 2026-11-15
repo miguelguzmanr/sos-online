@@ -17,6 +17,7 @@ It is a BepInEx 6 (IL2CPP) plugin. The game ships Steamworks (`steam_api64.dll`,
 | Input override | Rewired's `Player.GetButton*/GetAxis*` (all 25 getters) answer from the synced frame. Every game system (movement, menus, combat, the co-op Join and Leave) reads input through them. | `Lockstep/InputOverride.cs` |
 | Input capture | Reads the local hardware through the original getters: 13 flags (down, up, repeat, short or long press, …) and axis values for each of the game's 59 actions. | `Lockstep/InputCapture.cs` |
 | Lockstep engine | Runs in Rewired's update. Captures input for frame N + delay and sends it. Waits for every player's input for frame N, applies it, and reseeds `UnityEngine.Random` from (session seed, frame). | `Lockstep/LockstepEngine.cs` |
+| Shared game clock | Unity's time getters (`time`, unscaled time, `smoothDeltaTime`, `frameCount`) are hooked at the native level and read the same on every PC: local time plus an offset re-based on every level load's release. Each PC's own clock made 0.1 s timers end a frame apart (float rounding at a different magnitude), which drifted every battle. | `Lockstep/GameClock.cs` |
 | Device routing | During a session your pads and keyboard drive your slot's player. The game's automatic controller (re)assignment and its pause on focus loss or Steam overlay are suspended, because they would only happen on one PC. | `Patches/Patches.cs` |
 | Save mirroring | The host sends its save folder (slots, autosaves, options) to the guests. Guests redirect the game's save I/O to `SosOnlineSession\`, so their own saves are never read or overwritten. | `Game/SaveMirror.cs` |
 | Host fixes | Every 30 frames the host sends a snapshot: scenes, RNG, party positions. Guests compare it with their own state at that frame, correct small position drift in place, and report real divergence as a desync. | `Lockstep/StateSync.cs` |
@@ -65,13 +66,22 @@ It is a BepInEx 6 (IL2CPP) plugin. The game ships Steamworks (`steam_api64.dll`,
 - The leaver keeps playing solo on their copy of the host's save.
 - Only the host ending the session ends it for everyone.
 
-**Drop-in.** Lockstep syncs inputs, not world state, so a newcomer can't be streamed into a running game. Instead everyone reloads a fresh autosave in place, behind the game's own fade, without leaving gameplay:
+**Drop-in.** Lockstep syncs inputs, not world state, so a newcomer can't be streamed into a running game. It rebuilds the game instead, by replay if it can, by a short reload for everyone if not.
+
+*Catching up (only the joiner waits).*
+- On every level load's last frame (the area entry), every PC autosaves. The host keeps a copy of that save, the inputs of every frame since, and its state snapshots (`Net/AreaLog.cs`).
+- A joiner gets that save, loads it, and replays the inputs since the area entry with rendering and sound off (about 800 frames per second on loopback), checking the host's snapshots as it goes. Then it follows the live inputs.
+- Once it is level with the session, the host picks a merge frame: every PC adds the player there and the joiner takes a party member. The players already in never stop.
+- If a player joined or left since the area entry, the replay would be over 15 minutes, it disagrees with a host snapshot, or it takes over 2 minutes, the joiner drops in by a reload instead (below).
+
+*Reload in place (fallback).* Everyone reloads a fresh autosave in place, behind the game's own fade, without leaving gameplay:
 - A friend who joins mid-session is admitted as *waiting*. Once the game itself has allowed saving for half a second (no battle, cutscene or loading), every PC in the session autosaves on an agreed frame. Lockstep keeps running.
 - The host sends its saves to the joiner, who loads them into its mirror folder wherever it is (title screen or its own game, once the game has finished booting) and reports ready. If that took more than 5 s, the host saves again first, so little progress is undone.
 - The host picks a join frame a few frames ahead and sends it, with where every party member stands, to everyone. The joiner starts lockstep on that frame with the inputs the host has buffered for it.
 - On the join frame every PC, the joiner included, loads the autosave in place (`GameBridge.ReloadInPlace`): the leader spawns where it stood, the loading barrier ends the load on one frame everywhere, and two frames later every party member is put back on its own position.
 - Co-op players aren't in the save, so on the join frame every PC lets the guests leave co-op, and each guest takes a party member again automatically: the mod presses the game's co-op **Join** for them, through synced input. The same happens after a session start.
 - Progress made between the autosave and the join frame (usually 2 s) is undone, except positions.
+- If a level load or battle is running on the join frame, every PC sees it on that frame and the join is postponed: the drop-in starts over with a fresh autosave once it is over.
 
 **Assign Players.** The game's own screen, made session-aware.
 - Offline it is device-driven. A gamepad joins by pressing a button (the screen polls every *local* device), and finishing moves devices between the game's players P1–P3.
@@ -147,6 +157,9 @@ powershell -ExecutionPolicy Bypass -File tools\deploy.ps1 -GameDir "W:\SteamLibr
 | `tests\uitest.cmd` | Screenshots of the title screen Online menu, hosts a real Steam lobby, leaves. |
 | `tests/ab-run.sh` | Runs solo battle instances in parallel (each `"port\|flags"`), e.g. timing bots with and without `--sosonline-nocomp`. |
 | `tests/battle-map.sh`, `tests/map-results.sh` | Maps the game's timed-hit and block grading: one run per press offset. |
+| `tests/battle-live.sh` | Two instances, a battle on both from frame 1500: prints the guest's corrections and mismatches (finding 8). |
+| `tests/dropin.sh` | Three instances: a third player joins 30 s in (`JOIN_DELAY`). `HOSTFLAGS`/`JOINFLAGS` add flags, e.g. `--sosonline-nocatchup` (reload in place), `--sosonline-loadatjoin`, `--sosonline-play=0` (join from its own game). Compares both guests' states with the host's. |
+| `tests/spike-b.sh` | Records a run, replays it from the area entry autosave, compares every frame. |
 
 Battle flags: `--sosonline-encounter=F` starts the nearest encounter on lockstep frame F (every peer). `--sosonline-bot` confirms menus and presses timed hits `--sosonline-botoffset` frames after the impact it sees; `--sosonline-bot=menu` only confirms menus. `--sosonline-trace` logs the combat timing calls, and `--sosonline-nocomp` disables client-side timing.
 

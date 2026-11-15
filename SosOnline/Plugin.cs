@@ -30,7 +30,10 @@ public sealed class Plugin : BasePlugin
             ClassInjector.RegisterTypeInIl2Cpp<OnlineBehaviour>();
             AddComponent<OnlineBehaviour>();
             TestHarness.Init();
+            GameClock.Install();
             if (TestHarness.TraceEnabled) Diagnostics.InstallTrace(harmony);
+            if (TestHarness.TryArg("tracecalls", out var traceClasses)) Diagnostics.InstallCallTrace(harmony, traceClasses);
+            if (TestHarness.TryArg("dashprobe", out _)) Diagnostics.InstallDashProbe(harmony);
             TimingCompensation.Install(harmony);
             NativeCode.AuditPatches(harmony, Guid);
             SteamInvites.ParseCommandLine();
@@ -47,6 +50,11 @@ public sealed class Plugin : BasePlugin
 public sealed class OnlineBehaviour : MonoBehaviour
 {
     public OnlineBehaviour(IntPtr ptr) : base(ptr) { }
+
+    /// <summary>Physics steps Unity has run (diagnostics: --sosonline-fixedlog).</summary>
+    internal static int FixedSteps;
+
+    private void FixedUpdate() => FixedSteps++;
 
     private void Update()
     {

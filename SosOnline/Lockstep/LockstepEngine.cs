@@ -24,7 +24,10 @@ internal sealed class LockstepEngine
     public int LocalSlot { get; private set; }
     public bool IsHost { get; private set; }
     public int Seed { get; private set; }
-    /// <summary>Added to the frame number when reseeding the RNG (spike B: a replay reproduces another run's frames).</summary>
+    /// <summary>
+    /// Added to the frame number when reseeding the RNG and when setting the game clock's frame count on a load
+    /// release (spike B: a replay reproduces another run's frames).
+    /// </summary>
     public int RngFrameOffset;
     public bool[] Occupied { get; private set; } = new bool[InputOverride.SlotCount];
 
@@ -45,6 +48,15 @@ internal sealed class LockstepEngine
 
     /// <summary>This peer's own slot reached its leave frame.</summary>
     public Action LeftSession;
+
+    /// <summary>
+    /// Optional: while it returns true, frames don't advance (Stage 3: a joiner's area-entry save is still loading;
+    /// frame L must not run before that load reaches its end).
+    /// </summary>
+    public Func<bool> Hold;
+
+    /// <summary>Newest frame whose system input (sent by the host only) has arrived: how far the session has got.</summary>
+    public int NewestKnownFrame { get; private set; } = -1;
 
     /// <summary>First frame a slot no longer takes part in (int.MaxValue = still in).</summary>
     private readonly int[] _leaveFrame = new int[InputOverride.SlotCount];
@@ -159,6 +171,8 @@ internal sealed class LockstepEngine
         _times.Clear();
         _scheduled.Clear();
         AppliedFrame = startFrame - 1;
+        NewestKnownFrame = startFrame - 1;
+        Hold = null;
         LookaheadWaitMs = 0;
         _lastLocal = _lastSystem = null;
         MaxStallMs = LastStallMs = 0;
@@ -197,6 +211,7 @@ internal sealed class LockstepEngine
         if (!Running) return;
         Running = false;
         InputOverride.Active = false;
+        GameClock.Stop();
         _frames.Clear();
         _scheduled.Clear();
         Plugin.Log.LogInfo($"[lockstep] stopped at frame {Frame}: {reason}");
@@ -228,7 +243,20 @@ internal sealed class LockstepEngine
         if (!Running || frame < Frame) return;
         var ch = Slots(frame);
         if (slot >= 0 && slot < InputOverride.SlotCount && frame < _leaveFrame[slot]) ch[slot] = input;
-        if (system != null) ch[InputOverride.SystemChannel] = system;
+        if (system != null)
+        {
+            ch[InputOverride.SystemChannel] = system;
+            if (frame > NewestKnownFrame) NewestKnownFrame = frame;
+        }
+    }
+
+    /// <summary>Stage 3: a logged frame from the host, every channel at once (slots not in the session are ignored).</summary>
+    public void OnRemoteFrame(int frame, InputSnapshot[] channels)
+    {
+        if (!Running || frame < Frame) return;
+        for (int s = 0; s < InputOverride.SlotCount; s++)
+            if (channels[s] != null && InSessionAt(s, frame)) OnRemoteInput(frame, s, channels[s], null);
+        if (channels[InputOverride.SystemChannel] != null) OnRemoteInput(frame, -1, null, channels[InputOverride.SystemChannel]);
     }
 
     private List<int> MissingSlots(int frame)
@@ -255,6 +283,8 @@ internal sealed class LockstepEngine
 
         if (Frame >= _leaveFrame[LocalSlot]) { Stop("left the session"); LeftSession?.Invoke(); return; }
 
+        if (Hold != null && Hold()) return;
+
         // 1. Capture and send local input for a future frame.
         int target = Frame + Delay;
         var local = InputCapture.Capture(GameBridge.PlayerForSlot(LocalSlot), _lastLocal);
@@ -271,9 +301,12 @@ internal sealed class LockstepEngine
             if (system != null) system = LocalInputFilter(target, InputOverride.SystemChannel, system);
         }
         var ch = Slots(target);
-        ch[LocalSlot] = local;
+        // A slot's first Delay frames are empty input on every PC (AddSlot); a Stage 3 joiner that is still catching
+        // up isn't in the session at all, and its own input must not drive its copy of the game either.
+        bool localIn = InSessionAt(LocalSlot, target) && target >= _joinFrame[LocalSlot] + Delay;
+        if (localIn) ch[LocalSlot] = local;
         if (system != null) ch[InputOverride.SystemChannel] = system;
-        SendInput?.Invoke(target, LocalSlot, local, system);
+        if (localIn || system != null) SendInput?.Invoke(target, LocalSlot, local, system);
 
         // 2. Wait for everyone's input for this frame.
         if (!Complete(Frame))
@@ -295,6 +328,7 @@ internal sealed class LockstepEngine
         // 3. Apply.
         InputOverride.SetFrame(_frames[Frame]);
         AppliedFrame = Frame;
+        GameClock.Tick();
         _times[Frame] = UnityEngine.Time.time;
         _times.Remove(Frame - HistoryFrames);
         // Reseed every frame: whatever consumed UnityEngine.Random a variable number of times last frame

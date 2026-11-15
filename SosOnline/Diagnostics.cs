@@ -61,6 +61,55 @@ internal static class Diagnostics
         Plugin.Log.LogInfo($"[trace] {count} combat timing methods traced");
     }
 
+    /// <summary>
+    /// --sosonline-tracecalls=Class1,Class2: logs every call to the public methods those game classes declare
+    /// (Assembly-CSharp), with the lockstep frame. Compare two PCs' logs to find a step that runs on different frames.
+    /// </summary>
+    public static void InstallCallTrace(Harmony harmony, string classes)
+    {
+        var asm = typeof(Encounter).Assembly;
+        var prefix = new HarmonyMethod(typeof(Diagnostics).GetMethod(nameof(CallPrefix), BindingFlags.Static | BindingFlags.NonPublic));
+        int count = 0;
+        foreach (var entry in classes.Split(',', StringSplitOptions.RemoveEmptyEntries))
+        {
+            // "Class" traces every public method it declares, "Class.Method" only that one.
+            var parts = entry.Split('.');
+            var name = parts[0];
+            var type = asm.GetTypes().FirstOrDefault(t => t.Name == name);
+            if (type == null) { Plugin.Log.LogWarning($"[trace] class {name} not found"); continue; }
+            foreach (var m in type.GetMethods(BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.DeclaredOnly))
+            {
+                if (parts.Length > 1 && m.Name != parts[1]) continue;
+                if (m.IsGenericMethodDefinition || m.Name.StartsWith("get_") || m.Name.StartsWith("set_") || m.Name.StartsWith("add_") || m.Name.StartsWith("remove_")) continue;
+                if (m.Name is "Update" or "LateUpdate" or "FixedUpdate") continue;
+                if (NativeCode.IsFolded(m)) continue;
+                try { harmony.Patch(m, prefix: prefix); count++; }
+                catch (Exception e) { Plugin.Log.LogWarning($"[trace] can't patch {type.Name}.{m.Name}: {e.Message}"); }
+            }
+        }
+        Plugin.Log.LogInfo($"[trace] {count} methods of {classes} traced");
+    }
+
+    /// <summary>--sosonline-dashprobe: the dash anticipation's timers each frame (battle-entry drift).</summary>
+    public static void InstallDashProbe(Harmony harmony)
+    {
+        var m = typeof(PlayerDashState).GetMethod(nameof(PlayerDashState.UpdateAnticipation));
+        harmony.Patch(m, prefix: new HarmonyMethod(typeof(Diagnostics).GetMethod(nameof(DashProbe), BindingFlags.Static | BindingFlags.NonPublic)));
+    }
+
+    private static void DashProbe(PlayerDashState __instance)
+    {
+        try
+        {
+            Plugin.Log.LogInfo(FormattableString.Invariant(
+                $"[dash] f{Session.Instance.Engine.AppliedFrame} {__instance.player?.gameObject.name} state={__instance.anticipationState} progress={__instance.anticipationProgress:R} idleLeft={__instance.anticipationDoneIdleTimeLeft:R} stepback={__instance.anticipationStepbackDuration:R} dt={Time.deltaTime:R} udt={Time.unscaledDeltaTime:R} scale={Time.timeScale:R} t={Time.time:R} smooth={Time.smoothDeltaTime:R}"));
+        }
+        catch (Exception e) { Plugin.Log.LogInfo($"[dash] {e.Message}"); }
+    }
+
+    private static void CallPrefix(MethodBase __originalMethod) =>
+        Plugin.Log.LogInfo($"[call] f{Session.Instance.Engine.AppliedFrame} {__originalMethod.DeclaringType?.Name}.{__originalMethod.Name}");
+
     /// <summary>--sosonline-assignprobe: what the Assign Players screen is built from, and whether virtual pads exist.</summary>
     public static void AssignProbe(int frame)
     {

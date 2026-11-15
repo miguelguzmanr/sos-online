@@ -261,7 +261,9 @@ Result over 3,896 frames from L (walk, battle, after):
 - What differs is battle timing, by one frame, at varying points from run to run, with knock-on differences after it. The trace shows identical decisions on the same frames, but the game's timed-input windows are absolute `Time.time` values: `afterEnd=56.265` on A against `43.175` on B. A replaying joiner cannot share the host's time base.
 - **This is not specific to the save.** The same check on a normal live two-instance session with a battle (`--sosonline-encounter=1500 --sosonline-bot`) also reports `party differs` at frame 1740 and `npcs differs` at 2040, and the guest corrects all three party positions on every snapshot during the battle. The old snapshot couldn't see either.
 
-Against the pass condition (every component identical for 3,000 frames including the battle) this is a fail. Against the question it was meant to answer (does the save reproduce live state) it is a pass. What blocks Stage 3 is the same drift that live sessions already have; see the plan's new finding 8.
+**Rerun with the shared game clock (finding 8 fixed): pass.** `tests/spike-b.sh`, with the replay adopting the recording's clock at L: all 3,898 frames from L identical, bit for bit (positions too), 1,383 of them in battle.
+
+Against the pass condition (every component identical for 3,000 frames including the battle) the original runs were a fail. Against the question it was meant to answer (does the save reproduce live state) it is a pass. What blocks Stage 3 is the same drift that live sessions already have; see the plan's new finding 8.
 
 ### Spike C — replay speed (2026-11-15): pass (cameras off)
 
