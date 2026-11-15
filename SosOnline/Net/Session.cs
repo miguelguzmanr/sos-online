@@ -553,7 +553,7 @@ internal sealed class Session
     {
         var (w, ms) = Protocol.Begin(Msg.Hello);
         w.Write(Protocol.Version);
-        w.Write(Plugin.Version);
+        w.Write(SessionLogs.Build);
         w.Write(Application.version ?? "");
         w.Write(ActionTable.Hash);
         w.Write(LocalName);
@@ -616,6 +616,12 @@ internal sealed class Session
                 Status = peer.Pending ? $"{name} is joining (player {slot + 1})…" : $"{name} joined (player {slot + 1}).";
                 Toast.Show(Status);
                 Plugin.Log.LogInfo($"[session] {name} joined as slot {slot} (mod {modVersion})");
+                if (modVersion != SessionLogs.Build)
+                {
+                    // Not refused (the protocol matched), but a different build is the first suspect if anything breaks.
+                    Plugin.Log.LogWarning($"[session] {name} runs mod build {modVersion}, this PC {SessionLogs.Build}");
+                    Toast.Show($"{name} runs a different build of the mod ({modVersion}). Use the same zip if anything goes wrong.");
+                }
                 break;
             }
             case Msg.Ping: Pong(from, r); break;
@@ -1101,6 +1107,7 @@ internal sealed class Session
         if (snap != null)
         {
             TestHarness.OnSnapshot(snap);
+            SessionLogs.Snapshot(snap);
             if (IsHost)
                 foreach (var peer in _peers.Values)
                 {

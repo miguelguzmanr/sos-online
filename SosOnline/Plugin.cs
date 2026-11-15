@@ -23,6 +23,7 @@ public sealed class Plugin : BasePlugin
     public override void Load()
     {
         Log = base.Log;
+        SessionLogs.Init();
         try
         {
             var harmony = new Harmony(Guid);
@@ -38,7 +39,7 @@ public sealed class Plugin : BasePlugin
             TimingCompensation.Install(harmony);
             NativeCode.AuditPatches(harmony, Guid);
             SteamInvites.ParseCommandLine();
-            Log.LogInfo($"Sea of Stars Online Co-op {Version} loaded. Press F8 in game.");
+            Log.LogInfo($"Sea of Stars Online Co-op {SessionLogs.Build} loaded. Press F8 in game. Logs: {SessionLogs.Folder}");
         }
         catch (Exception e)
         {
@@ -82,6 +83,7 @@ public sealed class OnlineBehaviour : MonoBehaviour
         {
             if (!ActionTable.Ready) ActionTable.TryBuild();
             Session.Instance.Update();
+            SessionLogs.Update();
             Overlay.Update();
             NativeMenus.Update();
             SteamInvites.Update();

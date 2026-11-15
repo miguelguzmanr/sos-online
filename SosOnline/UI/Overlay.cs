@@ -123,6 +123,9 @@ internal static class Overlay
                 DrawRunning(s);
                 break;
         }
+        _y += 4;
+        Label($"Mod {SessionLogs.Build}", _small);
+        if (Button("Open logs folder (to share if something went wrong)")) SessionLogs.OpenFolder();
 
         _y = _area.yMax - Line - 4;
         Label("F8: close   ·   Use a gamepad or keyboard to play; the mouse is not synced.", _small);

@@ -183,7 +183,17 @@ Nothing Steam-specific has been tested end to end yet (see *Not yet verified*). 
 5. The friend leaves and rejoins (gets the same character back); the host walks into a new area first so the rejoin catches up instead of reloading.
 6. Accept an invite while in your own game (one confirmation, then the join).
 
-If something goes wrong, the logs are in `BepInEx\LogOutput.log` on each PC (`[session]`, `[sync]`, `[dropin]`, `[catchup]`, `[resync]` lines).
+### If something goes wrong: share the logs
+
+Every start of the game writes its own log, so nothing is lost when you restart. **Both players** should send theirs, from the same session:
+
+1. Open the logs folder: press **F8** in game → **Open logs folder**, or title screen → **Online** → **Open logs folder**. It is `BepInEx\SosOnline\logs` in the game folder.
+2. Send the newest `sosonline-<date-time>.log` and `state-<date-time>.log` (the file names carry when the game was started). If you restarted the game since the problem, take the pair from that earlier start; the last 10 starts are kept.
+3. Say roughly what happened and when (the log lines carry the time of day).
+
+What's in them: everything the mod logged (joins, drop-ins, desyncs, pauses, leaves), the game's own errors, the mod build (the commit, e.g. `0.1.0+e3d3ca0`), the game version, Windows version and graphics card, and a session summary every minute (players, ping, input delay, sync checks). The state file has a snapshot of the game state every half second, so the host's and a guest's can be compared frame by frame. The logs contain the Steam names of the players in the session and Steam lobby ids (sometimes a player's Steam id); nothing else personal.
+
+If the friend runs a different build than the host, the host gets a message when they join: use the same zip on both PCs.
 
 ## Testing without a second PC
 

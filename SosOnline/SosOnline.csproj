@@ -13,6 +13,8 @@
     <CheckEolTargetFramework>false</CheckEolTargetFramework>
     <NoWarn>$(NoWarn);CS0618;CS8632</NoWarn>
     <Version>0.1.0</Version>
+    <!-- The commit is appended to the informational version ("0.1.0+e3d3ca0"): logs and the join handshake show it. -->
+    <IncludeSourceRevisionInInformationalVersion>true</IncludeSourceRevisionInInformationalVersion>
 
     <!-- Override with: dotnet build -p:GameDir="D:\Path\To\Sea of Stars" -->
     <GameDir Condition="'$(GameDir)' == ''">W:\SteamLibrary\steamapps\common\Sea of Stars</GameDir>
@@ -53,6 +55,19 @@
     <Reference Include="$(Interop)\Unity.TextMeshPro.dll" Private="false" />
     <Reference Include="$(Interop)\Assembly-CSharp.dll" Private="false" />
   </ItemGroup>
+
+  <Target Name="StampCommit" BeforeTargets="InitializeSourceControlInformation;GetAssemblyVersion;GenerateAssemblyInfo">
+    <Exec Command="git rev-parse --short HEAD" ConsoleToMSBuild="true" IgnoreExitCode="true" StandardOutputImportance="low" WorkingDirectory="$(MSBuildProjectDirectory)">
+      <Output TaskParameter="ConsoleOutput" PropertyName="_GitCommit" />
+    </Exec>
+    <Exec Command="git status --porcelain -- ." ConsoleToMSBuild="true" IgnoreExitCode="true" StandardOutputImportance="low" WorkingDirectory="$(MSBuildProjectDirectory)">
+      <Output TaskParameter="ConsoleOutput" PropertyName="_GitDirty" />
+    </Exec>
+    <PropertyGroup>
+      <SourceRevisionId Condition="'$(_GitCommit)' != ''">$(_GitCommit)</SourceRevisionId>
+      <SourceRevisionId Condition="'$(_GitCommit)' != '' and '$(_GitDirty)' != ''">$(_GitCommit)-modified</SourceRevisionId>
+    </PropertyGroup>
+  </Target>
 
   <Target Name="DeployPlugin" AfterTargets="Build" Condition="'$(DeployToGame)' == 'true'">
     <MakeDir Directories="$(GameDir)\BepInEx\plugins\SosOnline" />

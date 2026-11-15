@@ -376,6 +376,7 @@ internal static class NativeMenus
         }
         if (!s.InSession || s.IsHost)
             yield return ($"Open to friends: {(Settings.OpenToFriends ? "on" : "off")}", () => { Settings.OpenToFriends = !Settings.OpenToFriends; ShowPage(MainPage); });
+        yield return ("Open logs folder", SessionLogs.OpenFolder);
         yield return ("Back", () => CloseSubmenu(true));
     }
 
