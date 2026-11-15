@@ -122,9 +122,26 @@ Measured (three loopback instances, `tests/dropin.sh`):
 | Second joiner in the same area (`tests/dropin-two.sh`) | Replayed the first joiner's merge from the log; both identical in all 169 snapshots. Also with the first joiner gone before the second arrived (join and leave replayed), and with both joining at once (merge applied live mid-replay). |
 
 Not done yet:
-- The catch-up screen: cameras are off, so the joiner sees a frozen frame and a progress toast.
 - Real Steam P2P (sending the log in 600-frame blocks is untested over the relay).
 - Physics steps: the game's fixed step is 0.02 s against 1/60 s frames, so one frame in six has no physics step, and which one depends on when each PC's clock started. Identical in every run measured; not forced.
+
+## Independent pause and menus (proposal, not started)
+
+**Today.** A pause or menu opens in the shared game, stops it for everyone, and only its opener can move in it. A banner now says who and which menu.
+
+**Asked for.** Each player pauses or browses menus on their own while the world keeps running.
+
+**Constraint.** Lockstep needs every PC to run the identical simulation. A menu opened inside one PC's copy of the game changes that copy: the game pauses, the UI player changes, and the menu's own state moves. So that PC would diverge. The game's own menus therefore can't open on one PC only. An independent menu has to be drawn by the mod, outside the simulation, while that player's character gets neutral input (or the party AI) and the world runs on.
+
+| Tier | What | Effort |
+|---|---|---|
+| 1 | Local pause screen: Resume, Options (audio, video and controls are per-PC settings), Online (leave). The opener's pause and game-menu presses are kept out of the synced input. Also fixes the guest Options desync (findings §7). | Moderate |
+| 2 | Read-only browsing: party, stats, equipment, inventory, quests, drawn by the mod from the game state. Reading changes nothing. | Large (own screens) |
+| 3 | Changes from a local menu (equip, use an item, relics, party order, shop purchases): each becomes a deterministic command in the input stream, applied on the same frame on every PC through the game's own methods. Conflicts (two players using the last potion) are resolved by command order. | Hard |
+
+**Must stay shared:** saving, return to title, Assign Players, dialogues, cutscenes and battle menus (battle commands are already turns of the shared game).
+
+**Suggested start:** tier 1.
 
 ## Order of work
 

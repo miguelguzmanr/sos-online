@@ -34,6 +34,8 @@ internal static class Overlay
         bool toggle = false;
         try { toggle = ReInput.isReady && ReInput.controllers.Keyboard.GetKeyDown(KeyCode.F8); } catch { }
         if (toggle) SetOpen(!Open);
+        MenuStatus.Update();
+        CatchUpScreen.Update();
 
         if (Open && Time.unscaledTime >= _nextFriendRefresh && Session.Instance.Role == Role.None && !Session.Instance.UsingUdp)
         {
@@ -81,7 +83,9 @@ internal static class Overlay
     {
         Styles();
         var s = Session.Instance;
-        if (s.Phase == Phase.Running) DrawHud(s);
+        CatchUpScreen.OnGUI();
+        if (s.Phase == Phase.Running && !s.CatchingUp) DrawHud(s);
+        MenuStatus.OnGUI();
         if (!Open)
         {
             return;

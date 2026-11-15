@@ -1,0 +1,6 @@
+# Host walks, then opens the main menu (inventory and party) and closes it.
+700 MoveVertical 60 -1
+860 MoveVertical 40 1
+2900 Player_GameMenu 4
+3100 UI_CloseGameMenu 4
+3200 UI_Back 4

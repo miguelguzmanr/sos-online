@@ -309,6 +309,40 @@ internal static class TestHarness
         _stateLog?.WriteLine($"{s.Hash():X8} {s}");
     }
 
+    /// <summary>Logs the sprites and fonts of every visible game screen (to style the mod's own UI like the game's).</summary>
+    private static void ProbeUi(int frame)
+    {
+        foreach (var view in UnityEngine.Object.FindObjectsOfType<View>())
+        {
+            if (view == null || !view.gameObject.activeInHierarchy) continue;
+            Plugin.Log.LogInfo($"[uiprobe] f{frame} view {view.GetIl2CppType().Name}");
+            foreach (var img in view.GetComponentsInChildren<UnityEngine.UI.Image>(false))
+            {
+                var sp = img.sprite;
+                var rt = img.rectTransform.rect;
+                Plugin.Log.LogInfo($"[uiprobe]   img {NodePath(img.transform, view.transform)} sprite={sp?.name} tex={sp?.texture?.name} border={sp?.border} type={img.type} color={img.color} size={rt.width:F0}x{rt.height:F0} ppu={sp?.pixelsPerUnit} mult={img.pixelsPerUnitMultiplier}");
+            }
+            foreach (var t in view.GetComponentsInChildren<TMPro.TextMeshProUGUI>(false))
+                Plugin.Log.LogInfo($"[uiprobe]   txt {NodePath(t.transform, view.transform)} font={t.font?.name} mat={t.fontSharedMaterial?.name} size={t.fontSize} color={t.color} '{Snip(t.text)}'");
+        }
+        var canvas = Manager<UIManager>.instance?.canvasInstance;
+        if (canvas != null) Plugin.Log.LogInfo($"[uiprobe] canvas {canvas.renderMode} scale={canvas.scaleFactor} ref={canvas.GetComponent<UnityEngine.UI.CanvasScaler>()?.referenceResolution} size={canvas.pixelRect}");
+    }
+
+    private static string Snip(string text)
+    {
+        text = (text ?? "").Replace('\n', ' ');
+        return text.Length > 40 ? text[..40] : text;
+    }
+
+    private static string NodePath(Transform t, Transform root)
+    {
+        var parts = new List<string>();
+        for (; t != null && t != root; t = t.parent) parts.Add(t.name);
+        parts.Reverse();
+        return string.Join("/", parts);
+    }
+
     private static bool At(string flag, int frame) => Args.TryGetValue(flag, out var v) && int.TryParse(v, out int f) && f == frame;
 
     private static bool _wasLoading = true;
@@ -388,6 +422,7 @@ internal static class TestHarness
         if (At("kill", frame)) { Plugin.Log.LogInfo($"[test] killing process at {frame}"); System.Diagnostics.Process.GetCurrentProcess().Kill(); }
         if (At("pauseleave", frame)) { Plugin.Log.LogInfo($"[test] synced pause-menu leave of P2 at {frame}"); session.LeaveSlotDeterministic(1); }
         if (At("hpdiverge", frame)) DivergeHp(frame);
+        if (At("uiprobe", frame)) ProbeUi(frame);
         if (At("assigntest", frame))
         {
             var pm = UnityEngine.Object.FindObjectsOfType<PauseMenu>().FirstOrDefault();

@@ -74,9 +74,38 @@ internal sealed class Session
         public List<int> Playing;
         public bool Held, Live, Ff;
         public int LiveChecks;
-        public double Since, NextToast;
+        public double Since;
+        // Replay speed (frames per second), measured every half second.
+        public double Rate, RateSince;
+        public int RateFrom = -1;
     }
     private CatchUpState _catchUp;
+
+    /// <summary>Catching up with the cameras off (the catch-up screen draws through its own camera).</summary>
+    public bool CatchUpFastForwarding => _catchUp != null && _catchUp.Ff;
+
+    /// <summary>This PC is catching up with the session (Stage 3) and isn't in it yet.</summary>
+    public bool CatchingUp => _catchUp != null && Phase == Phase.Running;
+
+    /// <summary>
+    /// Joiner, for the catch-up screen: what it is doing, progress 0..1, frames replayed and left, replay speed
+    /// (frames per second, 0 until measured) and the estimated seconds left (-1: unknown).
+    /// </summary>
+    public (string step, float progress, int done, int left, double rate, double eta) CatchUpProgress
+    {
+        get
+        {
+            var c = _catchUp;
+            if (c == null) return ("", 0, 0, 0, 0, -1);
+            if (!c.Held) return ("Loading the area", 0, 0, Math.Max(0, Engine.NewestKnownFrame - c.L), 0, -1);
+            int done = Math.Max(0, Engine.AppliedFrame - c.L);
+            int left = Math.Max(0, Engine.NewestKnownFrame - Engine.AppliedFrame);
+            if (c.Live) return ("Joining the party", 1, done, 0, c.Rate, 0);
+            // The session keeps moving at 60 frames a second while this PC replays.
+            double eta = c.Rate > 70 ? left / (c.Rate - 60) : -1;
+            return ("Catching up", done / (float)Math.Max(1, done + left), done, left, c.Rate, eta);
+        }
+    }
 
     public ITransport Transport { get; private set; }
     public bool UsingUdp { get; private set; }
@@ -1722,7 +1751,6 @@ internal sealed class Session
         _loadSeq = seq - 1;
         ScheduleLoadRelease(seq, L, clockBase);
         Status = "Catching up with the party…";
-        Toast.Show(Status);
         if (!GameBridge.ReloadInPlace(saveSlot, true, party.Leader, party.Angle))
         {
             var (w, ms) = Protocol.Begin(Msg.CatchUpFailed);
@@ -1755,11 +1783,13 @@ internal sealed class Session
         if (!c.Live && behind > 30 && !c.Ff) StartCatchUpFastForward();
         if (c.Ff) KeepCamerasOff();
         double now = Now;
-        if (!c.Live && now >= c.NextToast)
+        if (c.RateFrom < 0) { c.RateFrom = Engine.AppliedFrame; c.RateSince = now; }
+        else if (now - c.RateSince >= 0.5)
         {
-            c.NextToast = now + 1;
-            int total = Math.Max(1, Engine.NewestKnownFrame - c.L);
-            Toast.Show($"Catching up with the party… {Math.Clamp(100 * (Engine.AppliedFrame - c.L) / total, 0, 100)}%");
+            double rate = (Engine.AppliedFrame - c.RateFrom) / (now - c.RateSince);
+            c.Rate = c.Rate <= 0 ? rate : 0.5 * c.Rate + 0.5 * rate;
+            c.RateFrom = Engine.AppliedFrame;
+            c.RateSince = now;
         }
         if (c.Live) return;
         // Caught up: no more than the input delay (plus a frame or two in flight) behind the host, and the last check
@@ -1797,7 +1827,7 @@ internal sealed class Session
         if (_ffCameraCheck-- > 0) return;
         _ffCameraCheck = 30;
         foreach (var cam in Camera.allCameras)
-            if (cam != null && cam.enabled) { cam.enabled = false; _ffCameras.Add(cam); }
+            if (cam != null && cam.enabled && cam != CatchUpScreen.Camera) { cam.enabled = false; _ffCameras.Add(cam); }
     }
 
     private void EndCatchUpFastForward()

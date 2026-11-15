@@ -1,0 +1,9 @@
+# Host walks, then pauses, opens the second pause menu entry (Options), backs out and resumes.
+700 MoveVertical 60 -1
+860 MoveVertical 40 1
+2200 UI_Start 4
+2290 UIMoveVertical 6 -1
+2350 UI_Confirm 4
+2500 UI_Back 4
+2580 UI_Back 4
+2650 UI_Start 4

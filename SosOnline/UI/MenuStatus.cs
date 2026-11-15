@@ -1,0 +1,207 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using Il2CppInterop.Runtime;
+using SosOnline.Game;
+using SosOnline.Lockstep;
+using SosOnline.Net;
+using UnityEngine;
+
+namespace SosOnline.UI;
+
+/// <summary>
+/// Shows who has the game paused or a menu open, and which menu.
+///
+/// Online there is one game: when any player pauses or opens a menu, it opens on every PC on the same frame, the
+/// game stops for everyone, and the player who opened it (the game's "UI player") is the only one who can move in
+/// it. Everyone sees the same screens, but not whose cursor that is; this banner says so. It reads only the game's
+/// own state, which is identical on every PC, so it needs no network messages and changes nothing.
+/// </summary>
+internal static class MenuStatus
+{
+    /// <summary>Menus a player navigates, from the bottom of the stack up (the last open one is the one in use).</summary>
+    private static readonly (Type type, string label)[] Menus =
+    {
+        (typeof(PauseMenu), "Pause menu"),
+        (typeof(GameMenu), "Menu"),
+        (typeof(MapScreen), "Map"),
+        (typeof(ShopMenu), "Shop"),
+        (typeof(CookingScreen), "Cooking"),
+        (typeof(SaveSelectionScreen), "Saves"),
+        (typeof(RelicSelectionScreen), "Relics"),
+        (typeof(CharacterSelectionScreen), "Party"),
+        (typeof(OptionsScreen), "Options"),
+        (typeof(RemappingMenu), "Controls"),
+        (typeof(AssignControllersScreen), "Assign Players"),
+        (typeof(HowToPlayScreen), "How to play"),
+        (typeof(AchievementScreen), "Achievements"),
+        (typeof(ShopPopup), "Shop"),
+        (typeof(GenericPopupScreen), "a question"),
+    };
+
+    private static Il2CppSystem.Type[] _il2cppTypes;
+
+    /// <summary>Slot of the player who has the menu (-1: nobody, or unknown).</summary>
+    public static int Slot { get; private set; } = -1;
+    /// <summary>The open menus, bottom to top ("Pause menu › Options"); empty when none is open.</summary>
+    public static string Path { get; private set; } = "";
+    public static bool Paused { get; private set; }
+
+    private static float _nextPoll;
+    private static string _logged = "";
+    private static GUIStyle _style;
+
+    public static void Update()
+    {
+        var s = Session.Instance;
+        if (s.Phase != Phase.Running || s.CatchingUp) { Clear(); UpdateBanner(); return; }
+        if (Time.realtimeSinceStartup < _nextPoll) return;
+        _nextPoll = Time.realtimeSinceStartup + 0.15f;
+        try { Poll(); }
+        catch (Exception e) { Clear(); Plugin.Log.LogWarning($"[menu] {e.Message}"); _nextPoll = Time.realtimeSinceStartup + 5f; }
+        UpdateBanner();
+
+        string now = Paused || Path.Length > 0 ? $"{Slot}|{Paused}|{Path}" : "";
+        if (now != _logged)
+        {
+            _logged = now;
+            Plugin.Log.LogInfo(now.Length == 0
+                ? $"[menu] f{s.Engine.AppliedFrame} closed"
+                : $"[menu] f{s.Engine.AppliedFrame} {(Slot >= 0 ? $"P{Slot + 1}" : "?")} {(Paused ? "paused" : "not paused")}: {(Path.Length > 0 ? Path : "no menu")}");
+        }
+    }
+
+    private static void Clear()
+    {
+        Slot = -1;
+        Path = "";
+        Paused = false;
+    }
+
+    private static void Poll()
+    {
+        Paused = Manager<PauseManager>.instance?.isPaused ?? false;
+        var ui = Manager<UIManager>.instance;
+        var open = new List<string>();
+        if (ui != null)
+        {
+            _il2cppTypes ??= Menus.Select(m => Il2CppType.From(m.type)).ToArray();
+            var byType = ui.screensByType;
+            for (int i = 0; i < Menus.Length; i++)
+            {
+                if (byType == null || !byType.ContainsKey(_il2cppTypes[i])) continue;
+                var views = byType[_il2cppTypes[i]];
+                bool shown = false;
+                for (int v = 0; v < views.Count && !shown; v++)
+                {
+                    var view = views[v];
+                    shown = view != null && view.gameObject.activeInHierarchy && !view.closing;
+                }
+                if (!shown) continue;
+                string label = Menus[i].label;
+                if (Menus[i].type == typeof(GameMenu)) label = GameMenuLabel(byType[_il2cppTypes[i]]);
+                if (!open.Contains(label)) open.Add(label);
+            }
+        }
+        Path = string.Join(GameUi.Arrow, open);
+        Slot = -1;
+        if (Paused || open.Count > 0)
+        {
+            var player = GameBridge.Coop?.uiInputsPlayer;
+            Slot = GameBridge.SlotOf(player);
+            // The System player (menus outside gameplay) follows the host's input.
+            if (Slot < 0 && player != null && player.id == Rewired.ReInput.players.GetSystemPlayer().id) Slot = 0;
+        }
+    }
+
+    private static string GameMenuLabel(Il2CppSystem.Collections.Generic.List<View> views)
+    {
+        for (int v = 0; v < views.Count; v++)
+        {
+            var menu = views[v]?.TryCast<GameMenu>();
+            if (menu == null || !menu.gameObject.activeInHierarchy) continue;
+            return menu.currentSectionId switch
+            {
+                GameMenu.GameMenuSectionId.Characters => "Menu: Characters",
+                GameMenu.GameMenuSectionId.Inventory => "Menu: Inventory",
+                GameMenu.GameMenuSectionId.Relics => "Menu: Relics",
+                _ => "Menu",
+            };
+        }
+        return "Menu";
+    }
+
+    /// <summary>(main line, second line) of the banner, or null when nobody has the game paused or a menu open.</summary>
+    private static (string main, string sub)? Banner()
+    {
+        var s = Session.Instance;
+        if (s.Phase != Phase.Running || s.CatchingUp || (!Paused && Path.Length == 0)) return null;
+        if (Slot == s.LocalSlot)
+            return ($"{(Paused ? "Paused for everyone" : "Everyone sees this menu")}{(Path.Length > 0 ? $": {Path}" : "")}",
+                "The other players wait until you close it.");
+        string who = Slot < 0 ? "Someone" : $"P{Slot + 1} {s.SlotName[Slot] ?? ""}".TrimEnd();
+        return ($"{who} {(Paused ? "paused the game" : "opened a menu")}{(Path.Length > 0 ? $": {Path}" : "")}",
+            "They have the controls until they close it.");
+    }
+
+    // ------------------------------------------------------------------ game-styled banner (canvas)
+
+    private static Canvas _canvas;
+    private static RectTransform _panel;
+    private static TMPro.TextMeshProUGUI _main, _sub;
+    private static string _shownText;
+
+    private static void UpdateBanner()
+    {
+        var banner = Banner();
+        bool show = banner != null && GameUi.Ready;
+        if (show && _canvas == null) BuildBanner();
+        if (_canvas != null && _canvas.gameObject.activeSelf != show) _canvas.gameObject.SetActive(show);
+        if (!show) { _shownText = null; return; }
+        var (main, sub) = banner.Value;
+        if (main + sub == _shownText) return;
+        _shownText = main + sub;
+        main = GameUi.Drawable(main);
+        sub = GameUi.Drawable(sub, true);
+        _main.text = main;
+        _sub.text = sub;
+        float w = Mathf.Max(_main.GetPreferredValues(main, 600, 20).x, _sub.GetPreferredValues(sub, 600, 20).x);
+        _panel.sizeDelta = new Vector2(Mathf.Ceil(w) + 24, 34);
+    }
+
+    private static void BuildBanner()
+    {
+        // Above the game's menus and HUD, below the catch-up screen.
+        _canvas = GameUi.CreateCanvas("SosOnline_MenuStatus", 29000);
+        _panel = GameUi.Panel(_canvas.transform, "Panel");
+        _panel.anchorMin = _panel.anchorMax = _panel.pivot = new Vector2(0.5f, 0f);
+        _panel.anchoredPosition = new Vector2(0, 44); // clear of the game's bottom bar (button hints)
+        _main = GameUi.Text(_panel, "Main", false, TMPro.TextAlignmentOptions.Center);
+        _main.enableWordWrapping = false;
+        _main.rectTransform.anchorMin = new Vector2(0, 1);
+        _main.rectTransform.anchorMax = new Vector2(1, 1);
+        _main.rectTransform.pivot = new Vector2(0.5f, 1);
+        _main.rectTransform.sizeDelta = new Vector2(0, 12);
+        _main.rectTransform.anchoredPosition = new Vector2(0, -5);
+        _sub = GameUi.Text(_panel, "Sub", true, TMPro.TextAlignmentOptions.Center);
+        _sub.enableWordWrapping = false;
+        _sub.rectTransform.anchorMin = new Vector2(0, 1);
+        _sub.rectTransform.anchorMax = new Vector2(1, 1);
+        _sub.rectTransform.pivot = new Vector2(0.5f, 1);
+        _sub.rectTransform.sizeDelta = new Vector2(0, 12);
+        _sub.rectTransform.anchoredPosition = new Vector2(0, -18);
+    }
+
+    /// <summary>Fallback without the game's UI art: a plain banner at the bottom of the screen.</summary>
+    public static void OnGUI()
+    {
+        if (GameUi.Ready) return;
+        var banner = Banner();
+        if (banner == null) return;
+        string text = banner.Value.main + ". " + banner.Value.sub;
+        _style ??= new GUIStyle(GUI.skin.box) { fontSize = 17, wordWrap = true, alignment = TextAnchor.MiddleCenter, padding = new RectOffset(16, 16, 8, 8) };
+        float w = Mathf.Min(760, Screen.width - 40);
+        float h = _style.CalcHeight(new GUIContent(text), w) + 2;
+        GUI.Box(new Rect((Screen.width - w) / 2, Screen.height - h - 20, w, h), text, _style);
+    }
+}

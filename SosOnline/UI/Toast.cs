@@ -20,6 +20,8 @@ internal static class Toast
 
     public static void OnGUI()
     {
+        // The catch-up screen covers everything; notices wait until it's gone.
+        if (Net.Session.Instance.CatchingUp) return;
         if (_current == null || Time.unscaledTime > _until)
         {
             _current = Pending.Count > 0 ? Pending.Dequeue() : null;

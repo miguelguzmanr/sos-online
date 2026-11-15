@@ -119,7 +119,7 @@ On by default; `--sosonline-nocatchup` forces Stage 2.
 ### Left for Stage 3
 
 1. ~~Roster changes since L~~: done, see above.
-2. **Joiner's screen during catch-up:** a frozen frame plus a toast. Add an overlay, or keep one camera rendering at a low rate.
+2. ~~Joiner's screen during catch-up~~: done, see *Catch-up screen* below.
 3. **Real Steam P2P:** the log blocks and snapshot burst over Valve's relay are untested, and so is everything Steam-related (no second account here).
 4. **Catch-up time budget:** the cut-off is a fixed 54,000 frames plus a 120 s timeout. Measure the replay speed on real hardware, and decide on Stage 3 or Stage 2 from (frames since L) ÷ (speed − 60), as the plan says.
 5. **Physics step phase** (above). Watch for it and align it if it ever diverges.
@@ -127,12 +127,47 @@ On by default; `--sosonline-nocatchup` forces Stage 2.
 7. **Merging during a battle:** the auto-join retries every 90 frames up to 12 times. Check that a long battle doesn't exhaust it.
 8. **Pause-menu leave during a replay:** not logged, on the assumption that the replayed menu input calls `LeaveSlotDeterministic` on the joiner too. Untested; `--sosonline-pauseleave` calls it directly, so it doesn't cover this.
 
+## 6. Catch-up screen: done
+
+`UI/CatchUpScreen.cs`, drawn with `UI/GameUi.cs`, which builds the mod's screens from the game's own UI art.
+- **Look.** It uses the pause menu's recipe, measured with `--sosonline-uiprobe`. All the art is in one UI atlas, drawn at the game's 640×360 reference size:
+  - **Panel:** tiled `panel-background-t1`, a sliced `panel-ornament-2-full-t1` frame, a `panel-border-rounded` outline and `Shadow-rounded`.
+  - **Separators:** two-tone `panel-separator-base` bars.
+  - **Fonts:** `copy1056-webfontBitmap` for main text and `kroegerBitmap` in grey for secondary text, both 8 px with the drop-shadow materials.
+  - **Highlight:** the cursor's cyan.
+- **Isolation.** Everything sits on the mod's own overlay canvas. Nothing is added to the game's UI hierarchy or view stack, so the simulation never sees it. Without the art (before the title screen has loaded it), a plain IMGUI version is drawn instead.
+- **Content.** A black screen with one panel showing "Joining X's game", the step (loading the area, catching up, joining the party), a progress bar, frames replayed, replay speed and the estimated seconds left. The replay speed is measured every 0.5 s and the estimate is frames left ÷ (speed − 60). Toasts wait until the screen is gone.
+- **Camera.** Overlay canvases only render when a camera renders, and fast-forward turns every camera off, so the screen used to freeze on the last frame drawn. A UI-only camera draws nothing of the scene, clears to black and renders one frame every 0.1 s. Fast-forward skips it. The replay speed is unchanged (1,442 frames in 3.7 s).
+- **Fonts.** The bitmap fonts lack some characters (`@`, `›`, most non-Latin scripts). Names are drawn without the characters the font can't draw (`GameUi.Drawable`).
+
+## 7. Pause and menus online: how they work, and a menu banner
+
+**How it works.** There is one game, so a pause is the same on every PC:
+- Any player can pause (`PauseManager.TogglePauseMenu(Player)`) or open the main menu. It opens on every PC on the same frame, and the game stops for everyone.
+- The game makes that player the UI player (`SinglePlayerPlusManager.uiInputsPlayer`). Only they can move in the menus; everyone else watches the same screens.
+- This is the game's own couch co-op behaviour, carried over by lockstep.
+
+**Banner (`UI/MenuStatus.cs`).** It says who has the game paused or a menu open, and which menu:
+- Others see, for example, "P2 Alex paused the game: Pause menu > Options. They have the controls until they close it." The player in the menu sees "Paused for everyone: …".
+- It is built from the game's art (a small panel at the bottom centre) and draws on every PC.
+- It needs no network messages. Every 0.15 s it reads the game's pause flag, the open screens (`UIManager.screensByType`: pause menu, main menu with its section, map, shop, options, controls, Assign Players and others), and the UI player mapped to a slot. All of this is identical on every PC.
+- It logs `[menu]` lines for tests (`tests/menu-status.sh`).
+
+**Found: Options opened by a guest desyncs the menus.**
+- When a guest opens Options, the game shows that player's controls page, built from the controllers assigned to that player on this PC.
+- On the guest's PC that is its keyboard. On the host and the other guests, that player has no controllers, so the page is empty and ignores the guest's Back. Those PCs stayed in Options until the end of the test, while the guest's own PC closed it and went on to the host's main menu.
+- The game state stayed identical (0 snapshot differences): only the UI diverged. It would turn into a game-state divergence as soon as the stuck PCs' menus take input differently.
+- The same steps by the host stay in sync on all three PCs: they all show the General tab and close on the same frames.
+- Not fixed yet. Options holds per-PC settings (audio, video, controls) anyway, so the likely fix is to take it out of the synced game: see the independent-menus note in the plan.
+
 ## Tools added
 
 | Script / flag | Use |
 |---|---|
 | `tests/battle-live.sh` | Two-instance battle; prints the guest's corrections and mismatches |
 | `tests/dropin.sh` | Three-instance drop-in; `HOSTFLAGS`, `JOINFLAGS`, `JOIN_DELAY`, `QUIT`; compares both guests with the host |
+| `tests/menu-status.sh` | Host and guest walk; the guest pauses and opens Options, the host opens the main menu; a third instance catches up. `HOSTSCRIPT`, `GUESTSCRIPT`, `SHOTS`, `EXTRA`, `JOIN_DELAY`, `QUIT` |
+| `--sosonline-uiprobe=F` | At frame F, log every visible game screen's images (sprite, slicing, colour, size) and texts (font, material, size, colour) |
 | `tests/dropin-two.sh` | Host alone, then two joiners in one area; `HOSTFLAGS`, `JOINFLAGS`, `AFLAGS`, `BFLAGS`, `JOIN_DELAY`, `JOIN2_DELAY`, `QUIT` |
 | `--sosonline-noclock` | Disable the shared clock (A/B) |
 | `--sosonline-nocatchup` | Force Stage 2 |
