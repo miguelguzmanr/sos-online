@@ -84,10 +84,10 @@ The current snapshot compares scenes and party positions only; its RNG probe alw
 
 ```bash
 tests/display-prefs.sh save
-tests/session.sh 27100 "--sosonline-start=0 --sosonline-guests=1 --sosonline-delay=3 --sosonline-script=tests/scripts/host-walk.txt --sosonline-reload=1300 --sosonline-shots=1290,1500,2300 --sosonline-quit=2400" "--sosonline-delay=3 --sosonline-script=tests/scripts/guest-join-walk.txt --sosonline-shots=1290,1500,2300 --sosonline-quit=2400"
+tests/session.sh 27100 "--sosonline-start=0 --sosonline-guests=1 --sosonline-delay=3 --sosonline-script=tests/scripts/host-walk.txt --sosonline-reload=1300 --sosonline-shots=1290,1500,2300 --sosonline-quit=2400" "--sosonline-delay=3 --sosonline-script=tests/scripts/guest-join-walk.txt --sosonline-reload=1300 --sosonline-shots=1290,1500,2300 --sosonline-quit=2400"
 ```
 
-Script paths are relative to the game folder; copy the scripts there or pass absolute paths. Frame 1300 is after the guest has joined (frame 1000) and walked.
+Script paths are relative to the game folder; copy the scripts there or pass absolute paths. Frame 1300 is after the guest has joined (frame 1000) and walked. `--sosonline-reload` goes to **every** instance: each PC saves and reloads itself. Add `--sosonline-reloadpos` to both for the position-restore variant.
 
 Compare:
 
@@ -210,3 +210,34 @@ For each spike, add a short section to this file:
 - anything the next stage must handle.
 
 Keep the harness flags you added; later stages reuse them as regression tests.
+
+## Results
+
+### Prerequisite — state log (2026-11-15): pass
+
+- Components logged: `lvl`, `scenes`, `party` (name/facing angle), `stats` (HP/MP per current party member), `gold` (currency amounts), `inv` (kinds/total), `combat` (`off`, or each actor's HP), `npcs` (every active `NPCController`, name and position to 0.1 m), `pos` (party positions, compared with the existing 2 cm drift correction). `RngProbe` is gone.
+- Walk scripts, two instances: the 61 snapshots up to frame 1800 match. `--sosonline-hpdiverge=1800` on the guest (ZALE 12 → 11) is reported on the next snapshot, with that component only: `frame 1830 mismatch #1: stats differs (local [ZALE:11/3,VALERE:11/2,GARL:15/2])`.
+- Cost: 3.4 ms per snapshot on average, 25.6 ms at worst (81 snapshots). Mostly `FindObjectsOfType<NPCController>`. At the default interval that is 0.1 ms per frame; Stage 0's rotating subset is not needed yet.
+- `gold` is empty in the test save (the early-game party owns no currency yet). Spike B should use a save that has some.
+
+### Spike A — reload in place (2026-11-15): pass
+
+How: `GameBridge.ReloadInPlace` calls `SaveManager.LoadSaveSlotAndSetLastIndex(slot)` (its `onSaveSlotLoaded` restores the managers), then `LevelManager.LoadLevel` with `showTransition = true`, `removeTransitionWhenDone = true` and a `GameplayLevelInitializerParams` built from the slot's `checkpointData`. Lockstep keeps running; nothing goes through the title screen.
+
+| Check | Result |
+|---|---|
+| Title screen in screenshots | None. The game's fade covers the load (frame 1500 mid-fade, 1600 fully visible). |
+| State logs after the reload | Identical on both PCs: 31 of 31 snapshots, in each of four runs. |
+| Guest controls a character again | Yes, with no new Join press. The co-op player survives the reload (`P2 playing` never goes false); the re-armed auto-join finds it already playing. |
+| F+120 to party controllable | 76–84 frames of loading (1.3–1.4 s), then the fade. The guest's scripted walk at frame 1500 moves its character. Well under 300 frames. |
+| Loading-finished gap between PCs | Without the barrier: 0 frames for the in-place reloads (1497/1497, 1499/1499, 1496/1496); 1–3 frames for the title-screen load at session start (333/335, 331/330, 327/327). One such gap produced `frame 330 mismatch: npcs differs`. With Stage 0's barrier, both PCs end every load on the same frame (333/333, 1504/1504); the hold costs 8–9 frames on loopback. |
+| Where the party reappears | At `checkpointData.position`, the point where the party entered the area (here (9.08, 1.00, 13.83)), not where it stood. Without initializer params the party lands at a level default ((14.67, −1.00, 67.28)) and the screen stays black. |
+
+Position restore: `UpdateCheckpointData` is not needed. `GameplayLevelInitializerParams.spawnPosition` (with `spawnPositionSet = true`) and `playerOrientation` place the leader exactly: 0.00 m from where it stood at the reload frame. The game re-forms the followers around the leader, so `--sosonline-reloadpos` also moves every party member back to its own position on fixed frame F+240. After that, the leader and P2 are within 0.01 m, and Garl (AI follower) is 0.47 m from where the game placed him before resuming his follow. The logs still match.
+
+For Stage 2:
+- Take the positions on the reload frame, not the save frame; the party keeps moving in between (2.5 m in this test).
+- The position fix-up frame has to come after the load ends. With the barrier, the release frame is known on every PC, so use release + a few frames instead of a fixed offset.
+- Inputs a player makes between the reload and the fix-up are undone for their character. Either block movement until the fix-up, or apply it on the release frame.
+- `--sosonline-reload` and `--sosonline-reloadpos` remain as regression tests.
+
