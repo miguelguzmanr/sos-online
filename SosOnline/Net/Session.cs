@@ -185,11 +185,11 @@ internal sealed class Session
     /// <summary>Host: last lockstep frame a battle was running (this run).</summary>
     private int _lastBattleFrame = int.MinValue / 2;
     /// <summary>
-    /// Frames out of battle before a drop-in autosave. Some battles come in rounds with short gaps where the game
-    /// allows saving (the Mooncradle training: about 2 s), and a drop-in saved in one of them would only be postponed
-    /// by the next round (2026-11-15).
+    /// Frames out of battle (and level-up) before a drop-in autosave. Some battles come in rounds with short gaps where
+    /// the game allows saving (the Mooncradle training: about 2 s), and the level-up starts about 5 s after the battle
+    /// ends; a drop-in saved in between would only be postponed (2026-11-15).
     /// </summary>
-    private const int BattleSettleFrames = 180;
+    private const int BattleSettleFrames = 360;
 
     // Every PC: the party positions to restore once the in-place reload's level load is released.
     private PartySpawn _reloadSpawn;
@@ -1653,7 +1653,7 @@ internal sealed class Session
         if (!IsHost) return;
         if (Phase != Phase.Running) { _dropIn = DropInStep.None; _joiners.Clear(); _saveableFrames = 0; _lastBattleFrame = int.MinValue / 2; return; }
         _joiners.RemoveAll(id => !_peers.ContainsKey(id));
-        if (GameBridge.InBattle) _lastBattleFrame = Engine.AppliedFrame;
+        if (GameBridge.InBattle || GameBridge.InLevelUp) _lastBattleFrame = Engine.AppliedFrame;
         switch (_dropIn)
         {
             case DropInStep.None:
@@ -1844,7 +1844,7 @@ internal sealed class Session
         {
             // The same state on every PC already in, so they all decide the same way. The joiner reloads anyway; it
             // is told to stop and wait.
-            if (GameBridge.LoadingLevel || GameBridge.InBattle)
+            if (GameBridge.DropInBlocker != null)
             {
                 PostponeDropIn(at, newSlots);
                 return;
@@ -1863,7 +1863,7 @@ internal sealed class Session
     /// </summary>
     private void PostponeDropIn(int at, List<int> slots)
     {
-        Plugin.Log.LogWarning($"[dropin] f{at} {(GameBridge.LoadingLevel ? "a level load" : "a battle")} is running: join of slot(s) {string.Join(",", slots)} postponed");
+        Plugin.Log.LogWarning($"[dropin] f{at} {GameBridge.DropInBlocker ?? "something"} is running: join of slot(s) {string.Join(",", slots)} postponed");
         foreach (int s in slots) Engine.SetLeaveFrame(s, at);
         if (!IsHost) return;
         foreach (var peer in _peers.Values.Where(p => slots.Contains(p.Slot)))

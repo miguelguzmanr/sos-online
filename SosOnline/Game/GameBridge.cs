@@ -303,6 +303,28 @@ internal static class GameBridge
         get { try { return Combat?.IsAnEncounterRunning() ?? false; } catch { return false; } }
     }
 
+    /// <summary>
+    /// The level-up sequence after a battle is running: it loads its own scene (<c>LevelUp</c>) on top of the area.
+    /// A reload in place during it left that scene loaded on the PCs already in, but not on the joiner, and every check
+    /// after found the scenes different (2026-11-15). Read from the loaded scenes, so every PC answers the same.
+    /// </summary>
+    public static bool InLevelUp
+    {
+        get
+        {
+            try
+            {
+                for (int i = 0; i < SceneManager.sceneCount; i++)
+                    if (SceneManager.GetSceneAt(i).name.IndexOf("LevelUp", StringComparison.OrdinalIgnoreCase) >= 0) return true;
+            }
+            catch { }
+            return false;
+        }
+    }
+
+    /// <summary>Something that a drop-in reload must not interrupt: a level load, a battle or a level-up. Null if none.</summary>
+    public static string DropInBlocker => LoadingLevel ? "a level load" : InBattle ? "a battle" : InLevelUp ? "a level-up" : null;
+
     /// <summary>In free gameplay where the game itself would allow saving (no battle, cutscene or loading).</summary>
     public static bool CanSaveNow
     {
@@ -313,6 +335,7 @@ internal static class GameBridge
                 if (LoadingLevel || Party?.Leader == null) return false;
                 var combat = SafeInstance<CombatManager>();
                 if (combat != null && combat.IsAnEncounterRunning()) return false;
+                if (InLevelUp) return false;
                 return Saves != null && Saves.CanSave() && !Saves.Saving;
             }
             catch { return false; }

@@ -264,6 +264,13 @@ Two PCs over Steam (host at 1920×1080, guest at 2560×1440), build `d9d6210`, a
 - The tutorial attack that ran 1.5 s early on the guest (above) may be the same cause, for example a hold to skip the tutorial's text.
 - **Edge case:** a PC that drops in counts holds from its join frame, so a button already held at that moment reads shorter there until it is released.
 
+**Drop-in during a level-up (third session, build `8bc51ec`).** The battle ended at f7740 and the drop-in autosave was taken at f7939, after the 3 s wait. The level-up sequence then started at f8040 by loading its own scene, `LevelUp`, on top of the area, and the join frame (f8073) fell inside it. The reload in place left `LevelUp` loaded on the host but not on the joiner. Every check after reported `scenes differs`, and the guest re-synced, reloaded and diverged again. Its game stopped logging during the third reload (crash, no game log).
+- **Fix:** `GameBridge.InLevelUp` (a `LevelUp` scene is loaded, the same on every PC) and `GameBridge.DropInBlocker` (level load, battle or level-up). A drop-in is postponed on the join frame for any of them, the game doesn't count as saveable during a level-up, and the wait after a battle or level-up is 6 s (`BattleSettleFrames` 360), since the level-up started about 5 s after the battle.
+
+**Battle desync in the same session.** The PCs matched for 200 frames while the battle waited for a command. Then Zale, the guest's own character, started his attack on the host's PC but not on the guest's. This is consistent with the hold-time getters above (an attack input cooldown would read "never pressed" for a controller that isn't on that PC). Expected to be fixed by them; confirm in the next battle.
+
+**Guest crashes after a re-sync in a battle.** Twice the guest's game stopped within 1 to 2 s of leaving the run in the middle of a battle for a re-sync (15:39:00 and 16:32:14). No error in the mod's or BepInEx's log. Needs the game's `Player.log` from one of these crashes.
+
 **Protocol 10:** snapshots carry each character's facing (9) and the game's pause flag (10).
 
 **Open:**
