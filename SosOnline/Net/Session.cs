@@ -45,6 +45,8 @@ internal sealed class Session
         public int LeavingAt = -1;
         /// <summary>How far this guest's game clock was ahead of ours when it reported ready (seconds).</summary>
         public double ClockLead;
+        /// <summary>Id of the last save transfer sent to this guest (each joiner can have its own in flight).</summary>
+        public int TransferId = -1;
         /// <summary>Stage 3 progress for a pending joiner.</summary>
         public CatchUpStep CatchUp;
         /// <summary>Area entry frame the joiner's catch-up files are from.</summary>
@@ -227,6 +229,7 @@ internal sealed class Session
         foreach (var peer in peers)
         {
             peer.Ready = false;
+            peer.TransferId = _transferId;
             foreach (var (name, data) in files)
             {
                 var (w, ms) = Protocol.Begin(Msg.File);
@@ -565,7 +568,7 @@ internal sealed class Session
             case Msg.Pong: OnPong(peer, r); break;
             case Msg.Ready:
                 if (peer == null) return;
-                if (r.ReadInt32() == _transferId) peer.Ready = true;
+                if (r.ReadInt32() == peer.TransferId) peer.Ready = true;
                 peer.ClockLead = r.ReadDouble() - GameClock.Now;
                 TryBeginLockstep();
                 break;
@@ -1156,11 +1159,15 @@ internal sealed class Session
 
     // ------------------------------------------------------------------ drop-out
 
-    /// <summary>Slot leaves on <paramref name="frame"/> on this peer (every peer does the same).</summary>
-    private void ApplySlotLeave(int slot, int frame)
+    /// <summary>
+    /// Slot leaves on <paramref name="frame"/> on this peer (every peer does the same). <paramref name="fromInput"/>:
+    /// the leave comes from synced input (the pause menu), which a Stage 3 replay reproduces by itself; any other
+    /// leave goes into the area log for joiners to replay.
+    /// </summary>
+    private void ApplySlotLeave(int slot, int frame, bool fromInput = false)
     {
         if (slot <= 0 || !Engine.Running) return;
-        _area.Invalidate("a player left");
+        if (IsHost && !fromInput) _area.LogRoster(frame, slot, false);
         Engine.SetLeaveFrame(slot, frame);
         Engine.Schedule(frame, () => GameBridge.MakeLeave(slot));
         Plugin.Log.LogInfo($"[session] slot {slot} leaves at frame {frame}");
@@ -1174,7 +1181,7 @@ internal sealed class Session
     {
         if (Phase != Phase.Running || slot <= 0) return;
         int frame = Engine.AppliedFrame + Engine.Delay + 1;
-        ApplySlotLeave(slot, frame);
+        ApplySlotLeave(slot, frame, fromInput: true);
         if (IsHost)
         {
             var peer = _peers.Values.FirstOrDefault(p => p.Slot == slot);
@@ -1557,7 +1564,7 @@ internal sealed class Session
                 case CatchUpStep.Files:
                     if (!_area.Valid || _area.L != peer.CatchUpL)
                     {
-                        // A new area (or a roster change) since the files were sent: start over from what is there now.
+                        // A new area since the files were sent (or the log became unusable): start over from what is there now.
                         Plugin.Log.LogInfo($"[catchup] {peer.Name}: area log changed ({_area.InvalidReason}); starting over");
                         peer.CatchUp = CatchUpStep.None;
                         break;
@@ -1611,6 +1618,7 @@ internal sealed class Session
         w.Write(_area.SaveSlot);
         _area.Party.Write(w);
         w.Write(Engine.AppliedFrame);
+        _area.WriteRoster(w);
         Send(peer.Id, ms, true);
 
         int blocks = 0;
@@ -1635,7 +1643,7 @@ internal sealed class Session
                 if (ch[s] == null || s == peer.Slot) continue;
                 SendInputTo(peer.Id, frame, s, ch[s], s == LocalSlot ? ch[InputOverride.SystemChannel] : null);
             }
-        Plugin.Log.LogInfo($"[catchup] {peer.Name}: start at f{_area.L}, {_area.FrameCount} logged frames in {blocks} blocks, {_area.Snapshots.Count} snapshots, live at f{Engine.AppliedFrame}");
+        Plugin.Log.LogInfo($"[catchup] {peer.Name}: start at f{_area.L}, {_area.FrameCount} logged frames in {blocks} blocks, {_area.Snapshots.Count} snapshots, {_area.Roster.Count} roster changes, live at f{Engine.AppliedFrame}");
     }
 
     /// <summary>Frames per input log message.</summary>
@@ -1645,7 +1653,8 @@ internal sealed class Session
     private void MergeCaughtUp(Peer peer, int joinerFrame)
     {
         int at = Engine.AppliedFrame + Engine.Delay + 3;
-        foreach (var p in _peers.Values.Where(p => !p.Pending || p == peer))
+        // Joiners already replaying get it live; the ones not started yet get it with the area log.
+        foreach (var p in _peers.Values.Where(p => !p.Pending || p == peer || p.CatchUp == CatchUpStep.Running))
         {
             var (w, ms) = Protocol.Begin(Msg.Merge);
             w.Write(at);
@@ -1658,7 +1667,7 @@ internal sealed class Session
         peer.Pending = false;
         peer.CatchUp = CatchUpStep.None;
         peer.LastInputFrame = at + Engine.Delay - 1;
-        _area.Invalidate("a player joined");
+        _area.LogRoster(at, slot, true);
         BroadcastRoster();
         Status = $"{peer.Name} joined.";
         Toast.Show($"{peer.Name} joined.");
@@ -1685,12 +1694,29 @@ internal sealed class Session
         int saveSlot = r.ReadInt32();
         var party = PartySpawn.Read(r);
         int live = r.ReadInt32();
+        var roster = AreaLog.ReadRoster(r);
         if (Phase == Phase.Running) return;
         _awaitingMirrorReload = false;
         Plugin.Log.LogInfo($"[catchup] start at f{L} (load {seq}, clock {clockBase:R}), {live - L} frames behind; save slot {saveSlot}, playing {string.Join(",", playing.Select(s => $"P{s + 1}"))}, party {party}");
 
         BeginLockstep(seed, delay, occupied, L, playerIndex, double.NaN, () => { });
         _autoJoin = false; // not in the session until the merge
+        // Joins and leaves since L, on their frames, as the session had them (before any logged input arrives).
+        foreach (var (frame, slot, join) in roster)
+        {
+            int s = slot;
+            if (join)
+            {
+                Engine.AddSlot(s, frame);
+                Engine.Schedule(frame, () => GameBridge.RegisterSlotPlayers(new[] { s }));
+            }
+            else
+            {
+                Engine.SetLeaveFrame(s, frame);
+                Engine.Schedule(frame, () => GameBridge.MakeLeave(s));
+            }
+            Plugin.Log.LogInfo($"[catchup] replaying roster change: P{s + 1} {(join ? "joins" : "leaves")} at f{frame}");
+        }
         _catchUp = new CatchUpState { L = L, Seq = seq, Party = party, Playing = playing, Since = Now, Total = live - L };
         // The save's load is load <seq> of the session's count; it ends on frame L, as it did for everyone.
         _loadSeq = seq - 1;

@@ -15,8 +15,10 @@ namespace SosOnline.Net;
 /// playing), and from L on every frame's inputs. A joiner loads the save, starts lockstep on frame L and replays the
 /// inputs (spike B: identical to the live game, battles included, once the game clock is shared).
 ///
-/// The log is valid until the next level load or a roster change (somebody joins or leaves): the replay doesn't
-/// reproduce those.
+/// The log is valid until the next level load. Roster changes the inputs don't reproduce (a Stage 3 merge, a player
+/// whose connection dropped) are logged with their frames in <see cref="Roster"/>, and the joiner applies them on
+/// the same frames. A leave chosen in the (synced) pause menu is input, so the replay reproduces it by itself. A
+/// Stage 2 drop-in reloads everyone, which starts a new log at its load release.
 /// </summary>
 internal sealed class AreaLog
 {
@@ -34,6 +36,9 @@ internal sealed class AreaLog
 
     /// <summary>The autosave and the save index as written on frame L (later autosaves overwrite the slot).</summary>
     public List<(string name, byte[] data)> SaveFiles { get; } = new();
+
+    /// <summary>Roster changes on frames after L, in the order they were decided: (frame, slot, joins or leaves).</summary>
+    public List<(int frame, int slot, bool join)> Roster { get; } = new();
 
     /// <summary>The host's state snapshots since L: a joiner checks its replay against them as it goes.</summary>
     public List<StateSnapshot> Snapshots { get; } = new();
@@ -56,6 +61,28 @@ internal sealed class AreaLog
         _frames.Clear();
         SaveFiles.Clear();
         Snapshots.Clear();
+        // The occupied slots recorded at L cover changes up to L; one decided earlier for a later frame still applies.
+        Roster.RemoveAll(e => e.frame <= frame);
+    }
+
+    /// <summary>Host: slot <paramref name="slot"/> joins (or leaves) the session on <paramref name="frame"/>.</summary>
+    public void LogRoster(int frame, int slot, bool join)
+    {
+        Roster.Add((frame, slot, join));
+        if (L >= 0) Plugin.Log.LogInfo($"[catchup] roster change logged: P{slot + 1} {(join ? "joins" : "leaves")} at f{frame}");
+    }
+
+    public void WriteRoster(BinaryWriter w)
+    {
+        w.Write(Roster.Count);
+        foreach (var (frame, slot, join) in Roster) { w.Write(frame); w.Write((byte)slot); w.Write(join); }
+    }
+
+    public static List<(int frame, int slot, bool join)> ReadRoster(BinaryReader r)
+    {
+        var list = new List<(int, int, bool)>();
+        for (int n = r.ReadInt32(); n > 0; n--) list.Add((r.ReadInt32(), r.ReadByte(), r.ReadBoolean()));
+        return list;
     }
 
     public void Invalidate(string reason)

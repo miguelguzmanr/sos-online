@@ -106,7 +106,8 @@ How it runs:
 - On every load release (frame L) every PC autosaves. The host keeps a copy of that save, what the save doesn't hold (party positions, game clock, slot → player map, co-op players playing), every frame's inputs and its state snapshots from L on (`Net/AreaLog.cs`).
 - A joiner gets that save, starts lockstep on frame L behind everyone (the engine holds until the save has loaded), replays the log uncapped with cameras and audio off, and then follows the live inputs as an observer. It checks every host snapshot on the way.
 - Once it runs within the input delay of the session, the host picks a merge frame; every PC adds the slot there and the joiner presses Join. Nobody already playing reloads or waits.
-- Falls back to Stage 2 when: no valid log (the entry save wasn't allowed, a player joined or left since L, more than 54,000 frames since L), the replay diverges from a host snapshot, it takes over 120 s, or a Stage 2 drop-in starts meanwhile.
+- Joins and leaves since L are logged with their frames and replayed on the joiner, so a second joiner in the same area catches up too.
+- Falls back to Stage 2 when: no valid log (the entry save wasn't allowed, a Stage 2 drop-in since L, more than 54,000 frames since L), the replay diverges from a host snapshot, it takes over 120 s, or a Stage 2 drop-in starts meanwhile.
 - A frame on which a load is released doesn't run before that load has reached its end on this PC (a joiner replaying uncapped would otherwise get there first).
 
 Measured (three loopback instances, `tests/dropin.sh`):
@@ -118,9 +119,9 @@ Measured (three loopback instances, `tests/dropin.sh`):
 | Joiner arrives during a battle | The replay crossed the battle start; merged and took P3 mid-battle; identical in all 129 snapshots. |
 | Joiner from its own game | Same as from the title screen: 1,491 frames in 3.3 s, identical. |
 | Divergence injected during the replay (`--sosonline-hpdiverge`) | Found at the next two host snapshots (f630, f660), mid-replay; fell back to Stage 2 and joined at f2060; identical afterwards. |
+| Second joiner in the same area (`tests/dropin-two.sh`) | Replayed the first joiner's merge from the log; both identical in all 169 snapshots. Also with the first joiner gone before the second arrived (join and leave replayed), and with both joining at once (merge applied live mid-replay). |
 
 Not done yet:
-- Replaying a roster change (a join or leave since L) instead of falling back.
 - The catch-up screen: cameras are off, so the joiner sees a frozen frame and a progress toast.
 - Real Steam P2P (sending the log in 600-frame blocks is untested over the relay).
 - Physics steps: the game's fixed step is 0.02 s against 1/60 s frames, so one frame in six has no physics step, and which one depends on when each PC's clock started. Identical in every run measured; not forced.

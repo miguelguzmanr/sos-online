@@ -65,7 +65,14 @@ On by default; `--sosonline-nocatchup` forces Stage 2.
 **Host (`UpdateCatchUpHost`, per pending peer).**
 - **None:** if `WantsCatchUp`, send the files, with the L save replacing the current autosave.
 - **Files:** once the joiner is ready, `SendCatchUp`: the `CatchUp` message, the log as `InputLog` blocks of 600 frames, the logged snapshots, and the inputs already buffered. Live inputs, snapshots and `LoadRelease` messages then reach the joiner as usual.
-- **Running:** on `CaughtUp`, `MergeCaughtUp`: merge frame = applied + Delay + 3, `Merge` to everyone, `AddSlot` everywhere.
+- **Running:** on `CaughtUp`, `MergeCaughtUp`: merge frame = applied + Delay + 3, `Merge` to everyone (joiners still replaying included), `AddSlot` everywhere.
+
+**Roster changes since L (`AreaLog.Roster`).**
+- The host logs each change the inputs don't reproduce, with its frame: a Stage 3 merge (`MergeCaughtUp`) and a leave after a lost connection (`DropPeer` → `ApplySlotLeave`).
+- A leave from the synced pause menu (`LeaveSlotDeterministic`) is input, so the replay reproduces it and it isn't logged.
+- The `CatchUp` message carries the list. Right after `BeginLockstep` at L, the joiner applies each change on its frame: `AddSlot` + `RegisterSlotPlayers`, or `SetLeaveFrame` + `MakeLeave`, as the session did. Changes after the `CatchUp` reach a replaying joiner live (`Merge`, `SlotLeft`).
+- A load release keeps only the changes after its frame; the occupied slots recorded at L cover the rest.
+- A Stage 2 drop-in still invalidates the log: everyone reloads, and the reload's load release starts a new one.
 
 **Joiner (`OnCatchUp`).**
 - `BeginLockstep` at frame L with its own slot not in the session, then `ReloadInPlace` of the save. `Engine.Hold` keeps frame L from running until the save's load is held at the barrier, so the load ends on L.
@@ -83,14 +90,14 @@ On by default; `--sosonline-nocatchup` forces Stage 2.
 **Fallbacks to Stage 2 (`ForceStage2`).**
 - The area log is invalid:
   - the save wasn't allowed at L;
-  - a player joined or left since L;
+  - a Stage 2 drop-in since L (everyone reloaded);
   - more than 54,000 frames since L.
 - The replay diverged (`CatchUpFailed`).
 - The catch-up took over 120 s.
 - A Stage 2 drop-in started meanwhile (`CancelCatchUp`).
 - An area change during the file transfer restarts the catch-up from the new entry.
 
-**Messages:** `CatchUp` 25, `InputLog` 26, `CaughtUp` 27, `Merge` 28, `CatchUpFailed` 29 (plus `DropInAbort` 24).
+**Messages** (protocol version 6): `CatchUp` 25, `InputLog` 26, `CaughtUp` 27, `Merge` 28, `CatchUpFailed` 29 (plus `DropInAbort` 24).
 
 ### Results (`tests/dropin.sh`, three loopback instances)
 
@@ -101,18 +108,24 @@ On by default; `--sosonline-nocatchup` forces Stage 2.
 | During a battle | `HOSTFLAGS="--sosonline-encounter=1500 --sosonline-bot" JOINFLAGS=--sosonline-encounter=1500` | Merged and took P3 mid-battle; 129/129 identical |
 | Own game | `--sosonline-play=0` | 1,491 frames in 3.3 s; identical |
 | Divergence | `JOINFLAGS=--sosonline-hpdiverge=600` | Caught at f630/f660 mid-replay → Stage 2 → joined at f2060; identical afterwards |
+| Second joiner, same area | `tests/dropin-two.sh` | A merged at f1714; B replayed that join from the area log and merged at f2997; both 169/169 identical |
+| Second joiner after the first left | `AFLAGS=--sosonline-quit=2400 tests/dropin-two.sh` | B replayed A's join (f1734) and leave (f2404); 169/169 identical |
+| Two joiners at once | `JOIN2_DELAY=1 tests/dropin-two.sh` | B was replaying when A merged (live `Merge`); both 170/170 identical |
 
 **Note for tests:** harness frame actions (`--sosonline-encounter`, `--sosonline-reload`, …) must go to the joiner too; it replays those frames.
 
+**Bug found on the way (fixed):** the host's save transfer id was global, so a second joiner's transfer made it ignore the first joiner's `Ready`, and the first joiner waited forever. Each peer now keeps the id of its own transfer (`Peer.TransferId`).
+
 ### Left for Stage 3
 
-1. **Roster changes since L.** Replay joins and leaves (log `AddSlot`/`SetLeaveFrame` events with their frames and replay them on the joiner) instead of invalidating the log. Today, any join (including a Stage 3 merge) invalidates the log until the next level load, so a second joiner in the same area uses Stage 2.
+1. ~~Roster changes since L~~: done, see above.
 2. **Joiner's screen during catch-up:** a frozen frame plus a toast. Add an overlay, or keep one camera rendering at a low rate.
 3. **Real Steam P2P:** the log blocks and snapshot burst over Valve's relay are untested, and so is everything Steam-related (no second account here).
 4. **Catch-up time budget:** the cut-off is a fixed 54,000 frames plus a 120 s timeout. Measure the replay speed on real hardware, and decide on Stage 3 or Stage 2 from (frames since L) ÷ (speed − 60), as the plan says.
 5. **Physics step phase** (above). Watch for it and align it if it ever diverges.
 6. **Joining from another area of your own game** is untested.
 7. **Merging during a battle:** the auto-join retries every 90 frames up to 12 times. Check that a long battle doesn't exhaust it.
+8. **Pause-menu leave during a replay:** not logged, on the assumption that the replayed menu input calls `LeaveSlotDeterministic` on the joiner too. Untested; `--sosonline-pauseleave` calls it directly, so it doesn't cover this.
 
 ## Tools added
 
@@ -120,6 +133,7 @@ On by default; `--sosonline-nocatchup` forces Stage 2.
 |---|---|
 | `tests/battle-live.sh` | Two-instance battle; prints the guest's corrections and mismatches |
 | `tests/dropin.sh` | Three-instance drop-in; `HOSTFLAGS`, `JOINFLAGS`, `JOIN_DELAY`, `QUIT`; compares both guests with the host |
+| `tests/dropin-two.sh` | Host alone, then two joiners in one area; `HOSTFLAGS`, `JOINFLAGS`, `AFLAGS`, `BFLAGS`, `JOIN_DELAY`, `JOIN2_DELAY`, `QUIT` |
 | `--sosonline-noclock` | Disable the shared clock (A/B) |
 | `--sosonline-nocatchup` | Force Stage 2 |
 | `--sosonline-loadatjoin` | Start a level load the frame before the first join frame |
