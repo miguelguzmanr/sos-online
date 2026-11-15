@@ -441,6 +441,8 @@ internal static class NativeMenus
                 else yield return ("Leave session", () => s.Leave());
                 break;
         }
+        if (s.InSession && !s.IsHost) yield return ("Send logs to the host", () => s.SendLogsToHost());
+        else if (s.IsHost && s.Peers.Any()) yield return ("Ask friends for their logs", () => s.AskForLogs());
         if (!s.InSession || s.IsHost)
             yield return ($"Open to friends: {(Settings.OpenToFriends ? "on" : "off")}", () => { Settings.OpenToFriends = !Settings.OpenToFriends; ShowPage(MainPage); });
         yield return ("Open logs folder", SessionLogs.OpenFolder);

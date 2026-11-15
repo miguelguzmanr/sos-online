@@ -435,8 +435,56 @@ internal sealed class Session
     // ------------------------------------------------------------------ per-frame
 
     /// <summary>Called every frame from Update (outside of lockstep waits).</summary>
+    // ------------------------------------------------------------------ log sharing
+
+    private int _logTransfer;
+
+    /// <summary>Guest: zip this PC's logs and send them to the host (the player's own choice).</summary>
+    public void SendLogsToHost()
+    {
+        if (!InSession || IsHost) { Toast.Show("Join a friend's session first: logs go to the host."); return; }
+        if (!LogShare.Begin()) { Toast.Show("Your logs are already on their way."); return; }
+        Toast.Show("Packing your logs…");
+    }
+
+    /// <summary>Host: ask every connected friend for their logs (they see a toast and decide).</summary>
+    public void AskForLogs()
+    {
+        if (!IsHost || _peers.Count == 0) { Toast.Show("No friends connected."); return; }
+        foreach (var peer in _peers.Values)
+        {
+            var (w, ms) = Protocol.Begin(Msg.LogRequest);
+            Send(peer.Id, ms, true);
+        }
+        Toast.Show($"Asked {string.Join(", ", _peers.Values.Select(p => p.Name))} for their logs.");
+    }
+
+    private void UpdateLogShare()
+    {
+        var zip = LogShare.TakeReady();
+        if (zip == null) return;
+        if (!InSession || IsHost) return;
+        int count = (zip.Length + LogShare.ChunkBytes - 1) / LogShare.ChunkBytes;
+        int id = ++_logTransfer;
+        for (int i = 0; i < count; i++)
+        {
+            int offset = i * LogShare.ChunkBytes;
+            var piece = new byte[Math.Min(LogShare.ChunkBytes, zip.Length - offset)];
+            Buffer.BlockCopy(zip, offset, piece, 0, piece.Length);
+            var (w, ms) = Protocol.Begin(Msg.LogChunk);
+            w.Write(id);
+            w.Write(i);
+            w.Write(count);
+            w.WriteBytes(piece);
+            Send(HostId, ms, true);
+        }
+        Plugin.Log.LogInfo($"[logs] sent {zip.Length / 1024} KB of logs to the host in {count} piece(s)");
+        Toast.Show($"Sending your logs to {SlotName[0] ?? "the host"} ({Math.Max(1, zip.Length / 1024)} KB)…");
+    }
+
     public void Update()
     {
+        UpdateLogShare();
         // A guest goes back to its own saves once it has left and is on the title screen again.
         if (!InSession && SaveMirror.Active && GameBridge.AtTitleScreen)
             SaveMirror.SetActiveAndReload(false);
@@ -704,6 +752,19 @@ internal sealed class Session
                 OnPauseStatus(slot, paused);
                 break;
             }
+            case Msg.LogChunk:
+            {
+                if (peer == null) return;
+                int id = r.ReadInt32(), index = r.ReadInt32(), count = r.ReadInt32();
+                var piece = r.ReadBytes();
+                string path = LogShare.Receive(from, peer.Name, id, index, count, piece);
+                if (path == null) return;
+                Plugin.Log.LogInfo($"[logs] received {peer.Name}'s logs: {path}");
+                Toast.Show($"Received {peer.Name}'s logs: {System.IO.Path.Combine("logs", "received", System.IO.Path.GetFileName(path))}");
+                var (w, ms) = Protocol.Begin(Msg.LogReceived);
+                Send(from, ms, true);
+                break;
+            }
             case Msg.LeaveRequest:
                 if (peer == null || peer.Pending || Phase != Phase.Running) return;
                 LeaveScheduled(peer);
@@ -751,6 +812,12 @@ internal sealed class Session
                         : $"Joined {SlotName[0] ?? Transport.Describe(HostId)}'s session as player {LocalSlot + 1}.");
                     Plugin.Log.LogInfo($"[session] welcomed as slot {LocalSlot}");
                 }
+                break;
+            case Msg.LogReceived:
+                Toast.Show($"{SlotName[0] ?? "The host"} received your logs. Thanks!");
+                break;
+            case Msg.LogRequest:
+                Toast.Show($"{SlotName[0] ?? "The host"} asks for your logs: press Esc (or title screen → Online) → Send logs to the host.");
                 break;
             case Msg.Reject:
                 SetError("Host refused: " + r.ReadString());
@@ -975,6 +1042,7 @@ internal sealed class Session
     private void DropPeer(ulong id, string why)
     {
         if (!_peers.Remove(id, out var peer)) return;
+        LogShare.Forget(id);
         Plugin.Log.LogInfo($"[session] {peer.Name} {why}");
         if (IsHost)
         {

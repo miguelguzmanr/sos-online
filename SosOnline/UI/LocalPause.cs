@@ -1,3 +1,4 @@
+using System.Linq;
 using System.Collections.Generic;
 using SosOnline.Game;
 using SosOnline.Lockstep;
@@ -186,6 +187,9 @@ internal static class LocalPause
                 // the next synced input carries a pause press that this screen lets through.
                 list.Add(new Entry { Label = "Pause for everyone", Action = () => { Close("pause for everyone"); _forwardStart = true; } });
                 list.Add(new Entry { Label = s.IsHost ? "End session" : "Leave session", Action = () => GoTo(Page.ConfirmLeave, 1) });
+                // Last, so the cursor positions above stay as they were.
+                if (!s.IsHost) list.Add(new Entry { Label = "Send logs to the host", Action = () => { s.SendLogsToHost(); Close("send logs"); } });
+                else if (s.Peers.Any()) list.Add(new Entry { Label = "Ask friends for their logs", Action = () => { s.AskForLogs(); Close("ask for logs"); } });
                 break;
         }
         return list;

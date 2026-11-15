@@ -38,11 +38,14 @@ internal enum Msg : byte
     LeaveRequest = 31, // guest → host: leave the session (chosen in the local pause screen)
     EndAt = 32,       // host → all: frame on which lockstep ends, reason (host chose End session in the local pause screen)
     AssignCharacter = 33, // host → all: frame, slot, character id (a rejoining guest gets its character back)
+    LogChunk = 34,    // guest → host: transfer id, piece index, piece count, bytes (a zip of the guest's logs)
+    LogReceived = 35, // host → guest: the logs arrived
+    LogRequest = 36,  // host → guests: the host asks for logs (a toast; the guest decides)
 }
 
 internal static class Protocol
 {
-    public const int Version = 10; // 9: snapshots carry each character's facing; 10: and the game's pause flag
+    public const int Version = 11; // 9: snapshots carry each character's facing; 10: and the game's pause flag; 11: log sharing
 
     public static (BinaryWriter w, MemoryStream ms) Begin(Msg type)
     {

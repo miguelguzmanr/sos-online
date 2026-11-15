@@ -207,7 +207,11 @@ Nothing Steam-specific has been tested end to end yet (see *Not yet verified*). 
 
 ### If something goes wrong: share the logs
 
-Every start of the game writes its own log, so nothing is lost when you restart. **Both players** should send theirs, from the same session:
+Every start of the game writes its own log, so nothing is lost when you restart.
+
+**Friends: press a button.** While connected to the host's session (also after a crash: rejoin first), choose **Send logs to the host**. It's on the pause screen (Esc, outside battles and cutscenes) and in the title screen's **Online** menu. Your game zips your last two starts' logs, the game's own `Player.log`/`Player-prev.log` and BepInEx's `LogOutput.log`, and sends them to the host only. The host gets a toast and the zip in `BepInEx\SosOnline\logs\received`. The host can also choose **Ask friends for their logs**, which shows friends a reminder; they still decide.
+
+**By hand** (the host's own logs, or without a session), from the same session on **both PCs**:
 
 1. Open the logs folder: press **F8** in game → **Open logs folder**, or title screen → **Online** → **Open logs folder**. It is `BepInEx\SosOnline\logs` in the game folder.
 2. Send the newest `sosonline-<date-time>.log` and `state-<date-time>.log` (the file names carry when the game was started). If you restarted the game since the problem, take the pair from that earlier start; the last 10 starts are kept.
