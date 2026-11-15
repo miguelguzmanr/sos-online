@@ -37,7 +37,7 @@ internal sealed class Session
         public float RttMs;
         public double LastHeard;
         public bool Ready;
-        /// <summary>Joined while a session was running: waits for the next resync (area change).</summary>
+        /// <summary>Joined while a session was running: drops in at the next moment the game allows saving.</summary>
         public bool Pending;
         /// <summary>Last lockstep frame we received this guest's input for.</summary>
         public int LastInputFrame = -1;
@@ -83,21 +83,27 @@ internal sealed class Session
     public IEnumerable<string> PendingNames => _peers.Values.Where(p => p.Pending).Select(p => p.Name);
     public bool HasPending => _peers.Values.Any(p => p.Pending);
 
-    /// <summary>Guest only: we were admitted mid-session and wait for the next area change.</summary>
+    /// <summary>Guest only: we were admitted mid-session and wait to drop in.</summary>
     public bool WaitingForResync { get; private set; }
 
-    // Drop-in: the session restarts from a fresh autosave at the next area change.
-    private enum ResyncStep { None, Saving, ToTitle }
-    private ResyncStep _resync;
-    private int _resyncSlot = -1;
-    private double _resyncAt;
-    private string _pendingSinceLevel;
-    private bool _areaChanged;
+    // Drop-in (host): autosave on an agreed frame, send that save to the joiners, then everyone, joiners included,
+    // reloads it in place on another agreed frame, where the party stood.
+    private enum DropInStep { None, Saving, Sending }
+    private DropInStep _dropIn;
+    private readonly List<ulong> _joiners = new();
+    private int _dropInSaveFrame;
+    private int _dropInSlot = -1;
+    private string _dropInLevel;
     private int _saveableFrames;
-    private bool _resyncRequested;
+
+    // Every PC: the party positions to restore once the in-place reload's level load is released.
+    private PartySpawn _reloadSpawn;
+    // Guest: the drop-in files may be applied anywhere, not only on the title screen.
+    private bool _readyAnywhere;
 
     // Joining the game itself (the co-op Join button) after the session starts.
     private bool _autoJoin;
+    private int _autoJoinFrom;
     private int _nextJoinTry;
     private int _joinTries;
 
@@ -161,9 +167,22 @@ internal sealed class Session
         if (!ActionTable.Ready) { SetError("Input system not ready yet."); return; }
         _startSlot = slotIndex;
         _startAuto = autoSave;
+        int fileCount = SendSaveFiles(_peers.Values, false);
+        Phase = Phase.AwaitingReady;
+        Status = $"Sending save data ({fileCount} files)…";
+        Plugin.Log.LogInfo($"[session] start requested from slot {slotIndex} auto={autoSave}, {fileCount} files to {_peers.Count} guest(s)");
+        TryBeginLockstep();
+    }
+
+    /// <summary>
+    /// Mirrors the host's save folder to <paramref name="peers"/>. <paramref name="inPlace"/>: they apply it wherever
+    /// they are (drop-in) instead of waiting for the title screen.
+    /// </summary>
+    private int SendSaveFiles(IEnumerable<Peer> peers, bool inPlace)
+    {
         _transferId++;
         var files = SaveMirror.PackHostFiles();
-        foreach (var peer in _peers.Values)
+        foreach (var peer in peers)
         {
             peer.Ready = false;
             foreach (var (name, data) in files)
@@ -177,12 +196,10 @@ internal sealed class Session
             var (w2, ms2) = Protocol.Begin(Msg.FilesDone);
             w2.Write(_transferId);
             w2.Write(files.Count);
+            w2.Write(inPlace);
             Send(peer.Id, ms2, true);
         }
-        Phase = Phase.AwaitingReady;
-        Status = $"Sending save data ({files.Count} files)…";
-        Plugin.Log.LogInfo($"[session] start requested from slot {slotIndex} auto={autoSave}, {files.Count} files to {_peers.Count} guest(s)");
-        TryBeginLockstep();
+        return files.Count;
     }
 
     private void TryBeginLockstep()
@@ -204,7 +221,9 @@ internal sealed class Session
             foreach (bool o in occupied) w.Write(o);
             Send(peer.Id, ms, true);
         }
-        BeginLockstep(seed, delay, _startSlot, _startAuto, occupied);
+        int saveSlot = _startSlot;
+        bool auto = _startAuto;
+        BeginLockstep(seed, delay, occupied, 0, null, () => GameBridge.EnterGameFromSlot(saveSlot, auto));
     }
 
     private int AutoDelay()
@@ -348,15 +367,16 @@ internal sealed class Session
 
         // Ready only once the host's saves are loaded AND we're on the title screen: everyone must enter the game
         // from the same place on the same frame.
-        if (_awaitingMirrorReload && SaveMirror.ReloadDone && !GameBridge.AtTitleScreen)
+        // A drop-in loads in place from wherever the guest is.
+        if (_awaitingMirrorReload && SaveMirror.ReloadDone && !GameBridge.AtTitleScreen && !_readyAnywhere)
             Status = "Save data received. Return to the title screen to start!";
-        if (_awaitingMirrorReload && SaveMirror.ReloadDone && GameBridge.AtTitleScreen)
+        if (_awaitingMirrorReload && SaveMirror.ReloadDone && GameBridge.Booted && (_readyAnywhere || GameBridge.AtTitleScreen))
         {
             _awaitingMirrorReload = false;
             var (w, ms) = Protocol.Begin(Msg.Ready);
             w.Write(_transferId);
             Send(HostId, ms, true);
-            Status = "Save data received. Waiting for host…";
+            Status = _readyAnywhere ? "Save data received. Dropping in…" : "Save data received. Waiting for host…";
         }
     }
 
@@ -461,7 +481,7 @@ internal sealed class Session
                 if (proto != Protocol.Version) reason = $"mod protocol mismatch (host {Protocol.Version}, you {proto})";
                 else if (gameVersion != (Application.version ?? "")) reason = $"game version mismatch (host {Application.version}, you {gameVersion})";
                 else if (ActionTable.Ready && actionHash != 0 && actionHash != ActionTable.Hash) reason = "input configuration mismatch";
-                else if (Phase == Phase.AwaitingReady || _resync != ResyncStep.None) reason = "the session is starting, try again in a moment";
+                else if (Phase == Phase.AwaitingReady) reason = "the session is starting, try again in a moment";
                 int slot = Array.FindIndex(SlotPeer, 1, id => id == 0);
                 if (reason == null && slot < 0) reason = "the session is full";
                 if (reason != null)
@@ -478,12 +498,7 @@ internal sealed class Session
                 SlotName[slot] = name;
                 SendWelcome(peer);
                 BroadcastRoster();
-                if (peer.Pending)
-                {
-                    if (_pendingSinceLevel == null) { _pendingSinceLevel = GameBridge.CurrentLevelId; _areaChanged = false; }
-                    Status = $"{name} will join at the next area change (player {slot + 1}).";
-                }
-                else Status = $"{name} joined (player {slot + 1}).";
+                Status = peer.Pending ? $"{name} is joining (player {slot + 1})…" : $"{name} joined (player {slot + 1}).";
                 Toast.Show(Status);
                 Plugin.Log.LogInfo($"[session] {name} joined as slot {slot} (mod {modVersion})");
                 break;
@@ -537,10 +552,10 @@ internal sealed class Session
                 {
                     Phase = Phase.Lobby;
                     Status = WaitingForResync
-                        ? $"Connected as player {LocalSlot + 1}. You'll enter the game at the party's next area change."
+                        ? $"Connected as player {LocalSlot + 1}. You'll drop in as soon as the game allows saving."
                         : $"Connected as player {LocalSlot + 1}. Waiting for the host to start…";
                     Toast.Show(WaitingForResync
-                        ? $"Joined {SlotName[0] ?? Transport.Describe(HostId)}'s game. You'll drop in at their next area change."
+                        ? $"Joined {SlotName[0] ?? Transport.Describe(HostId)}'s game. You'll drop in as soon as their game allows saving."
                         : $"Joined {SlotName[0] ?? Transport.Describe(HostId)}'s session as player {LocalSlot + 1}.");
                     Plugin.Log.LogInfo($"[session] welcomed as slot {LocalSlot}");
                 }
@@ -580,8 +595,9 @@ internal sealed class Session
             {
                 int id = r.ReadInt32();
                 _expectedFiles = r.ReadInt32();
+                _readyAnywhere = r.ReadBoolean();
                 if (id != _transferId) { _transferId = id; SaveMirror.BeginReceive(); _receivedFiles = 0; }
-                if (!GameBridge.AtTitleScreen) Status = "Host is starting. Go to the title screen!";
+                if (!GameBridge.AtTitleScreen && !_readyAnywhere) Status = "Host is starting. Go to the title screen!";
                 SaveMirror.SetActiveAndReload(true);
                 _awaitingMirrorReload = true;
                 Phase = Phase.AwaitingReady;
@@ -596,7 +612,28 @@ internal sealed class Session
                 bool auto = r.ReadBoolean();
                 var occupied = new bool[InputOverride.SlotCount];
                 for (int s = 0; s < occupied.Length; s++) occupied[s] = r.ReadBoolean();
-                BeginLockstep(seed, delay, slot, auto, occupied);
+                BeginLockstep(seed, delay, occupied, 0, null, () => GameBridge.EnterGameFromSlot(slot, auto));
+                break;
+            }
+            case Msg.DropIn:
+                OnDropIn(r);
+                break;
+            case Msg.DropInSave:
+            {
+                int at = r.ReadInt32();
+                if (Engine.Running) Engine.Schedule(at, () => SaveForDropIn(at));
+                break;
+            }
+            case Msg.DropInReload:
+            {
+                int at = r.ReadInt32();
+                int saveSlot = r.ReadInt32();
+                var slots = new List<int>();
+                for (int n = r.ReadInt32(); n > 0; n--) slots.Add(r.ReadInt32());
+                var spawn = r.ReadBoolean() ? PartySpawn.Read(r) : null;
+                if (!Engine.Running) break;
+                foreach (int s in slots) Engine.AddSlot(s, at);
+                ScheduleReloadInPlace(at, saveSlot, spawn, slots);
                 break;
             }
             case Msg.Input:
@@ -604,8 +641,12 @@ internal sealed class Session
                 Engine.OnRemoteInput(frame, fslot, input, system);
                 break;
             case Msg.Snapshot:
-                Sync.OnHostSnapshot(StateSnapshot.Read(r));
+            {
+                var snap = StateSnapshot.Read(r);
+                // A drop-in guest gets the host's snapshots before its run starts; it has no state for those frames.
+                if (Engine.Running && snap.Frame >= Engine.StartFrame) Sync.OnHostSnapshot(snap);
                 break;
+            }
             case Msg.LoadRelease:
             {
                 int seq = r.ReadInt32();
@@ -623,13 +664,6 @@ internal sealed class Session
                 ApplySlotLeave(leftSlot, leftFrame);
                 break;
             }
-            case Msg.Resync:
-                WaitingForResync = false;
-                if (Phase == Phase.Running) StopLockstep("resync");
-                GameBridge.ReturnToTitle();
-                Status = "A player is joining: everyone reloads from the host's autosave…";
-                Toast.Show(r.ReadString());
-                break;
             case Msg.Bye:
                 SetError("The host closed the session.");
                 if (Phase == Phase.Running) StopLockstep("host left");
@@ -698,7 +732,7 @@ internal sealed class Session
             }
             BroadcastRoster();
             if (Phase == Phase.AwaitingReady) TryBeginLockstep();
-            if (!HasPending) _pendingSinceLevel = null;
+            _joiners.Remove(id);
             Status = $"{peer.Name} {why}.";
             Toast.Show(Phase == Phase.Running ? $"{peer.Name} {why}. Their character rejoins the party AI." : Status);
         }
@@ -713,12 +747,15 @@ internal sealed class Session
 
     // ------------------------------------------------------------------ lockstep glue
 
-    private void BeginLockstep(int seed, int delay, int saveSlot, bool autoSave, bool[] occupied)
+    /// <summary>
+    /// Starts lockstep on this PC. A new run starts on frame 0; a drop-in starts on the join frame
+    /// <paramref name="startFrame"/>, with the slot → player mapping the session already uses
+    /// (<paramref name="playerIndex"/>). <paramref name="enterGame"/> runs on the start frame.
+    /// </summary>
+    private void BeginLockstep(int seed, int delay, bool[] occupied, int startFrame, int[] playerIndex, Action enterGame)
     {
         GameBridge.LockTime();
         Application.runInBackground = true;
-        GameBridge.ResetSlotPlayers();
-        ControllerRouting.RouteLocalDevicesTo(GameBridge.PlayerForSlot(LocalSlot));
 
         Sync.Reset();
         ResetLoadBarrier();
@@ -747,20 +784,29 @@ internal sealed class Session
         Engine.Stalled = OnStalled;
         Engine.LeftSession = OnLeftSession;
         _autoJoin = LocalSlot > 0;
+        // After a title-screen start the game needs a moment before Join works; a drop-in waits for its load instead.
+        _autoJoinFrom = startFrame == 0 ? 240 : startFrame + 1;
         _nextJoinTry = 0;
         _joinTries = 0;
+        _reloadSpawn = null;
         WaitingForResync = false;
-        Engine.Start(LocalSlot, IsHost, occupied, delay, seed);
-        Engine.Schedule(0, () =>
+        Engine.Start(LocalSlot, IsHost, occupied, delay, seed, startFrame);
+        if (playerIndex != null)
+        {
+            Array.Copy(playerIndex, GameBridge.SlotPlayerIndex, GameBridge.SlotPlayerIndex.Length);
+            LockstepEngine.RemapPlayers();
+        }
+        ControllerRouting.RouteLocalDevicesTo(GameBridge.PlayerForSlot(LocalSlot));
+        Engine.Schedule(startFrame, () =>
         {
             var slots = new List<int>();
             for (int s = 0; s < occupied.Length; s++) if (occupied[s]) slots.Add(s);
             GameBridge.RegisterSlotPlayers(slots);
-            GameBridge.EnterGameFromSlot(saveSlot, autoSave);
+            enterGame();
         });
         Phase = Phase.Running;
         Status = "Co-op running.";
-        Toast.Show(LocalSlot > 0 ? "Co-op session started. Joining the party…" : "Co-op session started.");
+        Toast.Show(startFrame > 0 ? "Dropping in…" : LocalSlot > 0 ? "Co-op session started. Joining the party…" : "Co-op session started.");
     }
 
     private void StopLockstep(string reason)
@@ -926,6 +972,13 @@ internal sealed class Session
             _heldSeq = -1;
             Plugin.Log.LogInfo($"[barrier] load {seq} released at f{frame} (held {frame - _heldSince} frames)");
             LoadBarrier.Release();
+            if (_reloadSpawn != null)
+            {
+                // The game re-forms the followers around the leader as the level starts; put them back after it.
+                var spawn = _reloadSpawn;
+                _reloadSpawn = null;
+                Engine.Schedule(frame + 2, () => Plugin.Log.LogInfo($"[dropin] f{frame + 2} restored positions: {GameBridge.RestoreParty(spawn)}"));
+            }
         });
     }
 
@@ -998,60 +1051,215 @@ internal sealed class Session
 
     // ------------------------------------------------------------------ drop-in
 
-    /// <summary>Host: admit waiting players now (at the next moment saving is allowed) instead of the next area change.</summary>
-    public void RequestResync()
-    {
-        if (IsHost && Phase == Phase.Running && HasPending) _resyncRequested = true;
-    }
-
-    /// <summary>Host, every frame while running with players waiting to join.</summary>
+    /// <summary>
+    /// Host, every frame. Drop-in without the title screen, while lockstep keeps running:
+    /// <list type="number">
+    /// <item>Once the game has allowed saving for half a second, every PC in the session autosaves on an agreed frame.</item>
+    /// <item>The host sends its save folder to the joiners, who load it into their mirror and report ready.</item>
+    /// <item>The host picks a join frame a few frames ahead and sends it, with where the party stands now, to
+    /// everyone. Joiners start their lockstep run on that frame, with the inputs the host has buffered for it.</item>
+    /// <item>On the join frame every PC, joiners included, loads the autosave in place behind the game's fade, the
+    /// leader spawning where it stood. The loading barrier ends the load on one frame everywhere, and two frames
+    /// later every party member is put back on its own position.</item>
+    /// </list>
+    /// Progress made between the autosave and the join frame (a second or two) is undone, except positions.
+    /// </summary>
     private void UpdateDropIn()
     {
         if (!IsHost) return;
-        switch (_resync)
+        if (Phase != Phase.Running) { _dropIn = DropInStep.None; _joiners.Clear(); _saveableFrames = 0; return; }
+        _joiners.RemoveAll(id => !_peers.ContainsKey(id));
+        switch (_dropIn)
         {
-            case ResyncStep.None:
-                if (Phase != Phase.Running || !HasPending) { _saveableFrames = 0; return; }
-                if (!_areaChanged && _pendingSinceLevel != null && !GameBridge.LoadingLevel && GameBridge.CurrentLevelId != _pendingSinceLevel)
-                    _areaChanged = true;
-                if (!_areaChanged && !_resyncRequested) return;
-                // Wait for free gameplay where the game itself allows saving (no battle, cutscene, loading).
+            case DropInStep.None:
+            {
+                if (!HasPending) { _saveableFrames = 0; return; }
+                // Free gameplay where the game itself allows saving (no battle, cutscene or loading).
                 _saveableFrames = GameBridge.CanSaveNow ? _saveableFrames + 1 : 0;
                 if (_saveableFrames < 30) return;
-                _resyncSlot = GameBridge.AutoSave();
-                if (_resyncSlot < 0) { _saveableFrames = 0; return; }
-                _resync = ResyncStep.Saving;
-                _resyncAt = Now + 0.5;
-                Plugin.Log.LogInfo($"[session] drop-in: autosaved slot {_resyncSlot} at frame {Engine.AppliedFrame}");
-                break;
-
-            case ResyncStep.Saving:
-                if (Now < _resyncAt || GameBridge.Saving) return;
-                string names = string.Join(", ", PendingNames);
+                _saveableFrames = 0;
+                _joiners.Clear();
+                _joiners.AddRange(_peers.Values.Where(p => p.Pending).Select(p => p.Id));
+                // Guests can be up to Delay + 1 frames ahead of us; they get this before any input that takes them further.
+                _dropInSaveFrame = Engine.AppliedFrame + Engine.Delay + 3;
+                _dropInSlot = -1;
+                _dropInLevel = GameBridge.CurrentLevelId;
                 foreach (var peer in _peers.Values.Where(p => !p.Pending))
                 {
-                    var (w, ms) = Protocol.Begin(Msg.Resync);
-                    w.Write($"{names} joined: reloading together from the latest autosave…");
+                    var (w, ms) = Protocol.Begin(Msg.DropInSave);
+                    w.Write(_dropInSaveFrame);
                     Send(peer.Id, ms, true);
                 }
-                foreach (var peer in _peers.Values) peer.Pending = false;
-                StopLockstep("resync");
-                GameBridge.ReturnToTitle();
-                Toast.Show($"{names} joined: reloading together from the latest autosave…");
-                _resync = ResyncStep.ToTitle;
-                _resyncAt = Now + 2.0;
+                int at = _dropInSaveFrame;
+                Engine.Schedule(at, () => SaveForDropIn(at));
+                _dropIn = DropInStep.Saving;
+                string names = string.Join(", ", _joiners.Select(id => _peers[id].Name));
+                Toast.Show($"Joining: {names}…");
+                Plugin.Log.LogInfo($"[dropin] {names}: autosave at f{at}");
+                break;
+            }
+
+            case DropInStep.Saving:
+                if (Engine.AppliedFrame < _dropInSaveFrame || GameBridge.Saving) return;
+                if (_joiners.Count == 0) { _dropIn = DropInStep.None; return; }
+                if (_dropInSlot < 0)
+                {
+                    // Every PC tried to save on the same frame and failed the same way; start over.
+                    Plugin.Log.LogWarning("[dropin] autosave failed, retrying");
+                    _dropIn = DropInStep.None;
+                    return;
+                }
+                int files = SendSaveFiles(_joiners.Select(id => _peers[id]), true);
+                Plugin.Log.LogInfo($"[dropin] autosave slot {_dropInSlot} done at f{Engine.AppliedFrame}; sent {files} files to {_joiners.Count} joiner(s)");
+                _dropIn = DropInStep.Sending;
                 break;
 
-            case ResyncStep.ToTitle:
-                if (!GameBridge.AtTitleScreen) { _resyncAt = Now + 2.0; return; }
-                if (Now < _resyncAt || Phase != Phase.Lobby) return;
-                _resync = ResyncStep.None;
-                _pendingSinceLevel = null;
-                _areaChanged = _resyncRequested = false;
-                _saveableFrames = 0;
-                StartFromSave(_resyncSlot, true);
+            case DropInStep.Sending:
+            {
+                if (_joiners.Count == 0) { _dropIn = DropInStep.None; return; }
+                if (_joiners.Any(id => !_peers[id].Ready)) return;
+                // The guests' own autosaves must be written too (spike A: 120 frames is plenty).
+                if (Engine.AppliedFrame < _dropInSaveFrame + 120) return;
+                if (GameBridge.CurrentLevelId != _dropInLevel)
+                {
+                    Plugin.Log.LogInfo("[dropin] the party changed area since the autosave; saving again");
+                    _dropIn = DropInStep.None;
+                    return;
+                }
+                if (!GameBridge.CanSaveNow) return; // a battle or cutscene started: wait for it to end
+                if (Engine.AppliedFrame - _dropInSaveFrame > StaleDropInSaveFrames)
+                {
+                    // The joiners took long (booting, a slow transfer). Reloading this save would undo everything
+                    // since; take a fresh one, which a ready joiner applies in a moment.
+                    Plugin.Log.LogInfo($"[dropin] autosave from f{_dropInSaveFrame} is stale at f{Engine.AppliedFrame}; saving again");
+                    _dropIn = DropInStep.None;
+                    _saveableFrames = 30;
+                    return;
+                }
+                JoinNow();
+                _dropIn = DropInStep.None;
                 break;
+            }
         }
+    }
+
+    /// <summary>A drop-in autosave older than this (frames) when the joiners are ready is replaced by a fresh one.</summary>
+    private const int StaleDropInSaveFrames = 300;
+
+    /// <summary>Every PC in the session, on the agreed frame: autosave for the drop-in.</summary>
+    private void SaveForDropIn(int frame)
+    {
+        int slot = GameBridge.AutoSave();
+        if (IsHost) _dropInSlot = slot;
+        Plugin.Log.LogInfo($"[dropin] f{frame} autosave -> slot {slot}");
+    }
+
+    /// <summary>Host: the joiners have the save. Pick the join frame and tell everyone.</summary>
+    private void JoinNow()
+    {
+        int at = Engine.AppliedFrame + Engine.Delay + 3;
+        var spawn = GameBridge.CaptureParty();
+        var slots = _joiners.Select(id => _peers[id].Slot).OrderBy(s => s).ToList();
+
+        // Everyone already playing: add the slots and reload in place on the join frame.
+        foreach (var peer in _peers.Values.Where(p => !p.Pending))
+        {
+            var (w, ms) = Protocol.Begin(Msg.DropInReload);
+            w.Write(at);
+            w.Write(_dropInSlot);
+            w.Write(slots.Count);
+            foreach (int s in slots) w.Write(s);
+            w.Write(spawn != null);
+            spawn?.Write(w);
+            Send(peer.Id, ms, true);
+        }
+
+        foreach (int s in slots) Engine.AddSlot(s, at);
+        var occupied = new bool[InputOverride.SlotCount];
+        for (int s = 0; s < occupied.Length; s++) occupied[s] = Engine.InSessionAt(s, at);
+
+        // Joiners: start lockstep on the join frame, then get every input already buffered for it and later.
+        foreach (ulong id in _joiners)
+        {
+            var peer = _peers[id];
+            var (w, ms) = Protocol.Begin(Msg.DropIn);
+            w.Write(Engine.Seed);
+            w.Write(Engine.Delay);
+            w.Write(at);
+            foreach (bool o in occupied) w.Write(o);
+            foreach (int p in GameBridge.SlotPlayerIndex) w.Write(p);
+            w.Write(_dropInSlot);
+            w.Write(spawn != null);
+            spawn?.Write(w);
+            Send(id, ms, true);
+
+            foreach (var (frame, ch) in Engine.BufferedFrom(at).OrderBy(f => f.frame).ToList())
+                for (int s = 0; s < InputOverride.SlotCount; s++)
+                {
+                    if (ch[s] == null || s == peer.Slot) continue;
+                    SendInputTo(id, frame, s, ch[s], s == LocalSlot ? ch[InputOverride.SystemChannel] : null);
+                }
+            peer.Pending = false;
+            peer.LastInputFrame = at + Engine.Delay - 1;
+        }
+
+        ScheduleReloadInPlace(at, _dropInSlot, spawn, slots);
+        BroadcastRoster();
+        string names = string.Join(", ", _joiners.Select(id => _peers[id].Name));
+        Status = $"{names} joined.";
+        Plugin.Log.LogInfo($"[dropin] {names} (slots {string.Join(",", slots)}) join at f{at}, reload slot {_dropInSlot}, spawn {spawn}");
+        _joiners.Clear();
+    }
+
+    /// <summary>Guest dropping in: start lockstep on the join frame and load the autosave in place on it.</summary>
+    private void OnDropIn(BinaryReader r)
+    {
+        int seed = r.ReadInt32();
+        int delay = r.ReadInt32();
+        int at = r.ReadInt32();
+        var occupied = new bool[InputOverride.SlotCount];
+        for (int s = 0; s < occupied.Length; s++) occupied[s] = r.ReadBoolean();
+        var playerIndex = new int[InputOverride.SlotCount];
+        for (int s = 0; s < playerIndex.Length; s++) playerIndex[s] = r.ReadInt32();
+        int saveSlot = r.ReadInt32();
+        var spawn = r.ReadBoolean() ? PartySpawn.Read(r) : null;
+        if (Phase == Phase.Running) return;
+        _awaitingMirrorReload = false;
+        Plugin.Log.LogInfo($"[dropin] joining at f{at}, reload slot {saveSlot}, spawn {spawn}");
+        BeginLockstep(seed, delay, occupied, at, playerIndex, () => ReloadInPlace(at, saveSlot, spawn));
+    }
+
+    /// <summary>Every PC already in the session: on the join frame, register the new slots and reload in place.</summary>
+    private void ScheduleReloadInPlace(int at, int saveSlot, PartySpawn spawn, List<int> newSlots)
+    {
+        Engine.Schedule(at, () =>
+        {
+            GameBridge.RegisterSlotPlayers(newSlots);
+            ReloadInPlace(at, saveSlot, spawn);
+        });
+    }
+
+    private void ReloadInPlace(int frame, int saveSlot, PartySpawn spawn)
+    {
+        if (GameBridge.Saving) Plugin.Log.LogError($"[dropin] f{frame} still saving");
+        if (GameBridge.LoadingLevel) Plugin.Log.LogWarning($"[dropin] f{frame} a level load is in progress");
+        // Co-op players are not in the save, and they survive an in-place load: guests already playing would keep
+        // theirs while a joiner starts without them. Every PC lets them all leave, and each guest joins again through
+        // synced input once the load is released.
+        for (int s = 1; s < InputOverride.SlotCount; s++) GameBridge.MakeLeave(s);
+        if (LocalSlot > 0)
+        {
+            _autoJoin = true;
+            _autoJoinFrom = frame + 1;
+            _nextJoinTry = 0;
+            _joinTries = 0;
+        }
+        // The reload's load is the first of a new count on every PC, joiners included.
+        ResetLoadBarrier();
+        _reloadSpawn = spawn;
+        Plugin.Log.LogInfo($"[dropin] f{frame} reloading autosave {saveSlot} in place");
+        if (!GameBridge.ReloadInPlace(saveSlot, true, spawn?.Leader, spawn?.Angle ?? -1))
+            SetError("Could not reload the autosave for the drop-in.");
     }
 
     /// <summary>Starts the auto-join again (after an in-place reload removed the co-op players).</summary>
@@ -1071,7 +1279,7 @@ internal sealed class Session
     {
         if (!_autoJoin) return snap;
         if (GameBridge.IsPlaying(LocalSlot)) { _autoJoin = false; return snap; }
-        if (Engine.AppliedFrame < 240 || GameBridge.LoadingLevel || GameBridge.Party?.Leader == null) return snap;
+        if (Engine.AppliedFrame < _autoJoinFrom || GameBridge.LoadingLevel || GameBridge.Party?.Leader == null) return snap;
         if (frame < _nextJoinTry) return snap;
         if (++_joinTries > 12) { _autoJoin = false; Toast.Show("Press Join on your controller to take over a party member."); return snap; }
         _nextJoinTry = frame + 90;
@@ -1106,9 +1314,11 @@ internal sealed class Session
         _pendingCall = 0;
         _nextHello = _nextPing = _nextLobbyPoll = 0;
         _awaitingMirrorReload = false;
-        _resync = ResyncStep.None;
-        _pendingSinceLevel = null;
-        _areaChanged = _resyncRequested = false;
+        _dropIn = DropInStep.None;
+        _joiners.Clear();
+        _saveableFrames = 0;
+        _reloadSpawn = null;
+        _readyAnywhere = false;
         _autoJoin = false;
         WaitingForResync = false;
         LocalSlot = 0;

@@ -455,12 +455,9 @@ internal static class NativeMenus
                     "Leave session", () => s.LeaveSlotDeterministic(slot));
                 return;
             }
-            string waiting = s.HasPending ? $"\nWaiting to join: {string.Join(", ", s.PendingNames)} (they drop in at the next area change)." : "";
-            Popup($"{PlayersLine(s)}{waiting}", "End session for everyone", "Let waiting players in now", i =>
-            {
-                if (i == 0) s.EndSessionDeterministic("The host ended the co-op session");
-                else if (i == 1) s.RequestResync(); // host-only effect; a no-op on the other peers
-            });
+            string waiting = s.HasPending ? $"\nJoining: {string.Join(", ", s.PendingNames)} (they drop in as soon as the game allows saving)." : "";
+            Confirm($"{PlayersLine(s)}{waiting}", "End session for everyone",
+                () => s.EndSessionDeterministic("The host ended the co-op session"));
             return;
         }
         if (!s.InSession)

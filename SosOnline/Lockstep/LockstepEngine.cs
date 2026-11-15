@@ -49,6 +49,12 @@ internal sealed class LockstepEngine
     /// <summary>First frame a slot no longer takes part in (int.MaxValue = still in).</summary>
     private readonly int[] _leaveFrame = new int[InputOverride.SlotCount];
 
+    /// <summary>First frame a slot takes part in (0 for the slots present at the start).</summary>
+    private readonly int[] _joinFrame = new int[InputOverride.SlotCount];
+
+    /// <summary>The frame this run started on (0, or the join frame on a PC that dropped in).</summary>
+    public int StartFrame { get; private set; }
+
     /// <summary>Slot <paramref name="slot"/> stops sending input from <paramref name="frame"/> on (same on every peer).</summary>
     public void SetLeaveFrame(int slot, int frame)
     {
@@ -56,7 +62,29 @@ internal sealed class LockstepEngine
         _leaveFrame[slot] = Math.Min(_leaveFrame[slot], frame);
     }
 
-    public bool InSessionAt(int slot, int frame) => Occupied[slot] && frame < _leaveFrame[slot];
+    public bool InSessionAt(int slot, int frame) => Occupied[slot] && frame >= _joinFrame[slot] && frame < _leaveFrame[slot];
+
+    /// <summary>
+    /// Drop-in: slot <paramref name="slot"/> takes part from <paramref name="frame"/> on (same on every peer). Its
+    /// first <see cref="Delay"/> frames are empty input, like the first frames of a run: the joiner's own input
+    /// starts at <paramref name="frame"/> + Delay.
+    /// </summary>
+    public void AddSlot(int slot, int frame)
+    {
+        if (slot <= 0 || slot >= InputOverride.SlotCount) return;
+        Occupied[slot] = true;
+        _joinFrame[slot] = frame;
+        _leaveFrame[slot] = int.MaxValue;
+        for (int f = frame; f < frame + Delay; f++) Slots(f)[slot] = InputSnapshot.Empty;
+        Plugin.Log.LogInfo($"[lockstep] slot {slot} joins at frame {frame}");
+    }
+
+    /// <summary>Every input buffered for <paramref name="from"/> and later (host: brings a joiner up to date).</summary>
+    public IEnumerable<(int frame, InputSnapshot[] channels)> BufferedFrom(int from)
+    {
+        foreach (var kv in _frames)
+            if (kv.Key >= from) yield return (kv.Key, kv.Value);
+    }
 
     /// <summary>Optional test-harness hook that edits local input before it is sent.</summary>
     public Func<int, int, InputSnapshot, InputSnapshot> LocalInputFilter;
@@ -113,36 +141,43 @@ internal sealed class LockstepEngine
     private readonly SortedDictionary<int, List<Action>> _scheduled = new();
     private InputSnapshot _lastLocal, _lastSystem;
 
-    public void Start(int localSlot, bool isHost, bool[] occupied, int delay, int seed)
+    /// <param name="startFrame">
+    /// 0 for a new run. A PC dropping into a running session starts on the join frame: its own first Delay frames
+    /// are empty, everyone else's input comes from the host.
+    /// </param>
+    public void Start(int localSlot, bool isHost, bool[] occupied, int delay, int seed, int startFrame = 0)
     {
         Seed = seed;
         LocalSlot = localSlot;
         IsHost = isHost;
         Occupied = (bool[])occupied.Clone();
         Delay = Math.Max(1, delay);
-        Frame = 0;
+        Frame = StartFrame = startFrame;
         RngFrameOffset = 0;
-        for (int i = 0; i < _leaveFrame.Length; i++) _leaveFrame[i] = int.MaxValue;
+        for (int i = 0; i < _leaveFrame.Length; i++) { _leaveFrame[i] = int.MaxValue; _joinFrame[i] = 0; }
         _frames.Clear();
         _times.Clear();
         _scheduled.Clear();
-        AppliedFrame = -1;
+        AppliedFrame = startFrame - 1;
         LookaheadWaitMs = 0;
         _lastLocal = _lastSystem = null;
         MaxStallMs = LastStallMs = 0;
 
-        for (int f = 0; f < Delay; f++)
+        for (int f = startFrame; f < startFrame + Delay; f++)
         {
             var ch = Slots(f);
-            for (int c = 0; c < InputOverride.ChannelCount; c++) ch[c] = InputSnapshot.Empty;
+            if (startFrame == 0)
+                for (int c = 0; c < InputOverride.ChannelCount; c++) ch[c] = InputSnapshot.Empty;
+            else ch[localSlot] = InputSnapshot.Empty;
         }
+        if (startFrame > 0) _joinFrame[localSlot] = startFrame;
 
         GameBridge.ResetSlotPlayers();
         RemapPlayers();
-        InputOverride.SetFrame(Slots(0));
+        InputOverride.SetFrame(startFrame == 0 ? Slots(0) : EmptyFrame());
         InputOverride.Active = true;
         Running = true;
-        Plugin.Log.LogInfo($"[lockstep] started: slot {localSlot}, host={isHost}, delay={Delay}, occupied={string.Join(",", occupied)}");
+        Plugin.Log.LogInfo($"[lockstep] started at frame {startFrame}: slot {localSlot}, host={isHost}, delay={Delay}, occupied={string.Join(",", occupied)}");
     }
 
     /// <summary>Points every lockstep channel at the Rewired player its slot currently drives.</summary>
@@ -172,6 +207,13 @@ internal sealed class LockstepEngine
         if (frame < Frame) frame = Frame;
         if (!_scheduled.TryGetValue(frame, out var list)) _scheduled[frame] = list = new List<Action>();
         list.Add(action);
+    }
+
+    private static InputSnapshot[] EmptyFrame()
+    {
+        var ch = new InputSnapshot[InputOverride.ChannelCount];
+        for (int c = 0; c < ch.Length; c++) ch[c] = InputSnapshot.Empty;
+        return ch;
     }
 
     private InputSnapshot[] Slots(int frame)

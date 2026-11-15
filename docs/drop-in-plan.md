@@ -90,7 +90,12 @@ Done when: a third instance joins two that are walking around, and the two never
 - **Spike B: partial.** The save reproduces the entry state. Live play and replay both drift in battles (finding 8).
 - **Spike C: pass with cameras off** (about 16× real time).
 - **Stage 1: not started.** The plan's own risk table asks for a real two-account Steam test first.
-- **Stages 2 and 3: not started.**
+- **Stage 2: done (loopback).** `Session.UpdateDropIn`: autosave on an agreed frame, files to the joiner, then a join frame on which every PC, joiner included, reloads in place with the party's positions. The engine adds slots mid-run (`LockstepEngine.AddSlot`, `Start(startFrame)`). Measured in three-instance runs: 92–95 frames (about 1.6 s) from the join frame to the release, guests playing 5 frames later, the joiner's state identical to the host's from then on. Also takes in two Stage 1 items: joiners queue for the first saveable moment (no area-change wait, no "let them in now"), and nothing is rejected during a drop-in.
+  - Co-op players are not in the save and survive an in-place load, so every PC makes the guests leave on the join frame and they rejoin by synced Join press.
+  - A guest that is still booting must not drop in (or start a session): the boot sequence later loads the title screen on top of the game. Guests now report ready only once `GameBridge.Booted`.
+  - A save older than 5 s when the joiners are ready is replaced by a fresh one.
+  - Not handled: a level load in progress on the join frame; joining from a guest's own gameplay is untested.
+- **Stage 3: not started.**
 
 ## Order of work
 

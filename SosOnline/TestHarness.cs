@@ -274,8 +274,6 @@ internal static class TestHarness
     private static string _lastLevel = "";
     private static readonly bool[] _wasPlaying = new bool[InputOverride.SlotCount];
     private static int _reloadSlot = -1;
-    private static Vector3? _reloadPos;
-    private static int _reloadAngle = -1;
 
     /// <summary>Logs level-loading and co-op playing transitions with their lockstep frames.</summary>
     private static void TrackTransitions(int frame)
@@ -295,7 +293,7 @@ internal static class TestHarness
         }
     }
 
-    private static readonly List<(string name, Vector3 pos)> _reloadParty = new();
+    private static PartySpawn _reloadParty;
 
     /// <summary>
     /// --sosonline-reload=F: spike A. Autosave at F; at F+120 reload it in place. With --sosonline-reloadpos the
@@ -313,39 +311,14 @@ internal static class TestHarness
         if (frame == f + 120)
         {
             if (GameBridge.Saving) Plugin.Log.LogError($"[reload] f{frame} still saving");
-            Vector3? spawn = null;
-            int angle = -1;
-            _reloadParty.Clear();
-            var leader = GameBridge.Party?.Leader;
-            if (restore && leader != null)
-            {
-                spawn = leader.transform.position;
-                try { angle = leader.lookDirectionController.CurrentLookAngle; } catch { }
-                var list = GameBridge.Party.LeaderAndFollowers;
-                for (int i = 0; i < list.Count; i++)
-                    if (list[i] != null) _reloadParty.Add((list[i].gameObject.name, list[i].transform.position));
-            }
-            Plugin.Log.LogInfo($"[reload] f{frame} reloading slot {_reloadSlot} in place, spawn {(spawn.HasValue ? spawn.Value.ToString() : "checkpoint")}");
-            if (_reloadSlot >= 0 && GameBridge.ReloadInPlace(_reloadSlot, true, spawn, angle)) Session.Instance.RearmAutoJoin();
+            _reloadParty = restore ? GameBridge.CaptureParty() : null;
+            Plugin.Log.LogInfo($"[reload] f{frame} reloading slot {_reloadSlot} in place, spawn {(_reloadParty != null ? _reloadParty.ToString() : "checkpoint")}");
+            if (_reloadSlot >= 0 && GameBridge.ReloadInPlace(_reloadSlot, true, _reloadParty?.Leader, _reloadParty?.Angle ?? -1)) Session.Instance.RearmAutoJoin();
         }
-        if (restore && frame == f + 240 && _reloadParty.Count > 0)
+        if (frame == f + 240 && _reloadParty != null)
         {
             if (GameBridge.LoadingLevel) { Plugin.Log.LogError($"[reload] f{frame} still loading, positions not restored"); return; }
-            var list = GameBridge.Party?.LeaderAndFollowers;
-            if (list == null) return;
-            var moved = new List<string>();
-            for (int i = 0; i < list.Count; i++)
-            {
-                var c = list[i];
-                if (c == null) continue;
-                foreach (var (name, pos) in _reloadParty)
-                    if (name == c.gameObject.name)
-                    {
-                        moved.Add($"{name} {(c.transform.position - pos).magnitude:F2}m");
-                        c.transform.position = pos;
-                    }
-            }
-            Plugin.Log.LogInfo($"[reload] f{frame} restored positions: {string.Join(", ", moved)}");
+            Plugin.Log.LogInfo($"[reload] f{frame} restored positions: {GameBridge.RestoreParty(_reloadParty)}");
         }
     }
 
@@ -360,7 +333,6 @@ internal static class TestHarness
         if (At("kill", frame)) { Plugin.Log.LogInfo($"[test] killing process at {frame}"); System.Diagnostics.Process.GetCurrentProcess().Kill(); }
         if (At("pauseleave", frame)) { Plugin.Log.LogInfo($"[test] synced pause-menu leave of P2 at {frame}"); session.LeaveSlotDeterministic(1); }
         if (At("hpdiverge", frame)) DivergeHp(frame);
-        if (At("admit", frame)) { Plugin.Log.LogInfo($"[test] admit waiting players at {frame}"); session.RequestResync(); }
         if (At("assigntest", frame))
         {
             var pm = UnityEngine.Object.FindObjectsOfType<PauseMenu>().FirstOrDefault();

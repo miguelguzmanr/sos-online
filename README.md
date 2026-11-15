@@ -65,13 +65,13 @@ It is a BepInEx 6 (IL2CPP) plugin. The game ships Steamworks (`steam_api64.dll`,
 - The leaver keeps playing solo on their copy of the host's save.
 - Only the host ending the session ends it for everyone.
 
-**Drop-in.** Lockstep syncs inputs, not world state, so a newcomer can't be streamed into a running game. Instead:
-- A friend who joins mid-session is admitted as *waiting* ("you'll drop in at the next area change").
-- After the party's next area change, once the game itself allows saving (no battle, cutscene or loading), the host autosaves.
-- Everyone returns to the title screen, and the session restarts from that autosave with the new roster. This reuses the normal session start: save mirroring, ready-on-title, synchronized start.
-- The autosave records the entrance just used, so everyone reappears where they were.
-- The host can also choose **Let waiting players in now** from the pause menu.
-- After a (re)start, guests take over a party member automatically: the mod presses the game's co-op **Join** for them, through synced input.
+**Drop-in.** Lockstep syncs inputs, not world state, so a newcomer can't be streamed into a running game. Instead everyone reloads a fresh autosave in place, behind the game's own fade, without leaving gameplay:
+- A friend who joins mid-session is admitted as *waiting*. Once the game itself has allowed saving for half a second (no battle, cutscene or loading), every PC in the session autosaves on an agreed frame. Lockstep keeps running.
+- The host sends its saves to the joiner, who loads them into its mirror folder wherever it is (title screen or its own game, once the game has finished booting) and reports ready. If that took more than 5 s, the host saves again first, so little progress is undone.
+- The host picks a join frame a few frames ahead and sends it, with where every party member stands, to everyone. The joiner starts lockstep on that frame with the inputs the host has buffered for it.
+- On the join frame every PC, the joiner included, loads the autosave in place (`GameBridge.ReloadInPlace`): the leader spawns where it stood, the loading barrier ends the load on one frame everywhere, and two frames later every party member is put back on its own position.
+- Co-op players aren't in the save, so on the join frame every PC lets the guests leave co-op, and each guest takes a party member again automatically: the mod presses the game's co-op **Join** for them, through synced input. The same happens after a session start.
+- Progress made between the autosave and the join frame (usually 2 s) is undone, except positions.
 
 **Assign Players.** The game's own screen, made session-aware.
 - Offline it is device-driven. A gamepad joins by pressing a button (the screen polls every *local* device), and finishing moves devices between the game's players P1–P3.
@@ -88,7 +88,7 @@ It is a BepInEx 6 (IL2CPP) plugin. The game ships Steamworks (`steam_api64.dll`,
 | Guest leaves | Applied on frame 905; the host keeps playing alone. |
 | Guest process killed | The host drops the slot after 2 s and keeps playing. |
 | Synced pause-menu leave | Applied on frame 905 on both PCs. |
-| Third player joins mid-session | Admitted as waiting; the reload carried the autosave (5 files). All three play, and the 81 snapshots after the reload are identical on all three PCs. |
+| Third player joins mid-session (drop-in in place) | The joiner is booting when it joins; the first autosave goes stale and is replaced. Existing players: 92–95 frames (about 1.6 s) from the join frame to the load's release, never via the title screen; both guests play again 5 frames later and the joiner walks its character. After the join, the joiner's state matches the host's exactly (73–81 of 73–81 snapshots, four runs); guest 1 differs only by up to 1 cm in positions, within the 2 cm correction, with no mismatch reported. |
 | Assign Players | Opened online; P2's cursor took the P1 column. After confirm, on both PCs the guest drives P1/Zale and the host P2/Valere. The screen closes through the game's own path; all 57 snapshots match. |
 
 ### Native-code safety
@@ -120,7 +120,7 @@ The menus use the game's own widgets, so they look, sound and navigate like the 
 3. **Guests:** accept the Steam invite, or use Title screen → **Online** → **Join a friend**, or use **Join Game** in the Steam friends list.
 4. **Host:** **Start co-op** and pick a save. Everyone loads it together, and guests automatically take over a party member.
 5. **Choosing who plays whom:** pause → **Assign Players** (the game's own screen, works online).
-6. **Friends joining later** drop in at the party's next area change. **Leaving:** pause → **Online** → **Leave session**.
+6. **Friends joining later** drop in as soon as the game allows saving: everyone sees a short fade and keeps their place. **Leaving:** pause → **Online** → **Leave session**.
 
 Use a gamepad or keyboard. The mouse is not synchronized. Saves made during co-op are written by the host as usual. On guests they go to the session folder, so the host keeps the shared progress.
 
@@ -157,10 +157,9 @@ Session flags:
 | `--sosonline-leave=F` | Guest leaves over the network on frame F. |
 | `--sosonline-kill=F` | Guest's process is killed on frame F. |
 | `--sosonline-pauseleave=F` | Synced pause-menu leave of P2 on frame F. |
-| `--sosonline-admit=F` | Host lets waiting players in on frame F. |
 | `--sosonline-assigntest=F` | Opens Assign Players from the pause menu on frame F. |
 
-`tests/session.sh` launches a host plus guests, staggering late joiners.
+`tests/session.sh` launches a host plus guests, staggering late joiners, and tiles their windows side by side, host on the left (`tests/place-window.ps1`; `NO_TILE=1` turns it off).
 
 Test instances never touch your real saves:
 - Each UDP test instance plays from its own sandbox copy (`<saves>\SosOnlineTest-<port>`) and its own mirror folder.
@@ -199,12 +198,12 @@ The command-line flags are documented in `SosOnline/TestHarness.cs`.
 - **Long sessions, area transitions with heavy streaming, cutscenes.** Async loading is the most likely source of desyncs.
   - The host-snapshot check reports them in the log and the HUD.
   - Seen in testing: the initial level finished loading 1–2 frames apart on two instances. It converged once the party spawned, but a loading barrier would make it exact.
-- **Drop-in triggered by a real area change.** Tests used the host's *let them in now* trigger; the area-change detection itself (level reference changes, then saving allowed) hasn't run in a test.
+- **Drop-in from a guest's own gameplay.** Tested joiners were on the title screen or still booting. Joining a level load already in progress on the join frame is not handled (the window is a few frames).
 - **Three players in combat**, and Assign Players with three players.
 
 ## Known limitations
 
-- Joining mid-session waits for the next area change (or the host's *let them in now*), and everyone briefly reloads from an autosave.
+- Joining mid-session waits for a moment the game allows saving, and everyone briefly reloads an autosave in place (a fade of about 1.5 s); about 2 s of progress other than positions is undone.
 - If the host leaves, the session ends; the host's save is the shared one.
 - On Assign Players, every player's cursor shows the keyboard icon (the stand-in device used online).
 - No automatic full resync after a desync yet. End the session from the pause menu and restart it from the latest save (or let someone "join" to force a reload).

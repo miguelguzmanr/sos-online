@@ -215,6 +215,12 @@ internal static class GameBridge
         get { try { return Levels?.LoadingLevel ?? true; } catch { return true; } }
     }
 
+    /// <summary>
+    /// The game finished booting (title screen or gameplay) and no level is loading. Before that, the boot sequence
+    /// still loads the title screen on its own, on top of anything loaded in the meantime.
+    /// </summary>
+    public static bool Booted => !LoadingLevel && CurrentLevelId != "";
+
     /// <summary>In free gameplay where the game itself would allow saving (no battle, cutscene or loading).</summary>
     public static bool CanSaveNow
     {
@@ -249,7 +255,7 @@ internal static class GameBridge
     }
 
     /// <summary>
-    /// Spike A: loads autosave <paramref name="slotIndex"/> from gameplay, without the title screen. Restores the
+    /// Loads autosave <paramref name="slotIndex"/> from gameplay, without the title screen. Restores the
     /// managers from the slot (SaveManager.onSaveSlotLoaded), then loads the slot's checkpoint level behind the
     /// game's own transition. Runs on the same lockstep frame on every peer.
     /// </summary>
@@ -286,18 +292,37 @@ internal static class GameBridge
         catch (Exception e) { Plugin.Log.LogError($"ReloadInPlace failed: {e}"); return false; }
     }
 
-    /// <summary>Leaves gameplay for the title screen, like "Return to title" in the pause menu.</summary>
-    public static bool ReturnToTitle()
+    /// <summary>Where the party stands now: the leader's position and facing, and every member's position.</summary>
+    public static PartySpawn CaptureParty()
     {
-        try
+        var leader = Party?.Leader;
+        if (leader == null) return null;
+        var spawn = new PartySpawn { Leader = leader.transform.position };
+        try { spawn.Angle = leader.lookDirectionController.CurrentLookAngle; } catch { }
+        var list = Party.LeaderAndFollowers;
+        for (int i = 0; i < list.Count; i++)
+            if (list[i] != null) spawn.Members.Add((list[i].gameObject.name, list[i].transform.position));
+        return spawn;
+    }
+
+    /// <summary>Puts every party member back on the position recorded in <paramref name="spawn"/>.</summary>
+    public static string RestoreParty(PartySpawn spawn)
+    {
+        var list = Party?.LeaderAndFollowers;
+        if (spawn == null || list == null) return "no party";
+        var moved = new List<string>();
+        for (int i = 0; i < list.Count; i++)
         {
-            var levels = Levels;
-            if (levels == null) return false;
-            var loading = new LevelLoading { levelToLoad = LevelReference.TitleScreen, showTransition = false };
-            levels.LoadLevel(loading);
-            return true;
+            var c = list[i];
+            if (c == null) continue;
+            foreach (var (name, pos) in spawn.Members)
+                if (name == c.gameObject.name)
+                {
+                    moved.Add($"{name} {(c.transform.position - pos).magnitude:F2}m");
+                    c.transform.position = pos;
+                }
         }
-        catch (Exception e) { Plugin.Log.LogError($"ReturnToTitle failed: {e}"); return false; }
+        return string.Join(", ", moved);
     }
 
     public static List<(int index, bool auto, string label)> ListSaveSlots()
@@ -316,4 +341,33 @@ internal static class GameBridge
         }
         return result;
     }
+}
+
+/// <summary>Party positions to respawn at after an in-place reload (identical values on every PC).</summary>
+internal sealed class PartySpawn
+{
+    public Vector3 Leader;
+    public int Angle = -1;
+    public readonly List<(string name, Vector3 pos)> Members = new();
+
+    public void Write(System.IO.BinaryWriter w)
+    {
+        WriteVec(w, Leader);
+        w.Write(Angle);
+        w.Write(Members.Count);
+        foreach (var (name, pos) in Members) { w.Write(name); WriteVec(w, pos); }
+    }
+
+    public static PartySpawn Read(System.IO.BinaryReader r)
+    {
+        var s = new PartySpawn { Leader = ReadVec(r), Angle = r.ReadInt32() };
+        int n = r.ReadInt32();
+        for (int i = 0; i < n; i++) s.Members.Add((r.ReadString(), ReadVec(r)));
+        return s;
+    }
+
+    private static void WriteVec(System.IO.BinaryWriter w, Vector3 v) { w.Write(v.x); w.Write(v.y); w.Write(v.z); }
+    private static Vector3 ReadVec(System.IO.BinaryReader r) => new(r.ReadSingle(), r.ReadSingle(), r.ReadSingle());
+
+    public override string ToString() => $"leader {Leader} angle {Angle}, {Members.Count} member(s)";
 }
