@@ -42,7 +42,7 @@ internal enum Msg : byte
 
 internal static class Protocol
 {
-    public const int Version = 8;
+    public const int Version = 9; // 9: state snapshots carry each character's facing
 
     public static (BinaryWriter w, MemoryStream ms) Begin(Msg type)
     {

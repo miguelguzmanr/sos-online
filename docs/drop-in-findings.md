@@ -237,6 +237,36 @@ Harness: `--sosonline-play` on the host plays a save with the lobby open; `--sos
 
 **Not tested:** everything Steam (lobby, invites, the invite popup, `OpenToFriends`' automatic lobby).
 
+## 10. First Steam session with a friend: fixes (2026-11-15)
+
+Two PCs over Steam (host at 1920×1080, guest at 2560×1440), build `d9d6210`, about 35 ms ping. Both PCs' logs were compared frame by frame.
+
+**Saving ended the co-op session.** At a save point, answering Yes to the game's own save question ran "End session for everyone". The game reuses its `GenericPopupScreen` view and adds its handler to `onPopupAnswered` with `+=`. Our `Popup` set its handler on that event and never removed it, so the game's later question also ran our old choice. **Fix:** `NativeMenus.Popup` ignores any answer that isn't for the pop-up it opened (a token per pop-up) and clears its handler after the answer.
+
+**Drop-in loop.** The friend dropped in again and again every few seconds. "Open to friends" restarted co-op immediately after the session ended. After each drop-in by reload, the only difference was the facing of P2's character (`party=[…/5 …/2]`), which counted as out of sync and forced a full reload every time. **Fixes:**
+- `StateSync`: facing is no longer part of the `party` hash. It travels with each character's position and the guest corrects it in place, but only if the character hasn't turned since that frame.
+- `Session`: after 3 re-syncs within 2 minutes, the next drop-in waits 60 s. The host sees a toast.
+
+**Input delay from one slow ping.** On a reconnect the first ping read 1630 ms, which set the maximum delay (15 frames, 250 ms) for the whole session. **Fix:** the ping is the median of the last 9 readings, and co-op from the host's own game waits for 3 readings before choosing the delay. The automatic delay is now at least 4: every drop-in at delay 3 went out of sync and none at 5, 6 or 15 did. This works around a cause that wasn't found; revisit it once the fixes below are confirmed.
+
+**Title screen Online menu.** The cursor went back to the first item whenever the page refreshed (a toggle, a player joining), and cancel (B/Esc) did nothing. **Fix:** the cursor stays on the same item, and cancel works like the Back item.
+
+**Battles went out of sync, and the guest's game crashed.**
+- **Damage rolls.** In the Mooncradle training, both PCs matched on every frame until a basic attack hit for 11 on the host and 10 on the guest, on the same frame with the same inputs, positions and MP. Hits get a random modifier (`PlayerAttackDamage.GetRandomDamageModifier`, `GlobalCombatSettings.playerRandomDamageRange`). The engine reseeds `UnityEngine.Random` once per frame, but visual effects (screen shakes, randomized sprites and particles, animator offsets) draw from it during the frame, and how often depends on each PC's screen. **Fix:** `Lockstep/DeterministicRandom.cs` runs every gameplay roll on a generator seeded from the session seed, the frame and the roll count, then restores the previous state. It covers the damage modifier, enemy move and pattern choices, random target picks, hit patterns, a few boss mechanics and loot. Not yet confirmed that the game rolls damage with `UnityEngine.Random`: check the `[random]` line at startup and a battle's HP in both state logs.
+- **Corrections during battles.** In another training round the guest ran Valere's attack 90 frames (1.5 s) before the host. The position correction then moved Valere 5 times in the middle of the attack, the guest's battle ended early, and its game crashed 2 s after leaving the run (no error in the mod log). In-sync battles need 0 corrections (finding 8), so a gap there means the PCs are at different points of the battle. **Fix:** no position or facing corrections during a battle. A gap over 0.5 m counts as a mismatch, and two in a row start a re-sync.
+- **Timing verdicts are always logged** (`[timing] attack impact …` and `[timing] block …`, a few lines per battle), so comparing both PCs' logs shows whether a battle desync came from timing.
+
+**Drop-in autosave between training rounds.** The game allows saving in the short gaps between the training's rounds (`combat=off` for about 2 s), and a drop-in autosave was taken in one of them (f68987). The guest had already crashed by then (15:39:00, save at 15:39:24), so it didn't cause the crash, and the join-frame check would have postponed the join when the next round started. It still saved and sent files for nothing. **Fix:** the host takes a drop-in autosave only once no battle has run for 3 s (`Session.BattleSettleFrames`, 180 frames).
+
+**Protocol 9:** snapshots carry each character's facing.
+
+**Open:**
+- Why the guest ran Valere's attack 1.5 s early. It could be the same random-roll cause (the training dummy's behaviour); retest with the new build first.
+- The crash: no game log was kept. If it happens again, get `Player.log` (or `Player-prev.log` after one restart) from `%USERPROFILE%\AppData\LocalLow\Sabotage Studio\Sea of Stars\` before the game is started twice more.
+- The minimum automatic delay of 4.
+
+**Not tested in the game yet:** everything in this section. The game folder was in use during the session, so the fixes were only built.
+
 ## Tools added
 
 | Script / flag | Use |
