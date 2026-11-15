@@ -23,6 +23,8 @@ namespace SosOnline;
 ///   --sosonline-shots=F1,F2,...   screenshot at those lockstep frames
 ///   --sosonline-quit=F            quit at lockstep frame F
 ///   --sosonline-reload=F          spike A: autosave at F, reload it in place at F+120 (every PC)
+///   --sosonline-ff[=nocam]        spike C: uncapped frame rate, audio muted (and cameras off)
+///   --sosonline-seed=N            fixed session seed (host)
 ///   --sosonline-stateevery=N      state snapshot interval in frames (default 30)
 ///   --sosonline-hpdiverge=F       at lockstep frame F, lower the first party member's HP by 1 on this PC only
 /// Every state snapshot is also appended to BepInEx/SosOnline/state-&lt;id&gt;.log for offline comparison.
@@ -74,6 +76,7 @@ internal static class TestHarness
             // Test instances never touch the real saves, nor each other's.
             SaveMirror.UseSandbox($"SosOnlineTest-{port}");
             SaveMirror.MirrorFolder = $"SosOnlineSession-{port}";
+            SpikeB.CopyIntoSandbox();
         }
         if (Args.TryGetValue("delay", out var d)) Session.Instance.ConfiguredDelay = int.Parse(d);
         if (Args.TryGetValue("guests", out var g)) _guests = int.Parse(g);
@@ -87,6 +90,8 @@ internal static class TestHarness
         if (Args.TryGetValue("stateevery", out var se)) StateSync.Interval = Math.Max(1, int.Parse(se));
 
         Directory.CreateDirectory(OutDir);
+        SpikeB.Init();
+        FastForward.Init();
         BepInEx.Logging.Logger.Listeners.Add(new InstanceLog(Path.Combine(OutDir, $"log-{InstanceId}.txt")));
         _stateLog = new StreamWriter(Path.Combine(OutDir, $"state-{InstanceId}.log"), false) { AutoFlush = true };
     }
@@ -153,11 +158,19 @@ internal static class TestHarness
 
     public static bool TraceEnabled => Args.ContainsKey("trace");
 
+    public static bool TryArg(string key, out string value) => Args.TryGetValue(key, out value);
+
     /// <summary>Test input filter (scripts, bots), chained after the session's own filter.</summary>
     public static Func<int, int, InputSnapshot, InputSnapshot> Filter;
 
     public static void Attach(LockstepEngine engine)
     {
+        if (SpikeB.Replaying)
+        {
+            // Spike B: every input comes from the recording, nothing from scripts or bots.
+            Filter = SpikeB.Filter;
+            return;
+        }
         bool bot = Args.TryGetValue("bot", out var botMode);
         CombatBot.PerfectPresses = bot && botMode != "menu";
         if (_scriptPath == null && !bot) return;
@@ -222,7 +235,7 @@ internal static class TestHarness
     }
 
     /// <summary>Starts the closest triggerable encounter. Runs on the same frame on every peer.</summary>
-    private static void StartNearestEncounter()
+    internal static void StartNearestEncounter()
     {
         var leader = GameBridge.Party?.Leader;
         if (leader == null) { Plugin.Log.LogWarning("[test] no party leader"); return; }
@@ -341,6 +354,8 @@ internal static class TestHarness
         var session = Session.Instance;
         TrackTransitions(frame);
         ReloadSpike(frame);
+        SpikeB.OnFrame(frame);
+        FastForward.OnFrame(frame);
         if (At("leave", frame)) { Plugin.Log.LogInfo($"[test] leaving at {frame}"); session.Leave(); }
         if (At("kill", frame)) { Plugin.Log.LogInfo($"[test] killing process at {frame}"); System.Diagnostics.Process.GetCurrentProcess().Kill(); }
         if (At("pauseleave", frame)) { Plugin.Log.LogInfo($"[test] synced pause-menu leave of P2 at {frame}"); session.LeaveSlotDeterministic(1); }
@@ -368,6 +383,8 @@ internal static class TestHarness
             Plugin.Log.LogInfo($"[sync] snapshot capture: {StateSnapshot.CaptureCount} taken, avg {StateSnapshot.CaptureMsTotal / Math.Max(1, StateSnapshot.CaptureCount):F2} ms, max {StateSnapshot.CaptureMsMax:F2} ms");
             Plugin.Log.LogInfo($"[test] quitting at frame {frame}");
             _stateLog?.Flush();
+            SpikeB.Close();
+            FastForward.Close();
             Application.Quit();
         }
     }

@@ -40,6 +40,7 @@
     <Reference Include="$(Interop)\UnityEngine.TextRenderingModule.dll" Private="false" />
     <Reference Include="$(Interop)\UnityEngine.ScreenCaptureModule.dll" Private="false" />
     <Reference Include="$(Interop)\Rewired_Core.dll" Private="false" />
+    <Reference Include="$(Interop)\AK.Wwise.Unity.API.dll" Private="false" />
     <Reference Include="$(Interop)\Sabotage.Core.dll" Private="false" />
     <Reference Include="$(Interop)\Sabotage.Platform.dll" Private="false" />
     <Reference Include="$(Interop)\Sabotage.Localization.dll" Private="false" />

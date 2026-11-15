@@ -24,6 +24,8 @@ internal sealed class LockstepEngine
     public int LocalSlot { get; private set; }
     public bool IsHost { get; private set; }
     public int Seed { get; private set; }
+    /// <summary>Added to the frame number when reseeding the RNG (spike B: a replay reproduces another run's frames).</summary>
+    public int RngFrameOffset;
     public bool[] Occupied { get; private set; } = new bool[InputOverride.SlotCount];
 
     public float LastStallMs { get; private set; }
@@ -119,6 +121,7 @@ internal sealed class LockstepEngine
         Occupied = (bool[])occupied.Clone();
         Delay = Math.Max(1, delay);
         Frame = 0;
+        RngFrameOffset = 0;
         for (int i = 0; i < _leaveFrame.Length; i++) _leaveFrame[i] = int.MaxValue;
         _frames.Clear();
         _times.Clear();
@@ -254,7 +257,7 @@ internal sealed class LockstepEngine
         _times.Remove(Frame - HistoryFrames);
         // Reseed every frame: whatever consumed UnityEngine.Random a variable number of times last frame
         // (async loading, visibility-driven effects) can't carry divergence into this one.
-        UnityEngine.Random.InitState(unchecked(Seed ^ (Frame * 486187739)));
+        UnityEngine.Random.InitState(unchecked(Seed ^ ((Frame + RngFrameOffset) * 486187739)));
         if (_scheduled.Remove(Frame, out var actions))
             foreach (var a in actions)
                 try { a(); } catch (Exception e) { Plugin.Log.LogError($"[lockstep] scheduled action at {Frame} failed: {e}"); }

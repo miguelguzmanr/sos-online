@@ -189,7 +189,7 @@ internal sealed class Session
     {
         if (Phase != Phase.AwaitingReady || _peers.Values.Any(p => !p.Ready)) return;
 
-        int seed = new System.Random().Next();
+        int seed = TestHarness.TryArg("seed", out var fixedSeed) ? int.Parse(fixedSeed) : new System.Random().Next();
         int delay = ConfiguredDelay > 0 ? ConfiguredDelay : AutoDelay();
         var occupied = new bool[InputOverride.SlotCount];
         for (int s = 0; s < occupied.Length; s++) occupied[s] = SlotPeer[s] != 0;
@@ -904,9 +904,13 @@ internal sealed class Session
         }
     }
 
+    /// <summary>(load sequence, release frame) whenever a load's release is scheduled on this PC.</summary>
+    public static event Action<int, int> LoadReleaseScheduled;
+
     private void ScheduleLoadRelease(int seq, int frame)
     {
         if (!Engine.Running) return;
+        LoadReleaseScheduled?.Invoke(seq, frame);
         if (frame < Engine.Frame)
         {
             LoadBarrierLateReleases++;
