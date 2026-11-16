@@ -1,4 +1,4 @@
-# Drop-in: findings and Stage 3 handoff (2026-11-15, §12 on 2026-11-16)
+# Drop-in: findings and Stage 3 handoff (2026-11-15, §12 and §13 on 2026-11-16)
 
 Companion to [drop-in-plan.md](drop-in-plan.md) (status, risks) and [drop-in-spikes.md](drop-in-spikes.md) (spike results). This file records what was found while finishing Stage 2 and starting Stage 3, and what is left.
 
@@ -352,9 +352,50 @@ Now `Session.ReturnToSolo`, from `AfterLockstep` (not while a guest re-syncs, wh
 
 **Camping.** The campfire near the user's save only says "The campfire feels cozy" (camping isn't unlocked yet in the story). Started through `CampingSpot.ToggleCamping()` instead (`CampingManager.StartCamping` only sets the flag): the intro, camp, the Rest choice (a held Confirm) and the end of camp run on the same frames on both PCs, with 0 mismatches, HP included.
 
-**Bosslug split (open).** Since the user's newest save moved into the Forbidden Cavern, `battle-turns.sh` reaches the Bosslug fight. The guest splits at frame 1800 in 4 of 6 runs (1 of 2 on v0.1.45): the Acid Bug adds differ; every turn decision and damage roll before that matches. The re-sync test also splits a second time after its first drop-in (party HP 0 on the guest at f8970), on v0.1.45 too. Next: call-probe the boss's AI between f1700 and f1800.
+**Bosslug split (fixed in §13).** Since the user's newest save moved into the Forbidden Cavern, `battle-turns.sh` reaches the Bosslug fight. The guest splits at frame 1800 in 4 of 6 runs (1 of 2 on v0.1.45): the Acid Bug adds differ; every turn decision and damage roll before that matches. The re-sync test also splits a second time after its first drop-in (party HP 0 on the guest at f8970), on v0.1.45 too. Next: call-probe the boss's AI between f1700 and f1800.
 
 **Stage 1 test.** Its guest script chose pause entries by cursor moves and reached *Pause for everyone* instead of *Leave co-op*; the host then quit early and the late joiner waited 300 s at the title screen. Now `--sosonline-pausechoose` chooses by label, and `session.sh` skips a late joiner whose host has quit.
+
+## 13. Battle determinism and re-sync by replay (2026-11-16, branch `milestone/battle-sync`)
+
+**A/B first.** `battle-turns.sh` on the Bosslug fight with the released v0.1.45 (`a7d2819`): split in 1 of 4 runs, the same way as today's build. Not a regression.
+
+**Spawns are traced and hashed (`Lockstep/SpawnTrace.cs`).** Postfixes on `SummonMoveHelper.SpawnEnemy` (summons), `Encounter.AddEnemy` (every enemy entering a battle, the opening roster included) and `Encounter.RemoveActor`, each with the class guard and the fold check. Each event is logged once (`[spawn] f1784 #1 add AcidBugEnemy slot 2 at (-35.0,2.0,236.9)`) and goes into a running count and hash, reset on every load release (the same frame on every PC). The snapshot's `spawn` component is that count/hash, and the snapshot carries its window's events, so a guest names the first spawn that differs and its frame: `spawn differs at f1784: host [f1784 add AcidBugEnemy slot 2], local [f1784 add AcidBugEnemy slot 1]` (reproduced with `--sosonline-nolockfix --sosonline-noresync`). A spawn difference is listed first among the reasons.
+
+**The Bosslug split: spell lock types rolled outside the deterministic wrappers.** Found with the call probe on the summon classes, then on `EnemyCastingData`/`EnemyCastingUI`:
+1. f1379: the Bosslug starts a cast; `EnemyCastingData.CastMove` picks the spell lock types from the move's `CombatMoveSpellLockSettings`. It wasn't wrapped, so it drew from `UnityEngine.Random` after whatever visual effects consumed that frame: host `[Blunt, Sword]`, guest `[Moon, Moon]` (other runs: `[Sword, Sword]`).
+2. f1555: Zale's timed hit calls `BreakLocks(Sword)` on both PCs; it breaks a lock only where there is a Sword lock. Combo points differ from here (+50 vs +200).
+3. The lock break makes that PC's Bosslug re-plan (`SummonMoveHelper.ReserveSummonSlot` on one PC only), and from f1784 the summoned Acid Bugs differ: the split the old snapshot found at f1800.
+
+Fix: `CastMove`, `SwapNextMove`, `EnemyCombatActor.GetSpecialMoveLocks`, both `GetSpellLockSettings` and `Bosslug.UpdateNextMove` run with the deterministic generator (`DeterministicRandom.LockTargets`; `--sosonline-nolockfix` leaves them out). None of the folded `CombatActor.On…TurnDone` methods was involved. Result: 5 of 5 consecutive `battle-turns.sh` runs with 0 guest mismatches and identical turn lines; lock types identical on both PCs in every run. Any enemy that casts with locks goes through the same code, so this covers more than the Bosslug.
+
+**Re-sync splitting again after its drop-in (handoff open item 2): a drop-in autosave during a game over.** In `resync.sh` the bot party loses the battle. Both party members at 0 HP, the game still says it can save, and the Stage 2 drop-in autosave was taken at f7586, just before the game's own game-over reload (f7619) restored the party on the host. The guest loaded a party at 0 HP. Now `GameBridge.PartyWiped` blocks `CanSaveNow`, counts as a battle for the settle time, and is a `DropInBlocker` ("a game over"). Rerun: autosave at f8223 (after the game-over reload), 0 differences after the join.
+
+**More combat state in the snapshot.**
+- `combat` (structural, never corrected): each actor as `name#slot` (two adds of one kind differ by slot), `/dead`, and for enemies `/cast`, `/t<turns to action>l<total locks>:<locks left>[<lock types, ! revealed>]`; every actor's gameplay modifiers (statuses and buffs, sorted); `turn=<current turn's main actor> round=<round>`.
+- `hp`: every actor's HP. `combo`: the party's combo points. `stats` (party HP/MP) as before.
+- `spawn` (above), and `test` (only set by `--sosonline-hpdiverge`).
+- HP, MP and combo points are corrected in place on the guest, like positions: the snapshot carries them as numbers, and the guest applies host minus its own value at the snapshot frame to the live value. Only when every structural component agrees, all or nothing, and never across 0 (a death is structural). Logged as `[sync] frame 1620: corrected hp:VALERE 48->49`. Tested with `--sosonline-hpnudge=1600` on the guest mid-battle: corrected at the next snapshot, 0 mismatches, 46 of 46 later snapshots identical.
+- Cost: `battle-turns.sh` on the Bosslug fight, 167 snapshots per PC: 3.11 ms average, 18.5 ms worst (v0.1.45 on the same test: 3.06 ms, 18.4 ms).
+- Because HP alone is now corrected, `--sosonline-hpdiverge` also marks the PC as diverged (the `test` component) so the re-sync tests still re-sync. It fires once per frame per process (a replay passes it without effect) unless `--sosonline-hpdivergeagain` is given.
+
+**Re-sync by replay (Stage 3), mid-battle included.** A guest that diverged used to wait for a saveable moment, so to the end of a battle. Now the host's `RequeueResynced` sends it through the Stage 3 catch-up when the area log is valid: the guest loads the area entry save, replays the log uncapped behind the catch-up screen ("Rejoining *host*'s game", "The others keep playing while you rejoin."), and merges ("You're back in sync."). Falls back to the old way (wait, then reload in place) when:
+- there's no valid area log (logged with its reason);
+- the replay diverges from a host snapshot (`CatchUpFailed`): the guest goes back to the waiting screen (`Session.RejoinFallBack`, no return to solo) and the host sets `ForceStage2`;
+- it takes over 120 s (`DropInAbort`, same fallback);
+- it diverges again at the same point: the same area entry and a divergence frame within 120 frames of the one the last replay re-sync was for (`Peer.ReplayL`, `ReplayDivergedAt`; the guest now sends its divergence frame with `ResyncRequest`).
+`ResyncLimit`/`ResyncHold` apply: a held peer doesn't start a catch-up before `HoldUntil`.
+
+Two things the catch-up needed for this:
+- **Observer mode** (`LockstepEngine.Observer`). A re-syncing guest's own slot was in the session at the area entry. Its catch-up run would have captured its own devices for that slot over the logged input, and stopped itself on its own logged leave frame. While catching up, the local slot's input comes only from the log and its leave doesn't stop the run; cleared on the merge message.
+- **Physics phase at L.** `AlignPhysicsPhase` runs on frame L−1, before a catch-up joiner's run starts, so a joiner entered L with its own phase (0.013 instead of 0.005), stepped physics on other frames, and a replayed battle drifted (a character 5.4 m off at f840; replay failed). Now the joiner aligns on its last held frame before L (`CatchUpState.Aligned`). This affected every Stage 3 join whose replay crosses a battle.
+
+Results (`resync.sh`, `DIVERGE=1600`, bot battle from f1530 to f7200, lag 20 ms + jitter 25 ms):
+- Diverged at f1654, left at f1662, replayed 1,336 frames from f333 in 3.5 s, merged at f1882, in the battle (P2 playing Zale to its end). After the merge: 241 snapshots compared, 0 differ.
+- With the divergence reproducing in the replay (`--sosonline-hpdivergeagain`): the replay diverged at f1650, the guest went back to the waiting screen, and the host reloaded it in place after the battle (join f8349, autosave f8223). 34 snapshots after, 0 differ.
+- Gap: right after the area entry a replaying joiner once saw the Bosslug NPC active at f390 when the host didn't (one snapshot, `npcs`). It never repeated in the next snapshot, so it didn't fail a replay, but two in a row would.
+
+**Also seen, not changed.** The session clock's `time` can differ by about 1e-14 between PCs (`45.42000099129975` vs `45.420000991299744` at f1417): `GameClock` adds a fixed offset to each PC's own accumulated time, whose rounding depends on its magnitude. No split traced to it yet. If one is, track the session time as base + the sum of each frame's float delta, which is identical on every PC.
 
 ## Tools added
 
@@ -376,6 +417,11 @@ Now `Session.ReturnToSolo`, from `AfterLockstep` (not while a guest re-syncs, wh
 | `--sosonline-campat=F`, `--sosonline-campstart=F`, `--sosonline-campstop=F` | Campfire interaction; camping past the story unlock (§12) |
 | `--sosonline-fakeupdate=V`, `--sosonline-name=TEXT` | Restart-to-update UI; hostile player names (§12) |
 | `[coop]` log lines | Who controls which character with which devices, on change (§12) |
+| `[spawn]` log lines | Every enemy added to, summoned into or removed from a battle, with the frame (§13) |
+| `[combat] … BreakLocks(Type): locks N -> M [...]` | Every spell lock hit, with the lock list before it (§13) |
+| `--sosonline-hpnudge=F` | Lower HP by 1 on this PC only, without marking it diverged: the guest corrects it in place (§13) |
+| `--sosonline-hpdivergeagain` | `--sosonline-hpdiverge` fires every time the frame is reached, replays included (§13) |
+| `--sosonline-nolockfix`, `--sosonline-noresync` | Spell lock rolls left to each PC; a guest that reports differences without re-syncing (§13) |
 
 **Run hygiene:**
 - Run `tests/display-prefs.sh save` before a test session and `restore` after.

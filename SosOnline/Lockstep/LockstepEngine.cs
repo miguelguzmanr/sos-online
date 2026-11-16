@@ -67,6 +67,13 @@ internal sealed class LockstepEngine
     /// <summary>The frame this run started on (0, or the join frame on a PC that dropped in).</summary>
     public int StartFrame { get; private set; }
 
+    /// <summary>
+    /// Stage 3 joiner that is still catching up: its own slot's input comes from the host's log (a guest that
+    /// re-syncs by replay was in the session at the area entry), never from this PC's devices, and its own slot
+    /// leaving in the log doesn't stop this run. Cleared on the merge frame message.
+    /// </summary>
+    public bool Observer;
+
     /// <summary>Slot <paramref name="slot"/> stops sending input from <paramref name="frame"/> on (same on every peer).</summary>
     public void SetLeaveFrame(int slot, int frame)
     {
@@ -179,6 +186,7 @@ internal sealed class LockstepEngine
         Occupied = (bool[])occupied.Clone();
         Delay = Math.Max(1, delay);
         Frame = StartFrame = startFrame;
+        Observer = false;
         RngFrameOffset = 0;
         _endFrame = int.MaxValue;
         _onEnd = null;
@@ -298,7 +306,7 @@ internal sealed class LockstepEngine
     {
         if (!Running) return;
 
-        if (Frame >= _leaveFrame[LocalSlot]) { Stop("left the session"); LeftSession?.Invoke(); return; }
+        if (!Observer && Frame >= _leaveFrame[LocalSlot]) { Stop("left the session"); LeftSession?.Invoke(); return; }
 
         if (Frame >= _endFrame)
         {
@@ -329,7 +337,7 @@ internal sealed class LockstepEngine
         var ch = Slots(target);
         // A slot's first Delay frames are empty input on every PC (AddSlot); a Stage 3 joiner that is still catching
         // up isn't in the session at all, and its own input must not drive its copy of the game either.
-        bool localIn = InSessionAt(LocalSlot, target) && target >= _joinFrame[LocalSlot] + Delay;
+        bool localIn = !Observer && InSessionAt(LocalSlot, target) && target >= _joinFrame[LocalSlot] + Delay;
         if (localIn) ch[LocalSlot] = local;
         if (system != null) ch[InputOverride.SystemChannel] = system;
         if (localIn || system != null) SendInput?.Invoke(target, LocalSlot, local, system);

@@ -323,9 +323,34 @@ internal static class GameBridge
     }
 
     /// <summary>Something that a drop-in reload must not interrupt: a level load, a battle or a level-up. Null if none.</summary>
-    public static string DropInBlocker => LoadingLevel ? "a level load" : InBattle ? "a battle" : InLevelUp ? "a level-up" : null;
+    public static string DropInBlocker => LoadingLevel ? "a level load" : InBattle ? "a battle" : InLevelUp ? "a level-up" : PartyWiped ? "a game over" : null;
 
-    /// <summary>In free gameplay where the game itself would allow saving (no battle, cutscene or loading).</summary>
+    /// <summary>
+    /// Every current party member is at 0 HP: a lost battle, before the game's own game-over reload. The game still
+    /// says it can save then; a drop-in autosave taken there (f7586, 2026-11-16) gave the joiner a party at 0 HP while
+    /// the game-over reload had restored the host's, and the joiner split right after joining.
+    /// </summary>
+    public static bool PartyWiped
+    {
+        get
+        {
+            try
+            {
+                var ids = Party?.CurrentParty;
+                var stats = Stats;
+                if (ids == null || stats == null || ids.Count == 0) return false;
+                for (int i = 0; i < ids.Count; i++)
+                {
+                    var d = stats.GetCharacterData(ids[i]);
+                    if (d == null || d.currentHP > 0) return false;
+                }
+                return true;
+            }
+            catch { return false; }
+        }
+    }
+
+    /// <summary>In free gameplay where the game itself would allow saving (no battle, cutscene, loading or game over).</summary>
     public static bool CanSaveNow
     {
         get
@@ -335,7 +360,7 @@ internal static class GameBridge
                 if (LoadingLevel || Party?.Leader == null) return false;
                 var combat = SafeInstance<CombatManager>();
                 if (combat != null && combat.IsAnEncounterRunning()) return false;
-                if (InLevelUp) return false;
+                if (InLevelUp || PartyWiped) return false;
                 return Saves != null && Saves.CanSave() && !Saves.Saving;
             }
             catch { return false; }

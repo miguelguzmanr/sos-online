@@ -29,7 +29,15 @@ namespace SosOnline;
 ///   --sosonline-ff[=nocam]        spike C: uncapped frame rate, audio muted (and cameras off)
 ///   --sosonline-seed=N            fixed session seed (host)
 ///   --sosonline-stateevery=N      state snapshot interval in frames (default 30)
-///   --sosonline-hpdiverge=F       at lockstep frame F, lower the first party member's HP by 1 on this PC only
+///   --sosonline-hpdiverge=F[,F2]  at lockstep frame F (the first time this PC reaches it; a replay passes it again
+///                                 without effect), lower the first party member's HP by 1 on this PC only, and mark
+///                                 this PC's state as diverged (the "test" snapshot component), which can't be corrected
+///   --sosonline-hpdivergeagain    with --sosonline-hpdiverge: fire every time the frame is reached (a cause that
+///                                 reproduces on this PC, e.g. in a replay)
+///   --sosonline-nolockfix         leave spell lock rolls to each PC (reproduces the Bosslug split of 2026-11-16)
+///   --sosonline-noresync          guest: report differences but never ask to re-sync (to see later ones, e.g. spawns)
+///   --sosonline-hpnudge=F         at lockstep frame F, lower the first party member's HP by 1 on this PC only, without
+///                                 the mark: the guest's state check corrects it in place
 ///   --sosonline-noclock           each PC keeps its own game clock (no session clock, finding 8)
 ///   --sosonline-play=SLOT[a]      guest: first play save SLOT on its own (offline), then join (--sosonline-join);
 ///                                 host: play save SLOT with the lobby open (no --sosonline-start), friends join it there
@@ -362,16 +370,30 @@ internal static class TestHarness
         target.InitiateEncounter(leader);
     }
 
+    /// <summary>
+    /// --sosonline-hpdiverge fired on this PC since its lockstep run started: the snapshot's "test" component says so,
+    /// a difference no correction removes (HP alone is corrected in place since 2026-11-16).
+    /// </summary>
+    public static bool Diverged;
+    private static readonly HashSet<int> _diverged = new();
+
+    private static bool AtList(string flag, int frame)
+    {
+        if (!Args.TryGetValue(flag, out var v)) return false;
+        foreach (var part in v.Split(',')) if (int.TryParse(part, out int f) && f == frame) return true;
+        return false;
+    }
+
     /// <summary>Deliberate divergence for testing the state check: this PC only.</summary>
-    private static void DivergeHp(int frame)
+    private static void DivergeHp(int frame, string flag)
     {
         var ids = GameBridge.Party?.CurrentParty;
-        if (ids == null || ids.Count == 0) { Plugin.Log.LogWarning("[test] hpdiverge: no party"); return; }
+        if (ids == null || ids.Count == 0) { Plugin.Log.LogWarning($"[test] {flag}: no party"); return; }
         var data = GameBridge.Stats?.GetCharacterData(ids[0]);
-        if (data == null) { Plugin.Log.LogWarning("[test] hpdiverge: no character data"); return; }
+        if (data == null) { Plugin.Log.LogWarning($"[test] {flag}: no character data"); return; }
         int hp = data.currentHP;
         data.SetCurrentHP(hp - 1);
-        Plugin.Log.LogInfo($"[test] hpdiverge at {frame}: {ids[0].characterId} HP {hp} -> {data.currentHP}");
+        Plugin.Log.LogInfo($"[test] {flag} at {frame}: {ids[0].characterId} HP {hp} -> {data.currentHP}");
     }
 
     public static void OnSnapshot(StateSnapshot s)
@@ -579,7 +601,8 @@ internal static class TestHarness
         if (At("kill", frame)) { Plugin.Log.LogInfo($"[test] killing process at {frame}"); System.Diagnostics.Process.GetCurrentProcess().Kill(); }
         if (At("endsession", frame) && session.IsHost) { Plugin.Log.LogInfo($"[test] host ends the session at {frame}"); session.EndSessionScheduled("The host ended the co-op session"); }
         if (At("pauseleave", frame)) { Plugin.Log.LogInfo($"[test] synced pause-menu leave of P2 at {frame}"); session.LeaveSlotDeterministic(1); }
-        if (At("hpdiverge", frame)) DivergeHp(frame);
+        if (AtList("hpdiverge", frame) && (Args.ContainsKey("hpdivergeagain") || _diverged.Add(frame))) { DivergeHp(frame, "hpdiverge"); Diverged = true; }
+        if (At("hpnudge", frame)) DivergeHp(frame, "hpnudge");
         if (At("campat", frame)) Camp(frame);
         // Camping itself, past the story unlock the campfire checks (an early save only gets "The campfire feels cozy").
         if (At("campstart", frame)) CampForce(frame, true);

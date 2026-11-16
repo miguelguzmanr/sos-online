@@ -9,6 +9,8 @@ GAME="/w/SteamLibrary/steamapps/common/Sea of Stars"; O="$GAME/BepInEx/SosOnline
 OUT="${1:-$O/sweep}"; mkdir -p "$OUT"; rm -f "$OUT"/*.txt
 SAVES="$LOCALAPPDATA/../LocalLow/Sabotage Studio/Sea of Stars"
 S="$(cygpath -m "$REPO/tests/scripts")"
+# Generated input scripts: --sosonline-script paths can't have spaces, and the game folder's has ("Sea of Stars").
+GEN="$(cygpath -m "$(mktemp -d)")"
 
 clean() {
   taskkill //F //IM SeaOfStars.exe >/dev/null 2>&1; sleep 3
@@ -74,16 +76,16 @@ session end-joining 80 "--sosonline-endsession=120 --sosonline-script=$S/host-wa
 session guest-killed 110 "--sosonline-script=$S/host-walk.txt" "--sosonline-kill=1500"
 
 # Assign Players with both players on one character (screenshot on both PCs at 1740).
-printf '1690 UIAssignMoveHorizontal 10 -1\n' > "$OUT/assign-guest-left.txt"
+printf '1690 UIAssignMoveHorizontal 10 -1\n' > "$GEN/assign-guest-left.txt"
 A="--sosonline-assigntest=1640 --sosonline-shots=1740 --sosonline-quit=1780"
-session assign 95 "$A" "--sosonline-script=$(cygpath -m "$OUT/assign-guest-left.txt") $A"
+session assign 95 "$A" "--sosonline-script=$(cygpath -m "$GEN/assign-guest-left.txt") $A"
 cp "$O"/shot-27100-001740.png "$OUT/assign-27100.png" 2>/dev/null
 
 # Camping: intro at 1500, the Rest choice at 2400 (a held Confirm picks it), end of camp.
-printf '2470 Interact 4\n2560 UI_Confirm 30\n2680 UI_Confirm 120\n' > "$OUT/camp-host.txt"
-printf '1800 MoveHorizontal 30 1\n' > "$OUT/camp-guest.txt"
+printf '2470 Interact 4\n2560 UI_Confirm 30\n2680 UI_Confirm 120\n' > "$GEN/camp-host.txt"
+printf '1800 MoveHorizontal 30 1\n' > "$GEN/camp-guest.txt"
 C="--sosonline-campstart=1500 --sosonline-campstop=2400 --sosonline-shots=1900,2560,3200 --sosonline-quit=3800"
-session camp 155 "--sosonline-script=$(cygpath -m "$OUT/camp-host.txt") $C" "--sosonline-script=$(cygpath -m "$OUT/camp-guest.txt") $C"
+session camp 155 "--sosonline-script=$(cygpath -m "$GEN/camp-host.txt") $C" "--sosonline-script=$(cygpath -m "$GEN/camp-guest.txt") $C"
 for f in "$O"/shot-2710*-001900.png "$O"/shot-2710*-003200.png; do cp "$f" "$OUT/camp-$(basename "$f")" 2>/dev/null; done
 
 # Title screen menus and the restart popup (hosts a real Steam lobby briefly).

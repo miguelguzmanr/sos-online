@@ -72,6 +72,22 @@ internal static class DeterministicRandom
         (typeof(EncounterController), nameof(EncounterController.OnEnemiesTurn)),
     };
 
+    /// <summary>
+    /// Spell lock types are picked when an enemy starts casting. The Bosslug's locks were Blunt + Sword on the host
+    /// and Moon + Moon on the guest; a Sword hit then broke a lock on one PC only, the boss re-planned into its summon
+    /// there, and the PCs split on the Acid Bug adds (tests/battle-turns.sh, f1379, 2026-11-16).
+    /// --sosonline-nolockfix leaves these alone (to reproduce that split).
+    /// </summary>
+    private static readonly (Type type, string method)[] LockTargets =
+    {
+        (typeof(EnemyCastingData), nameof(EnemyCastingData.CastMove)),
+        (typeof(EnemyCastingData), nameof(EnemyCastingData.SwapNextMove)),
+        (typeof(EnemyCombatActor), nameof(EnemyCombatActor.GetSpecialMoveLocks)),
+        (typeof(AbstractLockCastingCombatMoveParams), nameof(AbstractLockCastingCombatMoveParams.GetSpellLockSettings)),
+        (typeof(MultiLockSettingsCastingCombatMoveParams), nameof(MultiLockSettingsCastingCombatMoveParams.GetSpellLockSettings)),
+        (typeof(Bosslug), nameof(Bosslug.UpdateNextMove)),
+    };
+
     /// <summary>Compiler-generated coroutine steps (found by name prefix: the suffix can change between builds).</summary>
     private static readonly (Type outer, string prefix)[] CoroutineTargets =
     {
@@ -99,7 +115,8 @@ internal static class DeterministicRandom
         var enter = new HarmonyMethod(typeof(DeterministicRandom).GetMethod(nameof(Enter), BindingFlags.Static | BindingFlags.NonPublic));
         var exit = new HarmonyMethod(typeof(DeterministicRandom).GetMethod(nameof(Exit), BindingFlags.Static | BindingFlags.NonPublic));
         int patched = 0;
-        foreach (var (type, name) in Targets)
+        var targets = TestHarness.TryArg("nolockfix", out _) ? Targets : Targets.Concat(LockTargets).ToArray();
+        foreach (var (type, name) in targets)
             foreach (var m in type.GetMethods(BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.DeclaredOnly).Where(m => m.Name == name))
             {
                 // Never detour native code shared with unrelated methods.

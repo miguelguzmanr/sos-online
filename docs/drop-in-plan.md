@@ -109,6 +109,8 @@ How it runs:
 - Joins and leaves since L are logged with their frames and replayed on the joiner, so a second joiner in the same area catches up too.
 - Falls back to Stage 2 when: no valid log (the entry save wasn't allowed, a Stage 2 drop-in since L, more than 54,000 frames since L), the replay diverges from a host snapshot, it takes over 120 s, or a Stage 2 drop-in starts meanwhile.
 - A frame on which a load is released doesn't run before that load has reached its end on this PC (a joiner replaying uncapped would otherwise get there first).
+- The joiner lines up its physics phase on its last held frame before L (the session did it on L−1, before the joiner's run starts). Without it a replay through a battle drifted (findings §13).
+- **Re-sync by replay (2026-11-16):** a guest that diverged rejoins the same way, right away, even mid-battle. Its own slot's input comes from the log while it catches up (`LockstepEngine.Observer`). Falls back to the old wait-and-reload when there's no valid log, the replay diverges, it times out, or it diverges again at the same point of the same area (findings §13).
 
 Measured (three loopback instances, `tests/dropin.sh`):
 

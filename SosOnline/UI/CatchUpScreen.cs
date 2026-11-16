@@ -47,7 +47,7 @@ internal static class CatchUpScreen
         PulseCamera(show && s.CatchUpFastForwarding);
         if (!show) return;
         if (resync) { UpdateResync(s); return; }
-        _footer.text = "The others keep playing while you join.";
+        _footer.text = s.Rejoining ? "The others keep playing while you rejoin." : "The others keep playing while you join.";
 
         var (step, progress, done, left, rate, eta) = s.CatchUpProgress;
         float now = Time.realtimeSinceStartup;
@@ -69,7 +69,8 @@ internal static class CatchUpScreen
         _lastStep = step;
         _nextText = now + 0.2f;
         string host = GameUi.Drawable(s.SlotName[0]);
-        _title.text = string.IsNullOrEmpty(host) ? "Joining the game" : $"Joining {host}'s game";
+        _title.text = s.Rejoining ? $"Rejoining {(string.IsNullOrEmpty(host) ? "the host" : host)}'s game"
+            : string.IsNullOrEmpty(host) ? "Joining the game" : $"Joining {host}'s game";
         _step.text = step + new string('.', 1 + (int)(now * 2) % 3);
         _detail.text = Detail(step, done, left, rate, eta);
     }

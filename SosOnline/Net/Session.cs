@@ -60,6 +60,13 @@ internal sealed class Session
         public bool Resyncing;
         /// <summary>When this guest's recent re-syncs were requested (host clock), for <see cref="ResyncLimit"/>.</summary>
         public readonly List<double> ResyncTimes = new();
+        /// <summary>Lockstep frame the guest reported its latest divergence on.</summary>
+        public int DivergedAt = -1;
+        /// <summary>
+        /// Area entry and divergence frame of this guest's last re-sync by replay (-1: none). Diverging again at the
+        /// same point of the same area would replay into the same cause (something on that PC): reload instead.
+        /// </summary>
+        public int ReplayL = -1, ReplayDivergedAt = -1;
         /// <summary>Host clock: don't drop this guest in again before then (it kept going out of sync).</summary>
         public double HoldUntil;
         /// <summary>Host: this guest's character was checked against the one it played before (since it last began playing).</summary>
@@ -83,6 +90,8 @@ internal sealed class Session
         public PartySpawn Party;
         public List<int> Playing;
         public bool Held, Live, Ff;
+        /// <summary>The physics phase was lined up on the last held frame before L.</summary>
+        public bool Aligned;
         public int LiveChecks;
         public double Since;
         // Replay speed (frames per second), measured every half second.
@@ -179,6 +188,24 @@ internal sealed class Session
     /// until the drop-in, with Esc to leave the session instead. A guest once had to force-quit here (2026-11-15).
     /// </summary>
     public bool ResyncWaiting { get; private set; }
+
+    /// <summary>
+    /// Guest: this catch-up is a re-sync (it left the run out of sync and rejoins by replaying the area log). If the
+    /// replay fails it goes back to <see cref="ResyncWaiting"/>, and drops in by a reload once the game allows saving.
+    /// </summary>
+    public bool Rejoining { get; private set; }
+
+    /// <summary>Guest: a re-sync by replay failed (<paramref name="why"/>); wait for a reload in place instead, as before.</summary>
+    private void RejoinFallBack(string why)
+    {
+        Plugin.Log.LogWarning($"[resync] rejoining by replay failed ({why}); waiting to rejoin with a reload");
+        Rejoining = false;
+        _resyncing = true; // keeps this PC's game as it is for the reload (no return to solo)
+        StopLockstep(why);
+        WaitingForResync = true;
+        ResyncWaiting = true;
+        Status = "Waiting for the host's save to rejoin…";
+    }
 
     // Drop-in (host): autosave on an agreed frame, send that save to the joiners, then everyone, joiners included,
     // reloads it in place on another agreed frame, where the party stood.
@@ -819,9 +846,11 @@ internal sealed class Session
             case Msg.ResyncRequest:
             {
                 string reason = r.ReadString();
+                int divergedAt = r.ReadInt32();
                 if (peer == null || peer.Pending || peer.Resyncing || Phase != Phase.Running) return;
-                Plugin.Log.LogWarning($"[resync] {peer.Name}: diverged ({reason}); dropping in again with a reload");
+                Plugin.Log.LogWarning($"[resync] {peer.Name}: diverged at f{divergedAt} ({reason}); dropping in again");
                 peer.Resyncing = true;
+                peer.DivergedAt = divergedAt;
                 double now = Now;
                 peer.ResyncTimes.RemoveAll(t => now - t > ResyncWindow);
                 peer.ResyncTimes.Add(now);
@@ -942,21 +971,24 @@ internal sealed class Session
                 Engine.Schedule(at, () => GameBridge.RegisterSlotPlayers(new[] { slot }));
                 if (slot == LocalSlot && _catchUp != null)
                 {
-                    Plugin.Log.LogInfo($"[catchup] merging at f{at} (replayed {_catchUp.Total} frames in {Now - _catchUp.Since:F1} s)");
+                    Plugin.Log.LogInfo($"[catchup] merging at f{at} (replayed {_catchUp.Total} frames in {Now - _catchUp.Since:F1} s){(Rejoining ? "; re-synced" : "")}");
                     EndCatchUpFastForward();
                     _catchUp = null;
+                    Engine.Observer = false;
                     _autoJoin = true;
                     _autoJoinFrom = at + 1;
                     _nextJoinTry = 0;
                     _joinTries = 0;
                     Status = "Playing co-op.";
-                    Toast.Show("You're in! Joining the party…");
+                    Toast.Show(Rejoining ? "You're back in sync." : "You're in! Joining the party…");
+                    Rejoining = false;
                 }
                 break;
             }
             case Msg.DropInAbort:
                 if (Phase != Phase.Running) break;
                 Plugin.Log.LogInfo($"[dropin] postponed by the host at f{Engine.AppliedFrame}");
+                if (Rejoining) { RejoinFallBack("joining was postponed"); break; }
                 StopLockstep("joining was postponed");
                 WaitingForResync = true;
                 Status = "Joining after the battle or loading ends…";
@@ -1140,6 +1172,8 @@ internal sealed class Session
         Application.runInBackground = true;
 
         Sync.Reset();
+        SpawnTrace.Reset();
+        TestHarness.Diverged = false; // this run's state comes from the host's (a save, or a replay of its inputs)
         ResetLoadBarrier();
         // An area log from an earlier run counts frames of that run.
         if (IsHost) _area.Clear("a new run started");
@@ -1345,12 +1379,13 @@ internal sealed class Session
             var (w, ms) = Protocol.Begin(Msg.CatchUpFailed);
             w.Write(Sync.LastDesyncReason ?? "");
             Send(HostId, ms, true);
+            if (Rejoining) { RejoinFallBack("out of sync while joining"); return; }
             StopLockstep("out of sync while joining");
             WaitingForResync = true;
             Status = "Couldn't catch up. Reloading to join…";
             return;
         }
-        if (Sync.Desynced && _desyncNotifiedFrame < 0)
+        if (Sync.Desynced && _desyncNotifiedFrame < 0 && !(TestHarness.TryArg("noresync", out _) && !IsHost))
         {
             _desyncNotifiedFrame = frame;
             if (!IsHost && !_resyncing)
@@ -1360,6 +1395,7 @@ internal sealed class Session
                 Plugin.Log.LogWarning($"[resync] f{frame} this PC diverged ({Sync.LastDesyncReason}); asking the host to re-sync");
                 var (w, ms) = Protocol.Begin(Msg.ResyncRequest);
                 w.Write(Sync.LastDesyncReason ?? "");
+                w.Write(frame);
                 Send(HostId, ms, true);
                 Status = "Out of sync. Reloading to rejoin…";
                 Toast.Show("Your game got out of sync. Re-syncing…");
@@ -1494,6 +1530,7 @@ internal sealed class Session
             _releaseFrames.Remove(frame);
             Plugin.Log.LogInfo($"[barrier] load {seq} released at f{frame} (held {frame - _heldSince} frames)");
             GameClock.SetBase(timeBase, frame + Engine.RngFrameOffset);
+            SpawnTrace.Reset();
             LoadBarrier.Release();
             // Every PC autosaves at the end of this frame: a later joiner can catch up from here (Stage 3).
             _entryFrame = frame;
@@ -1612,11 +1649,23 @@ internal sealed class Session
         peer.LeavingAt = -1;
         peer.Pending = true;
         peer.Ready = false;
-        peer.ForceStage2 = true;
         peer.CatchUp = CatchUpStep.None;
         peer.LastInputFrame = -1;
-        Plugin.Log.LogInfo($"[resync] {peer.Name} left the run at f{Engine.AppliedFrame}; queued to drop in again");
+        // Rejoin by replaying the area log (Stage 3) when there is one: right away, even mid-battle. Otherwise, or if
+        // the last replay re-sync of this area diverged at the same point again, reload in place (Stage 2) at the
+        // next moment the game allows saving.
+        bool again = peer.ReplayL == _area.L && peer.ReplayDivergedAt >= 0 && Math.Abs(peer.DivergedAt - peer.ReplayDivergedAt) <= SamePointFrames;
+        bool replay = CatchUpEnabled && _area.Valid && !again;
+        peer.ForceStage2 = !replay;
+        if (replay) { peer.ReplayL = _area.L; peer.ReplayDivergedAt = peer.DivergedAt; }
+        string how = replay ? $"by replay from f{_area.L}"
+            : again ? $"with a reload (diverged at f{peer.DivergedAt} again, last time at f{peer.ReplayDivergedAt})"
+            : $"with a reload ({(CatchUpEnabled ? _area.InvalidReason : "replay off")})";
+        Plugin.Log.LogInfo($"[resync] {peer.Name} left the run at f{Engine.AppliedFrame}; rejoins {how}");
     }
+
+    /// <summary>Two divergences this close (frames) in one area count as the same point (snapshots are 30 frames apart).</summary>
+    private const int SamePointFrames = 120;
 
     // ------------------------------------------------------------------ Stage 1: characters
 
@@ -1837,7 +1886,7 @@ internal sealed class Session
         if (!IsHost) return;
         if (Phase != Phase.Running) { _dropIn = DropInStep.None; _joiners.Clear(); _saveableFrames = 0; _lastBattleFrame = int.MinValue / 2; return; }
         _joiners.RemoveAll(id => !_peers.ContainsKey(id));
-        if (GameBridge.InBattle || GameBridge.InLevelUp) _lastBattleFrame = Engine.AppliedFrame;
+        if (GameBridge.InBattle || GameBridge.InLevelUp || GameBridge.PartyWiped) _lastBattleFrame = Engine.AppliedFrame;
         switch (_dropIn)
         {
             case DropInStep.None:
@@ -2128,6 +2177,15 @@ internal sealed class Session
     private bool HoldFrame()
     {
         if (_catchUp != null && !_catchUp.Held) return true;
+        if (_catchUp != null && !_catchUp.Aligned)
+        {
+            // The session lined up the physics phase on frame L-1, which this run starts after: do it on this last
+            // held frame, so frame L runs with the same phase. Without it the replayed battle drifted (2026-11-16:
+            // phase 0.013 instead of 0.005, a character 5 m off at f840, the re-sync by replay failed).
+            _catchUp.Aligned = true;
+            GameClock.AlignPhysicsPhase();
+            return true;
+        }
         return _releaseFrames.TryGetValue(Engine.Frame, out int seq) && _heldSeq != seq && GameBridge.LoadingLevel;
     }
 
@@ -2145,7 +2203,7 @@ internal sealed class Session
             switch (peer.CatchUp)
             {
                 case CatchUpStep.None:
-                    if (!WantsCatchUp(peer) || _dropIn != DropInStep.None || _joiners.Contains(peer.Id)) break;
+                    if (!WantsCatchUp(peer) || _dropIn != DropInStep.None || _joiners.Contains(peer.Id) || now < peer.HoldUntil) break;
                     peer.CatchUp = CatchUpStep.Files;
                     peer.CatchUpL = _area.L;
                     peer.CatchUpSince = now;
@@ -2291,9 +2349,13 @@ internal sealed class Session
         var roster = AreaLog.ReadRoster(r);
         if (Phase == Phase.Running) return;
         _awaitingMirrorReload = false;
-        Plugin.Log.LogInfo($"[catchup] start at f{L} (load {seq}, clock {clockBase:R}), {live - L} frames behind; save slot {saveSlot}, playing {string.Join(",", playing.Select(s => $"P{s + 1}"))}, party {party}");
+        bool rejoin = ResyncWaiting || _resyncing;
+        Plugin.Log.LogInfo($"[catchup] start at f{L} (load {seq}, clock {clockBase:R}), {live - L} frames behind; save slot {saveSlot}, playing {string.Join(",", playing.Select(s => $"P{s + 1}"))}, party {party}{(rejoin ? "; rejoining after a divergence" : "")}");
 
         BeginLockstep(seed, delay, occupied, L, playerIndex, double.NaN, () => { });
+        Rejoining = rejoin;
+        // Its own slot may have been in the session since before L (a re-sync): that slot's input is the logged one.
+        Engine.Observer = true;
         _autoJoin = false; // not in the session until the merge
         // Joins and leaves since L, on their frames, as the session had them (before any logged input arrives).
         foreach (var (frame, slot, join) in roster)
@@ -2315,12 +2377,13 @@ internal sealed class Session
         // The save's load is load <seq> of the session's count; it ends on frame L, as it did for everyone.
         _loadSeq = seq - 1;
         ScheduleLoadRelease(seq, L, clockBase);
-        Status = "Catching up with the party…";
+        Status = Rejoining ? "Rejoining the party…" : "Catching up with the party…";
         if (!GameBridge.ReloadInPlace(saveSlot, true, party.Leader, party.Angle))
         {
             var (w, ms) = Protocol.Begin(Msg.CatchUpFailed);
             w.Write("could not load the area entry save");
             Send(HostId, ms, true);
+            if (Rejoining) { RejoinFallBack("couldn't catch up"); return; }
             StopLockstep("couldn't catch up");
             WaitingForResync = true;
         }
@@ -2442,6 +2505,7 @@ internal sealed class Session
         _autoJoin = false;
         WaitingForResync = false;
         ResyncWaiting = false;
+        Rejoining = false;
         LocalSlot = 0;
         Array.Clear(SlotPeer);
         Array.Clear(SlotName);

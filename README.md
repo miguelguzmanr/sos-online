@@ -201,7 +201,7 @@ pwsh -File tools\publish.ps1 -GameDir "W:\SteamLibrary\steamapps\common\Sea of S
 - **Leaving:** pause → **Leave co-op**. Your character goes back to the party AI and the others keep playing; your own game is yours again (your pad and keyboard drive the leader). When the last friend leaves, the host simply keeps playing; the lobby stays open.
 - **Ending:** the host's pause → **End co-op**. Everyone keeps playing on their own; the lobby closes and **Open to friends** turns off.
 - **Camping** works as in local co-op (tested on loopback: intro, camp, Rest and the end of camp on the same frames on both PCs).
-- If a friend's game gets out of sync, it re-syncs by itself with a short reload on their PC.
+- If a friend's game gets out of sync, it fixes itself: small differences (HP, MP, combo points, positions) are corrected in place; otherwise their PC rejoins by replaying the area behind a loading screen (a few seconds, even mid-battle), or, if that can't work, with a short reload once the game allows saving. Nobody else waits.
 
 Use a gamepad or keyboard; the mouse is not synchronized. Saves made during co-op are written by the host as usual. On guests they go to a separate session folder, so the guests' own saves are never touched and the host keeps the shared progress. Options stay each PC's own.
 
@@ -250,7 +250,7 @@ If the friend runs a different build than the host, the host gets a message when
 | `tests/menu-status.sh` | Pause screen and menu banner while a third player catches up. |
 | `tests/battle-turns.sh` | A battle where both players take turns over a simulated lagged link (`LAG`, `JITTER`, `SPIKES`); prints both PCs' turn decisions and the first differing snapshot. Run it 3–4 times: battle splits are intermittent. |
 | `tests/save-sync.sh` | A manual save (`SAVER=host` or `guest`) over a lagged link; both PCs must open and close the question on the same frames. |
-| `tests/resync.sh` | A forced divergence (`DIVERGE`): the guest re-syncs by a reload; compares it with the host afterwards. |
+| `tests/resync.sh` | A forced divergence (`DIVERGE`): the guest rejoins by replay (or a reload); compares it with the host afterwards. `EXTRA=--sosonline-hpdivergeagain` makes the replay diverge too (the reload fallback). |
 | `tests/sweep.sh` | Every test above that checks the session, one after another (about 50 minutes), plus leaving, ending, Assign Players, camping and the title-screen menus: the check before a release. Results and logs per test in `BepInEx/SosOnline/sweep`. |
 | `tests/spike-b.sh` | Records a run, replays it from the area entry autosave, compares every frame. |
 
@@ -303,6 +303,10 @@ The command-line flags are documented in `SosOnline/TestHarness.cs`.
   - Identical screenshots on both instances.
 - Pause menu opened by the host appears on the guest (synced menus).
 
+### Verified (2026-11-16, branch milestone/battle-sync, same save)
+
+The Bosslug fight runs in step: 11 runs in a row of the battle-turns test with 0 differences (the spell lock types its casts roll were the cause). A guest that gets out of sync mid-battle rejoins by replay in about 3.5 s; when the replay can't work, it rejoins with a reload after the battle. In a second full sweep (title-screen menus and the restart popup included) every test passes with 0 differences except the re-sync test: after rejoining by replay, the guest split again in the Bosslug fight (the two summoned Acid Bugs took their slots in the opposite order) and waited for the battle to end to reload (see *Known limitations*). One earlier run of that test stayed identical to the end.
+
 ### Verified (2026-11-16, build 3fd5a2c, the user's newest save in the Forbidden Cavern)
 
 Every loopback test in one sweep: saves (P1 and P2 saving), the live battle, drop-ins (catch-up, reload in place, a level load on the join frame, from the joiner's own game), two joiners, menu banners, Stage 1, leaving, ending (with a guest playing and with one still joining), a guest's game killed, Assign Players, the title-screen menus and the restart popup: all pass with 0 differences. Camping (intro, camp, Rest, end) runs on the same frames on both PCs. The battle-turns test splits in the Bosslug fight (see *Known limitations*); the re-sync test recovers but splits a second time after its first drop-in. Both also happen on v0.1.45.
@@ -322,8 +326,8 @@ Every loopback test in one sweep: saves (P1 and P2 saving), the live battle, dro
 - Options are not available from the pause screen in battles and cutscenes for guests (the shared pause there would put the PCs' menus out of step).
 - If the host leaves, the session ends; the host's save is the shared one.
 - On Assign Players, every online player shows the keyboard icon (the stand-in device used online), with their name and colour.
-- The Bosslug fight (Forbidden Cavern) can put a guest out of sync: the adds it summons can differ between PCs. The guest re-syncs by itself. Seen in 4 of 6 loopback runs over a lagged link, and in v0.1.45 too.
-- After a desync, the guest that diverged re-syncs with a reload in place on its PC; a desync of the host's own game can't be detected (the host is the reference).
+- A guest that rejoined by replay can split again in the Bosslug fight: the summoned Acid Bugs can take their slots in the opposite order on its PC (1 of 2 loopback runs; cause not found yet). It then waits on the waiting screen until the battle ends and reloads.
+- After a desync, the guest that diverged rejoins by replay (or a reload in place) on its PC; a desync of the host's own game can't be detected (the host is the reference).
 - If one PC can't keep 60 fps, everyone slows down with it (lockstep).
 - Mod and game versions must match on every PC (checked when joining).
 

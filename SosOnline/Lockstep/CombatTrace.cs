@@ -43,6 +43,9 @@ internal static class CombatTrace
         // Views open asynchronously; when one is ready can differ between PCs.
         Patch(harmony, typeof(UIManager), nameof(UIManager.LoadView), nameof(ViewRequested));
         Patch(harmony, typeof(UIManager), nameof(UIManager.EndScreenPreloading), nameof(ViewReady));
+        // Spell locks: which hit broke how many (the Bosslug split, 2026-11-16: one PC broke a lock the other didn't).
+        PatchLocks(harmony, nameof(EnemyCastingData.BreakLocks));
+        PatchLocks(harmony, nameof(EnemyCastingData.BreakAllLocksOfType));
         foreach (var name in new[] { nameof(EnemyCombatActor.EnterChargeState), nameof(EnemyCombatActor.EndChargeState), nameof(EnemyCombatActor.OnDoCastingCombatMove), nameof(EnemyCombatActor.BreakSpellLocks), nameof(EnemyCombatActor.OverrideNextCastingTime) })
             Patch(harmony, typeof(EnemyCombatActor), name, nameof(EnemyEvent));
         // Each modifier pass: log the ones that change the damage.
@@ -196,6 +199,74 @@ internal static class CombatTrace
     private static void LastUsed(Rewired.Controller __result) => Probe("InputManager.GetLastUsedController", __result);
     private static void LastActive(Rewired.Controller __result) => Probe("Rewired.GetLastActiveController", __result);
     private static void ActiveChanged(Rewired.Player __0, Rewired.Controller __1) => Probe($"OnActiveControllerChanged(player {__0?.id})", __1);
+
+    private static void PatchLocks(Harmony harmony, string method)
+    {
+        foreach (var m in typeof(EnemyCastingData).GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.DeclaredOnly).Where(m => m.Name == method))
+        {
+            if (NativeCode.IsFolded(m)) { Plugin.Log.LogWarning($"[combat] EnemyCastingData.{method} is folded; not traced"); continue; }
+            try
+            {
+                harmony.Patch(m, prefix: new HarmonyMethod(typeof(CombatTrace).GetMethod(nameof(LocksBefore), BindingFlags.Static | BindingFlags.NonPublic)),
+                    postfix: new HarmonyMethod(typeof(CombatTrace).GetMethod(nameof(LocksAfter), BindingFlags.Static | BindingFlags.NonPublic)));
+            }
+            catch (Exception e) { Plugin.Log.LogWarning($"[combat] EnemyCastingData.{method} not traced: {e.Message}"); }
+        }
+    }
+
+    private static int LockCount(EnemyCastingData d)
+    {
+        try { return d?.spellLocks?.Count ?? -1; } catch { return -1; }
+    }
+
+    /// <summary>Each lock: damage type, revealed (!) or not (?), and its visibility window. Diagnostics.</summary>
+    internal static string LockDesc(EnemyCastingData d, bool window)
+    {
+        try
+        {
+            var locks = d?.spellLocks;
+            if (locks == null) return "";
+            var parts = new System.Collections.Generic.List<string>();
+            for (int i = 0; i < locks.Count; i++)
+            {
+                var l = locks[i];
+                if (l == null) { parts.Add("null"); continue; }
+                string type = "?";
+                try { type = l.damageType != null ? l.damageType.name : "none"; } catch { }
+                parts.Add(type + (l.revealed ? "!" : "?") + (window ? l.visibilityWindow.ToString("R", System.Globalization.CultureInfo.InvariantCulture) : ""));
+            }
+            return string.Join(" ", parts);
+        }
+        catch { return "!"; }
+    }
+
+    private static string _locksBefore;
+
+    private static void LocksBefore(EnemyCastingData __instance, out int __state)
+    {
+        __state = Active ? LockCount(__instance) : -1;
+        _locksBefore = __state >= 0 ? LockDesc(__instance, true) : null;
+    }
+
+    /// <summary>Logged only when a lock actually broke.</summary>
+    private static void LocksAfter(EnemyCastingData __instance, int __state, MethodBase __originalMethod, Il2CppSystem.Collections.Generic.List<EDamageType> __0)
+    {
+        if (!Active || __state <= 0) return; // no locks to break: most hits
+        int now = LockCount(__instance);
+        string types = "?";
+        try
+        {
+            var parts = new System.Collections.Generic.List<string>();
+            if (__0 != null) for (int i = 0; i < __0.Count; i++) parts.Add(__0[i].ToString());
+            types = string.Join("+", parts);
+        }
+        catch { }
+        string who = "?";
+        try { who = Name(__instance.owner); } catch { }
+        // Every hit on an enemy with locks (a few per battle), broken or not: a hit that breaks nothing on one PC and a
+        // lock on the other is the point.
+        Plugin.Log.LogInfo($"[combat] f{Frame} {who} {__originalMethod.Name}({types}): locks {__state} -> {now} [{_locksBefore}]");
+    }
 
     private static void Patch(Harmony harmony, Type type, string method, string postfix)
     {

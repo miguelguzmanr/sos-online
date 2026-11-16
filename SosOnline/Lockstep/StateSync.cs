@@ -24,6 +24,13 @@ internal sealed class StateSnapshot
     public readonly List<(string name, Vector3 pos)> Characters = new();
     /// <summary>Facing of each entry of <see cref="Characters"/> (-1 unknown). Corrected in place like positions, not hashed.</summary>
     public readonly List<int> Angles = new();
+    /// <summary>Enemies that entered or left a battle in this snapshot's window (<see cref="SpawnTrace"/>), so a guest names the spawn that differs.</summary>
+    public List<(int frame, string what)> Spawns = new();
+    /// <summary>
+    /// Plain numbers a guest may correct in place when they differ (HP, MP, combo points): (key, value). Sent with the
+    /// snapshot, like <see cref="Characters"/>.
+    /// </summary>
+    public readonly List<(string key, int value)> Numbers = new();
 
     public static double CaptureMsTotal { get; private set; }
     public static int CaptureCount { get; private set; }
@@ -36,11 +43,17 @@ internal sealed class StateSnapshot
         s.Add("lvl", () => GameBridge.CurrentLevelId);
         s.Add("scenes", () => GameBridge.ActiveSceneName);
         s.Add("party", s.CaptureParty);
-        s.Add("stats", CaptureStats);
+        s.Add("stats", s.CaptureStats);
         s.Add("gold", CaptureCurrency);
         s.Add("inv", CaptureInventory);
-        s.Add("combat", CaptureCombat);
+        s.Add("combat", s.CaptureCombat);
+        s.Add("hp", s.CaptureHp);
+        s.Add("combo", s.CaptureCombo);
         s.Add("npcs", CaptureNpcs);
+        s.Add("spawn", () => $"{SpawnTrace.Count}/{SpawnTrace.Hash:x8}");
+        s.Spawns = SpawnTrace.Window(frame, StateSync.Interval);
+        // Tests: a divergence injected on purpose (--sosonline-hpdiverge) that no in-place correction removes.
+        s.Add("test", () => TestHarness.Diverged ? "diverged" : "");
         // The game's own pause (menus, pause screen, questions). One PC stuck in a menu while the other plays on
         // otherwise only shows as endless position corrections (2026-11-15: a save question left open on the host).
         s.Add("pause", () => (Manager<PauseManager>.instance?.isPaused ?? false) ? "on" : "off");
@@ -86,8 +99,8 @@ internal sealed class StateSnapshot
         return string.Join(" ", parts);
     }
 
-    /// <summary>Current party: HP and MP of each member.</summary>
-    private static string CaptureStats()
+    /// <summary>Current party: HP and MP of each member. Numbers: the guest corrects them in place.</summary>
+    private string CaptureStats()
     {
         var ids = GameBridge.Party?.CurrentParty;
         var stats = GameBridge.Stats;
@@ -99,6 +112,8 @@ internal sealed class StateSnapshot
             var data = stats.GetCharacterData(id);
             if (data == null) continue;
             parts.Add($"{id.characterId}:{data.currentHP}/{data.currentSP}");
+            Numbers.Add(("hp:" + id.characterId, data.currentHP));
+            Numbers.Add(("sp:" + id.characterId, data.currentSP));
         }
         return string.Join(",", parts);
     }
@@ -124,13 +139,68 @@ internal sealed class StateSnapshot
         return $"{kinds}/{total}";
     }
 
-    /// <summary>Whether an encounter runs, and each combat actor's HP.</summary>
-    private static string CaptureCombat()
+    /// <summary>
+    /// The battle's structure: whether an encounter runs, every actor by name and slot (dead or not), whose turn it
+    /// is and the round, each enemy's casting state, turns to its action and spell locks, and every actor's gameplay
+    /// modifiers (statuses and buffs). A difference here can't be patched: the guest re-syncs.
+    /// </summary>
+    private string CaptureCombat()
     {
         var cm = GameBridge.Combat;
         if (cm == null || !cm.IsAnEncounterRunning()) return "off";
-        var actors = cm.CurrentEncounter?.AllActors;
+        var enc = cm.CurrentEncounter;
+        var actors = enc?.AllActors;
         if (actors == null) return "on";
+        var parts = new List<string>();
+        for (int i = 0; i < actors.Count; i++)
+        {
+            var a = actors[i];
+            if (a == null) continue;
+            string extra = "";
+            try { if (a.CombatTarget != null && a.CombatTarget.Dead) extra += "/dead"; } catch { }
+            try
+            {
+                var enemy = a.TryCast<EnemyCombatActor>();
+                if (enemy != null)
+                {
+                    // An enemy charging a spell takes less damage; the PCs once disagreed on it with every HP equal.
+                    if (enemy.IsCasting()) extra += "/cast";
+                    var cd = enemy.castingData;
+                    if (cd != null) extra += $"/t{cd.turnsToAction}l{cd.totalSpellLocks}:{cd.spellLocks?.Count ?? 0}[{CombatTrace.LockDesc(cd, false)}]";
+                }
+            }
+            catch { }
+            try
+            {
+                var mods = a.CombatTarget?.GetGameplayModifiersHandler()?.gameplayModifiers;
+                if (mods != null && mods.Count > 0)
+                {
+                    var names = new List<string>();
+                    for (int m = 0; m < mods.Count; m++) if (mods[m] != null) names.Add(mods[m].GetIl2CppType().Name);
+                    names.Sort(StringComparer.Ordinal);
+                    extra += "/m[" + string.Join("+", names) + "]";
+                }
+            }
+            catch { }
+            parts.Add(ActorId(a) + extra);
+        }
+        string turn = "";
+        try
+        {
+            var ctl = enc.controller;
+            if (ctl != null) turn = $" turn={ActorId(ctl.currentTurnMainActor)} round={ctl.roundElapsed}";
+        }
+        catch { }
+        return "on " + string.Join(",", parts) + turn;
+    }
+
+    /// <summary>Every combat actor's HP. Numbers: the guest corrects enemies' in place when the battle's structure agrees.</summary>
+    private string CaptureHp()
+    {
+        var cm = GameBridge.Combat;
+        if (cm == null || !cm.IsAnEncounterRunning()) return "";
+        var actors = cm.CurrentEncounter?.AllActors;
+        if (actors == null) return "";
         var parts = new List<string>();
         for (int i = 0; i < actors.Count; i++)
         {
@@ -138,12 +208,33 @@ internal sealed class StateSnapshot
             if (a == null) continue;
             int hp = -1;
             try { hp = a.CombatTarget?.GetCurrentHP() ?? -1; } catch { }
-            // An enemy charging a spell takes less damage; the PCs once disagreed on it with every HP equal.
-            string cast = "";
-            try { var enemy = a.TryCast<EnemyCombatActor>(); if (enemy != null && enemy.IsCasting()) cast = "/cast"; } catch { }
-            parts.Add($"{a.gameObject.name}:{hp}{cast}");
+            string id = ActorId(a);
+            parts.Add($"{id}:{hp}");
+            // Party members' HP lives in their character data ("stats"); only enemies are corrected from here.
+            try { if (hp >= 0 && a.TryCast<EnemyCombatActor>() != null) Numbers.Add(("ehp:" + id, hp)); } catch { }
         }
-        return "on " + string.Join(",", parts);
+        return string.Join(",", parts);
+    }
+
+    /// <summary>The party's combo points.</summary>
+    private string CaptureCombo()
+    {
+        var stats = GameBridge.Stats;
+        if (stats == null) return "";
+        int combo = stats.comboPoints;
+        Numbers.Add(("combo", combo));
+        return combo.ToString(CultureInfo.InvariantCulture);
+    }
+
+    /// <summary>Name and slot of a combat actor ("AcidBugEnemy#3"): two adds of one kind share a name.</summary>
+    internal static string ActorId(CombatActor a)
+    {
+        if (a == null) return "none";
+        string name;
+        try { name = a.gameObject.name.Replace("PlayableCharacter_", "").Replace("(Clone)", "").Trim(); } catch { name = "?"; }
+        int slot = -1;
+        try { var sl = a.Slot; if (sl != null) slot = sl.transform.GetSiblingIndex(); } catch { }
+        return $"{name}#{slot}";
     }
 
     /// <summary>Every active NPC or enemy in the level: name and position, sorted.</summary>
@@ -162,6 +253,12 @@ internal sealed class StateSnapshot
     }
 
     public int AngleAt(int i) => i < Angles.Count ? Angles[i] : -1;
+
+    public int? NumberOf(string key)
+    {
+        foreach (var (k, v) in Numbers) if (k == key) return v;
+        return null;
+    }
 
     public string Get(string key)
     {
@@ -189,6 +286,10 @@ internal sealed class StateSnapshot
             w.Write(pos.x); w.Write(pos.y); w.Write(pos.z);
             w.Write((short)AngleAt(i));
         }
+        w.Write((byte)Math.Min(Spawns.Count, 255));
+        for (int i = 0; i < Spawns.Count && i < 255; i++) { w.Write(Spawns[i].frame); w.Write(Spawns[i].what); }
+        w.Write((byte)Math.Min(Numbers.Count, 255));
+        for (int i = 0; i < Numbers.Count && i < 255; i++) { w.Write(Numbers[i].key); w.Write(Numbers[i].value); }
     }
 
     public static StateSnapshot Read(BinaryReader r)
@@ -202,6 +303,8 @@ internal sealed class StateSnapshot
             s.Characters.Add((r.ReadString(), new Vector3(r.ReadSingle(), r.ReadSingle(), r.ReadSingle())));
             s.Angles.Add(r.ReadInt16());
         }
+        for (int m = r.ReadByte(); m > 0; m--) s.Spawns.Add((r.ReadInt32(), r.ReadString()));
+        for (int m = r.ReadByte(); m > 0; m--) s.Numbers.Add((r.ReadString(), r.ReadInt32()));
         return s;
     }
 
@@ -256,6 +359,11 @@ internal sealed class StateSync
     private readonly Dictionary<int, StateSnapshot> _pendingHost = new();
 
     public int Corrections { get; private set; }
+    /// <summary>Snapshots whose HP, MP or combo points were corrected in place.</summary>
+    public int NumberCorrections { get; private set; }
+
+    /// <summary>Components made only of numbers a guest may correct in place (<see cref="StateSnapshot.Numbers"/>).</summary>
+    private static readonly HashSet<string> Correctable = new() { "stats", "hp", "combo" };
     public int Checks { get; private set; }
     public int SkippedLoading { get; private set; }
     public int DesyncStreak { get; private set; }
@@ -266,7 +374,7 @@ internal sealed class StateSync
     {
         _localHistory.Clear();
         _pendingHost.Clear();
-        Corrections = Checks = DesyncStreak = SkippedLoading = 0;
+        Corrections = NumberCorrections = Checks = DesyncStreak = SkippedLoading = 0;
         LastDesyncReason = "";
     }
 
@@ -296,11 +404,29 @@ internal sealed class StateSync
         if (host.Loading || local.Loading) { SkippedLoading++; return; }
         Checks++;
         var reasons = new List<string>();
+        var numeric = new List<string>();
         foreach (var (key, hostHash) in host.Hashes)
         {
             var localHash = local.HashOf(key);
             if (localHash == null) reasons.Add($"{key} missing locally");
-            else if (localHash != hostHash) reasons.Add($"{key} differs (local [{Trim(local.Get(key))}])");
+            else if (localHash == hostHash) continue;
+            else if (Correctable.Contains(key)) numeric.Add(key);
+            else reasons.Add(key == "spawn" ? SpawnDifference(host, local) : $"{key} differs (local [{Trim(local.Get(key))}])");
+        }
+        // The spawn names the cause best: put it first.
+        int si = reasons.FindIndex(x => x.StartsWith("spawn", StringComparison.Ordinal));
+        if (si > 0) { var first = reasons[si]; reasons.RemoveAt(si); reasons.Insert(0, first); }
+        // HP, MP and combo points are corrected in place, like positions, as long as nothing structural differs (same
+        // level, roster, turn, statuses and spawns). Otherwise they are part of the mismatch.
+        if (numeric.Count > 0)
+        {
+            string fixedWhat = reasons.Count == 0 ? CorrectNumbers(host, local) : null;
+            if (fixedWhat != null)
+            {
+                NumberCorrections++;
+                Plugin.Log.LogInfo($"[sync] frame {host.Frame}: corrected {fixedWhat}");
+            }
+            else foreach (var key in numeric) reasons.Add($"{key} differs (local [{Trim(local.Get(key))}])");
         }
         bool sameLevel = host.HashOf("lvl") == local.HashOf("lvl") && host.HashOf("scenes") == local.HashOf("scenes");
 
@@ -365,6 +491,102 @@ internal sealed class StateSync
             Plugin.Log.LogWarning($"[sync] frame {host.Frame} mismatch #{DesyncStreak}: {LastDesyncReason}\n  local: {local}");
         }
         else DesyncStreak = 0;
+    }
+
+    /// <summary>The first enemy spawn or removal in the window that differs between the host and this PC, with its frame.</summary>
+    private static string SpawnDifference(StateSnapshot host, StateSnapshot local)
+    {
+        int start = Net.Session.Instance.Engine.StartFrame;
+        var h = host.Spawns.FindAll(e => e.frame >= start);
+        var l = local.Spawns.FindAll(e => e.frame >= start);
+        for (int i = 0; i < Math.Max(h.Count, l.Count); i++)
+        {
+            var he = i < h.Count ? h[i] : (frame: -1, what: null);
+            var le = i < l.Count ? l[i] : (frame: -1, what: null);
+            if (he.frame == le.frame && he.what == le.what) continue;
+            int f = he.frame < 0 ? le.frame : le.frame < 0 ? he.frame : Math.Min(he.frame, le.frame);
+            return $"spawn differs at f{f}: host [{(he.what == null ? "none" : $"f{he.frame} {he.what}")}], local [{(le.what == null ? "none" : $"f{le.frame} {le.what}")}]";
+        }
+        return $"spawn differs (local [{local.Get("spawn")}], same spawns in this window)";
+    }
+
+    /// <summary>
+    /// Applies the host's numbers as a delta (host minus this PC at the snapshot's frame) to the live values, so
+    /// changes since then are kept. All or nothing: a value missing on either side, or one side at 0 or below and the
+    /// other above (a death is structural), corrects nothing. Returns what was corrected, or null.
+    /// </summary>
+    private static string CorrectNumbers(StateSnapshot host, StateSnapshot local)
+    {
+        var changes = new List<(string key, int delta, int from, int to)>();
+        foreach (var (key, hv) in host.Numbers)
+        {
+            int? lv = local.NumberOf(key);
+            if (lv == null) return null;
+            if (hv == lv.Value) continue;
+            if ((hv <= 0) != (lv.Value <= 0)) return null;
+            changes.Add((key, hv - lv.Value, lv.Value, hv));
+        }
+        foreach (var (key, _) in local.Numbers) if (host.NumberOf(key) == null) return null;
+        if (changes.Count == 0) return null; // the hashes differ but no number does: something else differs
+        // Check every live value first, then write.
+        var writes = new List<(Action<int> set, int value)>();
+        foreach (var (key, delta, _, _) in changes)
+        {
+            var (get, set) = LiveNumber(key);
+            if (get == null) return null;
+            int now = get();
+            int value = now + delta;
+            if ((now <= 0) != (value <= 0)) return null;
+            writes.Add((set, value));
+        }
+        foreach (var (set, value) in writes) set(value);
+        return string.Join(", ", changes.ConvertAll(c => $"{c.key} {c.from}->{c.to}"));
+    }
+
+    /// <summary>Getter and setter of the live value behind a <see cref="StateSnapshot.Numbers"/> key; (null, null) if it's gone.</summary>
+    private static (Func<int> get, Action<int> set) LiveNumber(string key)
+    {
+        try
+        {
+            if (key == "combo")
+            {
+                var stats = GameBridge.Stats;
+                if (stats == null) return (null, null);
+                return (() => stats.comboPoints, v => stats.comboPoints = v);
+            }
+            if (key.StartsWith("hp:", StringComparison.Ordinal) || key.StartsWith("sp:", StringComparison.Ordinal))
+            {
+                string who = key[3..];
+                bool hp = key[0] == 'h';
+                var ids = GameBridge.Party?.CurrentParty;
+                var stats = GameBridge.Stats;
+                if (ids == null || stats == null) return (null, null);
+                for (int i = 0; i < ids.Count; i++)
+                {
+                    if (ids[i].characterId != who) continue;
+                    var data = stats.GetCharacterData(ids[i]);
+                    if (data == null) return (null, null);
+                    return hp ? (() => data.currentHP, v => data.currentHP = v) : (() => data.currentSP, v => data.currentSP = v);
+                }
+                return (null, null);
+            }
+            if (key.StartsWith("ehp:", StringComparison.Ordinal))
+            {
+                string id = key[4..];
+                var actors = GameBridge.Combat?.CurrentEncounter?.AllActors;
+                if (actors == null) return (null, null);
+                for (int i = 0; i < actors.Count; i++)
+                {
+                    var enemy = actors[i]?.TryCast<EnemyCombatActor>();
+                    if (enemy == null || StateSnapshot.ActorId(enemy) != id) continue;
+                    var target = enemy.CombatTarget;
+                    if (target == null) return (null, null);
+                    return (() => target.currentHP, v => { target.currentHP = v; try { target.UpdateHPStatus(); } catch { } });
+                }
+            }
+        }
+        catch { }
+        return (null, null);
     }
 
     private static string Trim(string v) => v == null ? "" : v.Length > 160 ? v[..160] + "…" : v;
