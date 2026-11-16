@@ -309,6 +309,8 @@ New tests reproduce what the Steam sessions showed. Two instances play over a si
 
 Result: 4 consecutive lagged runs with identical turn records and 0 mismatches, and identical turn sequences from run to run.
 
+**Save point in the tests.** A script that walks up to the save point and presses Interact doesn't open it: the leader (Zale, `SunBoy`) isn't close enough to the save book with the crystal in it, at the spot where a session from slot 0 starts. `--sosonline-saveat=F` calls `Savepoint.ShowSaveScreen()` on every PC instead, which skips the book animation (`OnBookAnimEvent`, `WaitAndShowSaveScreen`). A test of the real interaction needs the leader moved into range first.
+
 **Saves: the question closed only on the answering player's PC.** Earlier fixes (all slots mirrored, the UI kept focused) weren't enough. In the test, after Yes, `SaveManager.UpdateDataAsync` started and the write never followed, on either PC. Bisecting with the call probe (`--sosonline-callprobe`) showed that any Harmony patch on `SaveSelectionScreen.ConsumeUIPopupInputs` makes the save complete on every PC, on the same frame. Why is unknown. `Patches.cs` keeps an empty patch there. With it the save completed on both PCs both ways (P1 saving and P2 saving), with 0 mismatches.
 
 **A guest that re-syncs during a battle was stuck.** Its copy of the battle waited for a player whose controller isn't on that PC, and nothing said what was happening. It now shows a full-screen "Re-syncing with <host>" panel until it drops in again, with Esc to leave the session instead (`Session.ResyncWaiting`). Tested: shown at the leave, hidden at the drop-in after the battle, 0 differences after. Esc is not tested (needs a real key).
