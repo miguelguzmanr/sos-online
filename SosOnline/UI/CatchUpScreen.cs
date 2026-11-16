@@ -22,7 +22,7 @@ internal static class CatchUpScreen
     private static TMPro.TextMeshProUGUI _title, _step, _detail, _footer;
     private static RectTransform _fill;
     private static float _nextText;
-    private static bool _shown;
+    private static bool _shown, _wasResync;
     private static float _nextRender;
 
     /// <summary>
@@ -37,12 +37,17 @@ internal static class CatchUpScreen
     public static void Update()
     {
         var s = Session.Instance;
-        bool show = s.CatchingUp && GameUi.Ready;
+        bool resync = s.ResyncWaiting && !s.CatchingUp;
+        bool show = (s.CatchingUp || resync) && GameUi.Ready;
         if (show && _canvas == null) Build();
         if (_canvas != null && _canvas.gameObject.activeSelf != show) _canvas.gameObject.SetActive(show);
+        if ((resync && show) != _wasResync) Plugin.Log.LogInfo($"[resync] waiting screen {(resync && show ? "shown" : "hidden")}");
+        _wasResync = resync && show;
         _shown = show;
         PulseCamera(show && s.CatchUpFastForwarding);
         if (!show) return;
+        if (resync) { UpdateResync(s); return; }
+        _footer.text = "The others keep playing; nobody waits for you.";
 
         var (step, progress, done, left, rate, eta) = s.CatchUpProgress;
         float now = Time.realtimeSinceStartup;
@@ -67,6 +72,39 @@ internal static class CatchUpScreen
         _title.text = string.IsNullOrEmpty(host) ? "Joining the game" : $"Joining {host}'s game";
         _step.text = step + new string('.', 1 + (int)(now * 2) % 3);
         _detail.text = Detail(step, done, left, rate, eta);
+    }
+
+    /// <summary>Waiting to drop in again after a re-sync: what's happening, a moving bar, and Esc to leave instead.</summary>
+    private static void UpdateResync(Session s)
+    {
+        float now = Time.realtimeSinceStartup;
+        float t = Mathf.Repeat(now * 0.6f, 1.25f) - 0.25f;
+        _fill.anchorMin = new Vector2(Mathf.Max(0, t), 0);
+        _fill.anchorMax = new Vector2(Mathf.Min(1, t + 0.25f), 1);
+        if (EscPressed()) { Plugin.Log.LogInfo("[resync] left the session from the waiting screen"); s.Leave(); return; }
+        if (now < _nextText && _lastStep == "resync") return;
+        _lastStep = "resync";
+        _nextText = now + 0.2f;
+        string host = GameUi.Drawable(s.SlotName[0]);
+        if (string.IsNullOrEmpty(host)) host = "the host";
+        _title.text = $"Re-syncing with {host}";
+        _step.text = "Your game got out of step" + new string('.', 1 + (int)(now * 2) % 3);
+        _detail.text = $"You rejoin automatically as soon as {host}'s game allows saving (after battles and cutscenes).";
+        _footer.text = GameUi.Drawable("Esc: leave the session instead.");
+    }
+
+    /// <summary>Esc / Back / Start on any player, read from the devices (no lockstep while waiting).</summary>
+    private static bool EscPressed()
+    {
+        try
+        {
+            if (Input.GetKeyDown(KeyCode.Escape)) return true;
+            if (!Rewired.ReInput.isReady) return false;
+            foreach (var p in Rewired.ReInput.players.AllPlayers.ToList())
+                if (p != null && (p.GetButtonDown("UI_Back") || p.GetButtonDown("UI_Start"))) return true;
+        }
+        catch { }
+        return false;
     }
 
     private static void PulseCamera(bool needed)

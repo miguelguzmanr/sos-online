@@ -292,6 +292,31 @@ Two PCs over Steam (host at 1920×1080, guest at 2560×1440), build `d9d6210`, a
 
 **Not tested in the game yet:** everything in this section. The game folder was in use during the session, so the fixes were only built.
 
+## 11. Battles and saves under real network conditions (2026-11-15, evening)
+
+New tests reproduce what the Steam sessions showed. Two instances play over a simulated internet link: the UDP transport gets `--sosonline-lag`, `--sosonline-jitter` and `--sosonline-spikes`, because loopback hides anything that depends on real time. The bots press on different schedules (`--sosonline-botphase`) and switch characters (`--sosonline-botswitch`).
+
+| Script | What it checks |
+|---|---|
+| `tests/battle-turns.sh` | A battle where both players compete for turns. Prints both PCs' turn decisions side by side and the first difference |
+| `tests/save-sync.sh` | A manual save at a save point (`--sosonline-saveat=F` opens the nearest one on every PC; `--sosonline-saveby=SLOT` hands its controls to that player). Prints both PCs' menu timelines |
+
+**Battles: the PCs disagreed on whose turn it was, on enemy casts, and on damage.** Without lag the battle stayed in sync; with lag it split in about half the runs. Causes, found one after another with the new turn and damage logs:
+- **Random turn picks.** When more than one player could take the next round, the game picks one at random, and an enemy's cast length is rolled too. These rolls now go through `DeterministicRandom` (turn bookkeeping, the turn queue, enemy casting).
+- **Clocks the shared clock didn't cover.** `realtimeSinceStartup` (the real-time waits in the turn logic) and `timeSinceLevelLoad` were each PC's own. So were `fixedTime` and `Time.time` read inside a physics step, about 4 s apart between the PCs. All now follow the session.
+- **Physics phase.** Physics runs every 0.02 s against 1/60 s frames, so which frames get a step depends on the phase. The two PCs' phases were ~0.001 s apart, which made them step physics on different frames about one session in three. Each PC now aligns its phase to the same value on the frame before every load release.
+- **Detection.** Snapshots now include an enemy's casting state. A split there had shown only as a 1-HP difference much later.
+
+Result: 4 consecutive lagged runs with identical turn records and 0 mismatches, and identical turn sequences from run to run.
+
+**Saves: the question closed only on the answering player's PC.** Earlier fixes (all slots mirrored, the UI kept focused) weren't enough. In the test, after Yes, `SaveManager.UpdateDataAsync` started and the write never followed, on either PC. Bisecting with the call probe (`--sosonline-callprobe`) showed that any Harmony patch on `SaveSelectionScreen.ConsumeUIPopupInputs` makes the save complete on every PC, on the same frame. Why is unknown. `Patches.cs` keeps an empty patch there. With it the save completed on both PCs both ways (P1 saving and P2 saving), with 0 mismatches.
+
+**A guest that re-syncs during a battle was stuck.** Its copy of the battle waited for a player whose controller isn't on that PC, and nothing said what was happening. It now shows a full-screen "Re-syncing with <host>" panel until it drops in again, with Esc to leave the session instead (`Session.ResyncWaiting`). Tested: shown at the leave, hidden at the drop-in after the battle, 0 differences after. Esc is not tested (needs a real key).
+
+**Notices** use the game's panel and font, sized to the text, and stay for about reading time (2.5 s + 0.06 s per character, between 3.5 s and 12 s). They are timed on the PC's own clock; the session clock jumps at start, which had dismissed fresh notices at once.
+
+**Not yet tested:** these fixes over Steam with two real PCs.
+
 ## Tools added
 
 | Script / flag | Use |

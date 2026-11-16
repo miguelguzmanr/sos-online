@@ -95,6 +95,7 @@ public sealed class OnlineBehaviour : MonoBehaviour
             Session.Instance.Update();
             InputOverride.KeepUiFocus();
             SosOnline.Update.AutoUpdate.Update();
+            Toast.Update();
             SessionLogs.Update();
             Overlay.Update();
             NativeMenus.Update();

@@ -173,6 +173,13 @@ internal sealed class Session
     /// <summary>Guest only: we were admitted mid-session and wait to drop in.</summary>
     public bool WaitingForResync { get; private set; }
 
+    /// <summary>
+    /// Guest: this PC left the run to re-sync and waits to drop in again. Its own copy of the game is out of step (in a
+    /// battle, nobody can even act: the turn belongs to a player whose controller isn't here), so a screen covers it
+    /// until the drop-in, with Esc to leave the session instead. A guest once had to force-quit here (2026-11-15).
+    /// </summary>
+    public bool ResyncWaiting { get; private set; }
+
     // Drop-in (host): autosave on an agreed frame, send that save to the joiners, then everyone, joiners included,
     // reloads it in place on another agreed frame, where the party stood.
     private enum DropInStep { None, Saving, Sending }
@@ -1129,6 +1136,7 @@ internal sealed class Session
         _joinTries = 0;
         _reloadSpawn = null;
         WaitingForResync = false;
+        ResyncWaiting = false;
         Engine.Start(LocalSlot, IsHost, occupied, delay, seed, startFrame);
         Engine.Hold = HoldFrame;
         if (playerIndex != null)
@@ -1666,6 +1674,7 @@ internal sealed class Session
             // Not leaving: the host puts us back in the queue and we drop in again with its next autosave.
             AfterLockstep();
             WaitingForResync = true;
+            ResyncWaiting = true;
             Status = "Re-syncing: waiting for the host's save…";
             Plugin.Log.LogInfo("[resync] left the run; waiting to drop in again");
             return;
@@ -2329,6 +2338,7 @@ internal sealed class Session
         _readyAnywhere = false;
         _autoJoin = false;
         WaitingForResync = false;
+        ResyncWaiting = false;
         LocalSlot = 0;
         Array.Clear(SlotPeer);
         Array.Clear(SlotName);
