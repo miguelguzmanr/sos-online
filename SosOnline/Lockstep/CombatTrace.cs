@@ -112,6 +112,7 @@ internal static class CombatTrace
 
     public static void OnFrame(int frame)
     {
+        if (Probed.Count > 0 && !Game.GameBridge.InBattle) Probed.Clear(); // each battle logs its first answer
         if (!CastProbe || !Game.GameBridge.InBattle) { _casting.Clear(); return; }
         try
         {
@@ -173,13 +174,14 @@ internal static class CombatTrace
     private static void AfterModifiers(CombatDamage __instance) { if (Active) { try { Plugin.Log.LogInfo($"[combat] f{Frame} final damage {__instance.finalDamage}"); } catch { } } }
     private static void RawDamage(float __result) { if (Active) Plugin.Log.LogInfo($"[combat] f{Frame} raw damage {__result:R}"); }
 
-    private static readonly System.Collections.Generic.HashSet<(int, string)> Probed = new();
+    /// <summary>Last answer per probe. The battle asks every frame, so only changes are logged (it was ~4,000 lines a battle).</summary>
+    private static readonly System.Collections.Generic.Dictionary<string, Rewired.Controller> Probed = new();
 
     private static void Probe(string what, Rewired.Controller result)
     {
         if (!Active || !Game.GameBridge.InBattle) return;
-        if (!Probed.Add((Frame, what))) return;
-        if (Probed.Count > 4000) Probed.Clear();
+        if (Probed.TryGetValue(what, out var last) && (last == null ? result == null : result != null && last.Pointer == result.Pointer)) return;
+        Probed[what] = result;
         string owner = "none";
         try
         {

@@ -67,18 +67,27 @@ internal static class InputManagerPatches
 }
 
 /// <summary>
-/// Manual saves never finished in lockstep: after Yes on "Overwrite this save data?", SaveManager.UpdateDataAsync
-/// started and the write never followed, on every PC but (in real sessions) the one whose player pressed Yes. The
-/// guest then stayed paused in the save menu and re-synced in a loop (2026-11-15).
-/// Found by bisecting in tests/save-sync.sh: with any Harmony patch on SaveSelectionScreen.ConsumeUIPopupInputs
-/// (called every frame while a save-screen popup is up) the save completes on every PC, on the same frame;
-/// without it, it never does. Why is not known (the game's native code can't be read from here). This empty
-/// patch keeps it patched; tests/save-sync.sh checks the save completes on both PCs.
+/// Manual saves never finished in lockstep: after Yes on "Overwrite this save data?", the save stopped on every PC
+/// but (in real sessions) the one whose player pressed Yes. The guest then stayed paused in the save menu and
+/// re-synced in a loop (2026-11-15).
+/// Cause: the game calls this once, on the frame the question is answered, to consume the UI_Back and UI_Confirm
+/// presses so they don't also reach the save screen. It looks them up with InputCategory.GetElementForAction, which
+/// throws a NullReferenceException for a player with no local controller mapped to the action (any player whose
+/// controller is on another PC, and every player in a test run). The native exception unwinds the rest of the
+/// answer and the save never continues. (A first fix was an empty patch: Il2CppInterop's trampoline catches the
+/// exception, so the save went on, but the PC whose player answered still consumed the presses and the others
+/// didn't.) During lockstep the original is skipped on every PC, which is what every passing test did in effect.
+/// tests/save-sync.sh checks the save completes on both PCs.
 /// </summary>
 [HarmonyPatch(typeof(SaveSelectionScreen), nameof(SaveSelectionScreen.ConsumeUIPopupInputs))]
 internal static class SaveCompletesPatch
 {
-    private static void Postfix() { }
+    private static bool Prefix(SaveSelectionScreen __instance)
+    {
+        if (!InputOverride.Active || !NativeCode.Is<SaveSelectionScreen>(__instance)) return true;
+        Plugin.Log.LogInfo($"[menu] f{Session.Instance.Engine.Frame} save question answered; its inputs left unconsumed on every PC");
+        return false;
+    }
 }
 
 /// <summary>
