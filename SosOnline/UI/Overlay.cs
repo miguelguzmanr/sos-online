@@ -116,7 +116,7 @@ internal static class Overlay
             case Phase.AwaitingReady:
                 DrawRoster(s);
                 if (s.IsHost) DrawHostLobby(s);
-                else if (Button("Leave session")) s.Leave();
+                else if (Button("Leave co-op")) s.Leave();
                 break;
             case Phase.Running:
                 DrawRoster(s);
@@ -125,7 +125,7 @@ internal static class Overlay
         }
         _y += 4;
         Label($"Mod {SessionLogs.Build}", _small);
-        if (Button("Open logs folder (to share if something went wrong)")) SessionLogs.OpenFolder();
+        if (Button("Open logs folder")) SessionLogs.OpenFolder();
 
         _y = _area.yMax - Line - 4;
         Label("F8: close   ·   Use a gamepad or keyboard to play; the mouse is not synced.", _small);
@@ -133,7 +133,7 @@ internal static class Overlay
 
     private static void DrawIdle(Session s)
     {
-        if (Button("Host a session")) s.Host();
+        if (Button("Host")) s.Host();
         _y += 6;
         Label("Friends in Sea of Stars:", _label);
         if (_friends.Count == 0) Label("  (none online)", _small);
@@ -166,7 +166,7 @@ internal static class Overlay
 
     private static void DrawHostLobby(Session s)
     {
-        if (!s.UsingUdp && Button("Invite friends (Steam overlay)")) s.InviteFriends();
+        if (!s.UsingUdp && Button("Invite friends")) s.InviteFriends();
 
         var row = new Rect(_area.x + Pad, _y, _area.width - 2 * Pad, Line);
         GUI.Label(new Rect(row.x, row.y + 3, 240, Line), $"Input delay: {(s.ConfiguredDelay == 0 ? "auto" : s.ConfiguredDelay + " frames")}", _small);
@@ -176,11 +176,11 @@ internal static class Overlay
 
         if (s.Phase == Phase.AwaitingReady)
         {
-            Label("Waiting for everyone to load the save data…", _label);
+            Label("Waiting for everyone to load…", _label);
         }
         else if (!GameBridge.AtTitleScreen)
         {
-            Label("Return to the title screen to start the co-op game.", _label);
+            Label("Go to the Title screen to start.", _label);
         }
         else
         {
@@ -190,7 +190,7 @@ internal static class Overlay
             if (_slots.Count == 0) Label("  (no saves found: start a game solo and save first)", _small);
         }
         _y += 6;
-        if (Button("Close session")) s.Leave();
+        if (Button("Stop hosting")) s.Leave();
     }
 
     private static void DrawRunning(Session s)
@@ -199,8 +199,8 @@ internal static class Overlay
         Label($"Frame {e.Frame} · input delay {e.Delay} · worst stall {e.MaxStallMs:F0} ms", _small);
         Label($"Sync checks {s.Sync.Checks} · corrections {s.Sync.Corrections}{(s.Sync.Desynced ? " · DESYNC: " + s.Sync.LastDesyncReason : "")}", _small);
         _y += 6;
-        if (s.IsHost) { if (Button("End co-op (everyone keeps playing solo)")) s.EndSession(); }
-        else if (Button("Leave session")) s.Leave();
+        if (s.IsHost) { if (Button("End co-op")) s.EndSession(); }
+        else if (Button("Leave co-op")) s.Leave();
     }
 
     private static void DrawHud(Session s)

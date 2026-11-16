@@ -47,7 +47,7 @@ internal static class CatchUpScreen
         PulseCamera(show && s.CatchUpFastForwarding);
         if (!show) return;
         if (resync) { UpdateResync(s); return; }
-        _footer.text = "The others keep playing; nobody waits for you.";
+        _footer.text = "The others keep playing while you join.";
 
         var (step, progress, done, left, rate, eta) = s.CatchUpProgress;
         float now = Time.realtimeSinceStartup;
@@ -87,10 +87,10 @@ internal static class CatchUpScreen
         _nextText = now + 0.2f;
         string host = GameUi.Drawable(s.SlotName[0]);
         if (string.IsNullOrEmpty(host)) host = "the host";
-        _title.text = $"Re-syncing with {host}";
-        _step.text = "Your game got out of step" + new string('.', 1 + (int)(now * 2) % 3);
-        _detail.text = $"You rejoin automatically as soon as {host}'s game allows saving (after battles and cutscenes).";
-        _footer.text = GameUi.Drawable("Esc: leave the session instead.");
+        _title.text = $"Rejoining {host}'s game";
+        _step.text = "Your game got out of sync" + new string('.', 1 + (int)(now * 2) % 3);
+        _detail.text = $"You'll rejoin as soon as {host}'s game allows saving.";
+        _footer.text = GameUi.Drawable("Esc: Leave co-op");
     }
 
     /// <summary>Esc / Back / Start on any player, read from the devices (no lockstep while waiting).</summary>
@@ -133,9 +133,9 @@ internal static class CatchUpScreen
 
     private static string Detail(string step, int done, int left, double rate, double eta) => step switch
     {
-        "Loading the area" => "Loading the save from where the party entered this area.",
-        "Joining the party" => "Caught up. You take over a party member in a moment.",
-        _ => $"Replaying what the party did here: {done:N0} of {done + left:N0} frames"
+        "Loading the area" => "Loading the party's save for this area.",
+        "Joining the party" => "Caught up. You'll take control in a moment.",
+        _ => $"Replaying the party's moves: {done:N0} of {done + left:N0}"
              + (rate > 0 ? $", {rate / 60:F0}x speed" : "")
              + (eta >= 0 ? $", about {Mathf.CeilToInt((float)eta)} s left." : "."),
     };
@@ -210,13 +210,13 @@ internal static class CatchUpScreen
         {
             "Loading the area" => "Loading the save from where the party entered this area.",
             "Joining the party" => "Caught up. You take over a party member in a moment.",
-            _ => $"Replaying what the party did in this area · {done:N0} of {done + left:N0} frames"
+            _ => $"Replaying the party's moves · {done:N0} of {done + left:N0}"
                  + (rate > 0 ? $" · {rate / 60:F0}× speed" : "")
                  + (eta >= 0 ? $" · about {Mathf.CeilToInt((float)eta)} s left" : ""),
         };
         GUI.Label(new Rect(x, y, w, 40), detail, _gSmall);
         y += 44;
-        GUI.Label(new Rect(x, y, w, 24), "The others keep playing; nobody waits for you.", _gSmall);
+        GUI.Label(new Rect(x, y, w, 24), "The others keep playing while you join.", _gSmall);
     }
 
     private static string Dots() => new('.', 1 + (int)(Time.realtimeSinceStartup * 2) % 3);

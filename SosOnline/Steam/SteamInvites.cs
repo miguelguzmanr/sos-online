@@ -59,7 +59,7 @@ internal static class SteamInvites
         ulong lobby = _pendingLobby;
         _pendingLobby = 0;
         _confirmed = false;
-        Session.Instance.JoinLobby(lobby, "your friend's session");
+        Session.Instance.JoinLobby(lobby, "your friend's game");
     }
 
     private static bool _asking, _confirmed;
@@ -69,9 +69,9 @@ internal static class SteamInvites
     {
         var s = Session.Instance;
         string mine = s.InSession && s.IsHost && s.Peers.Any()
-            ? "\nThe friends playing with you go back to their own games."
+            ? "\nYour friends will continue playing without you."
             : "";
-        _asking = UI.NativeMenus.Popup($"Join your friend's game?\nYour own game stops here: anything since your last save is lost.{mine}",
+        _asking = UI.NativeMenus.Popup($"Join your friend's game?\nAny progress since your last save will be lost.{mine}",
             "Join", "Not now", i =>
             {
                 _asking = false;

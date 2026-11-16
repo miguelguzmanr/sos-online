@@ -162,10 +162,10 @@ internal static class LocalPause
             case Page.ConfirmLeave:
                 list.Add(new Entry
                 {
-                    Label = s.IsHost ? "End session for everyone" : "Leave session",
+                    Label = s.IsHost ? "End" : "Leave",
                     Action = () =>
                     {
-                        if (s.IsHost) s.EndSessionScheduled("The host ended the co-op session");
+                        if (s.IsHost) s.EndSessionScheduled("the host ended it");
                         else s.RequestLeave();
                         Close(s.IsHost ? "end session" : "leave session");
                     },
@@ -186,10 +186,10 @@ internal static class LocalPause
                 // The game's own pause menu (Assign Players, the game's Options, return to title), shared as before:
                 // the next synced input carries a pause press that this screen lets through.
                 list.Add(new Entry { Label = "Pause for everyone", Action = () => { Close("pause for everyone"); _forwardStart = true; } });
-                list.Add(new Entry { Label = s.IsHost ? "End session" : "Leave session", Action = () => GoTo(Page.ConfirmLeave, 1) });
+                list.Add(new Entry { Label = s.IsHost ? "End co-op" : "Leave co-op", Action = () => GoTo(Page.ConfirmLeave, 1) });
                 // Last, so the cursor positions above stay as they were.
-                if (!s.IsHost) list.Add(new Entry { Label = "Send logs to the host", Action = () => { s.SendLogsToHost(); Close("send logs"); } });
-                else if (s.Peers.Any()) list.Add(new Entry { Label = "Ask friends for their logs", Action = () => { s.AskForLogs(); Close("ask for logs"); } });
+                if (!s.IsHost) list.Add(new Entry { Label = "Send logs to host", Action = () => { s.SendLogsToHost(); Close("send logs"); } });
+                else if (s.Peers.Any()) list.Add(new Entry { Label = "Ask for logs", Action = () => { s.AskForLogs(); Close("ask for logs"); } });
                 break;
         }
         return list;
@@ -287,15 +287,15 @@ internal static class LocalPause
     private static string Title(Session s) => _page switch
     {
         Page.Options => "Options",
-        Page.ConfirmLeave => s.IsHost ? "End the co-op session?" : "Leave the co-op session?",
+        Page.ConfirmLeave => s.IsHost ? "End co-op for everyone?" : "Leave co-op?",
         _ => "Paused",
     };
 
     private static string Hint(Session s) => _page switch
     {
-        Page.Options => "Left and right change a setting. Only this PC changes.",
-        Page.ConfirmLeave => s.IsHost ? "Everyone keeps playing on their own from here." : "Your character goes back to the party AI; the others keep playing.",
-        _ => "Only you are paused. The game keeps running for everyone.",
+        Page.Options => "These settings only change on this PC.",
+        Page.ConfirmLeave => s.IsHost ? "Everyone may continue playing solo." : "The AI takes over your character.",
+        _ => "Only you are paused. The game keeps running.",
     };
 
     private static (RectTransform, UnityEngine.UI.Image, TMPro.TextMeshProUGUI, TMPro.TextMeshProUGUI) Row(int i)

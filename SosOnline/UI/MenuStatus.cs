@@ -139,10 +139,10 @@ internal static class MenuStatus
         if (!Paused && Path.Length == 0) return LocalPauseTip(s);
         if (Slot == s.LocalSlot)
             return ($"{(Paused ? "Paused for everyone" : "Everyone sees this menu")}{(Path.Length > 0 ? $": {Path}" : "")}",
-                "The other players wait until you close it.");
+                "The others wait until you close it.");
         string who = Slot < 0 ? "Someone" : $"P{Slot + 1} {s.SlotName[Slot] ?? ""}".TrimEnd();
         return ($"{who} {(Paused ? "paused the game" : "opened a menu")}{(Path.Length > 0 ? $": {Path}" : "")}",
-            "They have the controls until they close it.");
+            "They're in control until they close it.");
     }
 
     /// <summary>
@@ -158,7 +158,7 @@ internal static class MenuStatus
         string who = string.Join(" and ", slots.Select(i => $"P{i + 1}"));
         string names = string.Join(" and ", slots.Select(i => s.SlotName[i]).Where(n => !string.IsNullOrEmpty(n)));
         return ($"{who} {(slots.Count == 1 ? "is" : "are")} paused",
-            $"{(names.Length > 0 ? names : "They")} {(slots.Count == 1 ? "has" : "have")} the pause screen open. The game keeps running.");
+            $"The game keeps running.");
     }
 
     // ------------------------------------------------------------------ game-styled banner (canvas)

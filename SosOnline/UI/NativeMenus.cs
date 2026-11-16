@@ -483,7 +483,7 @@ internal static class NativeMenus
         if (SosOnline.Update.AutoUpdate.RestartLabel is { } restart)
             yield return (restart, () =>
             {
-                if (s.InSession) Confirm("Restart the game now? This PC leaves the co-op session.", "Restart", SosOnline.Update.AutoUpdate.Restart);
+                if (s.InSession) Confirm("Restart the game now?", "Restart", SosOnline.Update.AutoUpdate.Restart);
                 else SosOnline.Update.AutoUpdate.Restart();
             });
         switch (s.Phase)
@@ -504,13 +504,13 @@ internal static class NativeMenus
                     if (s.Phase == Phase.Lobby) yield return ("Start", () => ShowPage(SavesPage));
                     if (!s.UsingUdp) yield return ("Invite friends", () => s.InviteFriends());
                     yield return ($"Input delay: {(s.ConfiguredDelay == 0 ? "auto" : s.ConfiguredDelay.ToString())}", () => ShowPage(DelayPage));
-                    yield return ("Close session", () => s.Leave());
+                    yield return ("Stop hosting", () => s.Leave());
                 }
-                else yield return ("Leave session", () => s.Leave());
+                else yield return ("Leave co-op", () => s.Leave());
                 break;
         }
-        if (s.InSession && !s.IsHost) yield return ("Send logs to the host", () => s.SendLogsToHost());
-        else if (s.IsHost && s.Peers.Any()) yield return ("Ask friends for their logs", () => s.AskForLogs());
+        if (s.InSession && !s.IsHost) yield return ("Send logs to host", () => s.SendLogsToHost());
+        else if (s.IsHost && s.Peers.Any()) yield return ("Ask for logs", () => s.AskForLogs());
         if (!s.InSession || s.IsHost)
             yield return ($"Open to friends: {(Settings.OpenToFriends ? "on" : "off")}", () => { Settings.OpenToFriends = !Settings.OpenToFriends; ShowPage(MainPage); });
         yield return ("Open logs folder", SessionLogs.OpenFolder);
@@ -547,7 +547,7 @@ internal static class NativeMenus
         foreach (int d in new[] { 0, 3, 5, 8 })
         {
             int delay = d;
-            yield return (delay == 0 ? "Automatic" : $"{delay} frames ({delay * 17} ms)", () => { s.ConfiguredDelay = delay; ShowPage(MainPage); });
+            yield return (delay == 0 ? "Auto" : $"{delay} frames ({delay * 17} ms)", () => { s.ConfiguredDelay = delay; ShowPage(MainPage); });
         }
         yield return ("Back", () => ShowPage(MainPage));
     }
@@ -621,34 +621,34 @@ internal static class NativeMenus
             try { slot = GameBridge.SlotOf(GameBridge.Coop?.GetUIInputsPlayer()); } catch { }
             if (slot > 0)
             {
-                Confirm($"{PlayersLine(s)}\nLeave the co-op session, P{slot + 1}? Your character goes back to the party AI; the others keep playing.",
-                    "Leave session", () => s.LeaveSlotDeterministic(slot));
+                Confirm($"{PlayersLine(s)}\nLeave co-op, P{slot + 1}?",
+                    "Leave", () => s.LeaveSlotDeterministic(slot));
                 return;
             }
             string waiting = s.HasPending ? $"\nJoining: {string.Join(", ", s.PendingNames)} (they drop in as soon as the game allows saving)." : "";
-            Confirm($"{PlayersLine(s)}{waiting}", "End session for everyone",
-                () => s.EndSessionDeterministic("The host ended the co-op session"));
+            Confirm($"{PlayersLine(s)}{waiting}", "End co-op",
+                () => s.EndSessionDeterministic("the host ended it"));
             return;
         }
         if (!s.InSession && SosOnline.Update.AutoUpdate.Downloaded != null)
         {
             // Not synced (no lockstep runs here), so the choice may depend on this PC's download. Friends get the
             // update too, so playing together waits for the restart anyway.
-            Confirm($"Update {SosOnline.Update.AutoUpdate.Current.ToString(3)} -> {SosOnline.Update.AutoUpdate.Downloaded.ToString(3)} is downloaded.\nFriends need the same version to play together.",
-                "Restart to update", SosOnline.Update.AutoUpdate.Restart);
+            Confirm($"Updated from {SosOnline.Update.AutoUpdate.Current.ToString(3)} to {SosOnline.Update.AutoUpdate.Downloaded.ToString(3)}.\nEveryone needs the same version to play together.",
+                "Restart", SosOnline.Update.AutoUpdate.Restart);
             return;
         }
         if (!s.InSession)
         {
-            Confirm("Open your game to friends?\nA Steam lobby stays open while you play, and friends who join drop in right here.",
-                "Open to friends", () => { Settings.OpenToFriends = true; s.Host(); });
+            Confirm("Open the game to friends?\nThey can join at any point if a save is possible.",
+                "Open", () => { Settings.OpenToFriends = true; s.Host(); });
             return;
         }
         if (s.IsHost && !s.UsingUdp)
-            Popup(StatusText(s) + "\nFriends who join drop in right here.", "Invite friends", "Close session",
+            Popup(StatusText(s) + "\nFriends who join drop in right here.", "Invite", "Stop hosting",
                 i => { if (i == 0) s.InviteFriends(); else if (i == 1) { Settings.OpenToFriends = false; s.Leave(); } });
         else
-            Confirm(StatusText(s), s.IsHost ? "Close session" : "Leave session", () => s.Leave());
+            Confirm(StatusText(s), s.IsHost ? "Stop hosting" : "Leave", () => s.Leave());
     }
 
     // ================================================================== text
@@ -660,7 +660,7 @@ internal static class NativeMenus
     {
         if (s.Phase == Phase.Idle)
             return string.IsNullOrEmpty(s.LastError)
-                ? "Online co-op: play together with up to two friends.\nEach player controls a party member, like local co-op."
+                ? "Play with up to two friends online.\nEach player controls a party member, like local co-op."
                 : s.LastError;
         var lines = new List<string> { s.Status, PlayersLine(s) };
         if (s.Peers.Any()) lines.Add($"Ping {s.Peers.Max(p => p.rtt):F0} ms");
