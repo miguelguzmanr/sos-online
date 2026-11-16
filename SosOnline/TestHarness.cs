@@ -415,6 +415,64 @@ internal static class TestHarness
 
     private static bool At(string flag, int frame) => Args.TryGetValue(flag, out var v) && int.TryParse(v, out int f) && f == frame;
 
+    /// <summary>
+    /// --sosonline-campat=F: on frame F (pass it to every instance) the nearest campfire is used as if P1 pressed
+    /// Interact at it, which opens the game's Camp / Cook / Rest choice. Scripted input picks from there.
+    /// </summary>
+    private static void Camp(int frame)
+    {
+        try
+        {
+            var spots = UnityEngine.Object.FindObjectsOfType<CampingSpot>();
+            var leader = GameBridge.Party?.Leader;
+            CampingSpot best = null;
+            float bestD = float.MaxValue;
+            foreach (var spot in spots)
+            {
+                float d = leader == null ? 0 : (spot.transform.position - leader.transform.position).magnitude;
+                if (d < bestD) { bestD = d; best = spot; }
+            }
+            Plugin.Log.LogInfo($"[test] f{frame} camp: {spots.Length} campfire(s) in this area{(best != null ? $", nearest {bestD:F1} m (multiplayer {best.AllowMultiplayer}, inn {best.isInn})" : "")}");
+            best?.OnCampingFireInteraction(GameBridge.PlayerForSlot(0));
+        }
+        catch (Exception e) { Plugin.Log.LogWarning($"[test] camp failed: {e.Message}"); }
+    }
+
+    /// <summary>--sosonline-campstart=F / campstop=F: the game's own start and stop of camping at the nearest campfire.</summary>
+    private static void CampForce(int frame, bool start)
+    {
+        try
+        {
+            var camp = Manager<CampingManager>.instance;
+            if (camp == null) { Plugin.Log.LogWarning("[test] no camping manager"); return; }
+            var leader = GameBridge.Party?.Leader;
+            var spot = UnityEngine.Object.FindObjectsOfType<CampingSpot>()
+                .OrderBy(s => leader == null ? 0 : (s.transform.position - leader.transform.position).sqrMagnitude).FirstOrDefault();
+            // The campfire's own toggle plays the intro (party sits down) or the outro; CampingManager.StartCamping
+            // only sets the camping flag.
+            Plugin.Log.LogInfo($"[test] f{frame} {(start ? "start" : "stop")} camping at {(spot == null ? "no campfire" : spot.name)}");
+            spot?.ToggleCamping();
+        }
+        catch (Exception e) { Plugin.Log.LogWarning($"[test] camping {(start ? "start" : "stop")} failed: {e.Message}"); }
+    }
+
+    private static string _lastCampState;
+
+    /// <summary>The camping state, logged on change, to compare the PCs frame by frame.</summary>
+    private static void CampState(int frame)
+    {
+        string state;
+        try
+        {
+            var camp = Manager<CampingManager>.instance;
+            state = camp == null ? "no camping manager" : $"camping {camp.IsCamping}";
+        }
+        catch (Exception e) { state = "error " + e.Message; }
+        if (state == _lastCampState) return;
+        _lastCampState = state;
+        Plugin.Log.LogInfo($"[test] f{frame} {state}");
+    }
+
     private static bool _wasLoading = true;
     private static string _lastLevel = "";
     private static readonly bool[] _wasPlaying = new bool[InputOverride.SlotCount];
@@ -522,6 +580,20 @@ internal static class TestHarness
         if (At("endsession", frame) && session.IsHost) { Plugin.Log.LogInfo($"[test] host ends the session at {frame}"); session.EndSessionScheduled("The host ended the co-op session"); }
         if (At("pauseleave", frame)) { Plugin.Log.LogInfo($"[test] synced pause-menu leave of P2 at {frame}"); session.LeaveSlotDeterministic(1); }
         if (At("hpdiverge", frame)) DivergeHp(frame);
+        if (At("campat", frame)) Camp(frame);
+        // Camping itself, past the story unlock the campfire checks (an early save only gets "The campfire feels cozy").
+        if (At("campstart", frame)) CampForce(frame, true);
+        if (At("campstop", frame)) CampForce(frame, false);
+        if ((Args.ContainsKey("campstart") || Args.ContainsKey("campat")) && frame % 30 == 0) CampState(frame);
+        if (Args.TryGetValue("pausechoose", out var pc))
+            foreach (var item in pc.Split(',', StringSplitOptions.RemoveEmptyEntries))
+            {
+                // F:Label, "_" for a space (the test launcher splits flags on spaces).
+                int colon = item.IndexOf(':');
+                if (colon <= 0 || !int.TryParse(item[..colon], out int pf) || pf != frame) continue;
+                string label = item[(colon + 1)..].Replace('_', ' ');
+                Plugin.Log.LogInfo($"[test] f{frame} pause screen: choose '{label}' -> {(UI.LocalPause.ChooseForTest(label) ? "done" : "not on the open page")}");
+            }
         if (At("uiprobe", frame)) ProbeUi(frame);
         if (At("assigntest", frame))
         {

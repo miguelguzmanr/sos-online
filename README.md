@@ -58,13 +58,14 @@ It is a BepInEx 6 (IL2CPP) plugin. The game ships Steamworks (`steam_api64.dll`,
 
 | How they leave | What happens |
 |---|---|
-| Pause menu → **Online** → **Leave session** | The menu is driven by synced input, so every PC runs the choice on the same frame. The player's inputs already sent are still used; the slot is empty from frame + delay + 1, on every PC. |
+| Pause screen → **Leave co-op**, or pause menu → **Online** → **Leave** | The game's pause menu is driven by synced input, so every PC runs the choice on the same frame. The player's inputs already sent are still used; the slot is empty from frame + delay + 1, on every PC. |
 | Quitting, or the title-screen **Leave** | The host picks the leave frame: the first frame after the last input it received from them, which it has already forwarded to everyone. It broadcasts that frame. |
 | Crash or lost connection | The host notices at once when Steam reports the connection lost, or after 2 s without input from that player, then does the same as above. |
 
 - On the leave frame, every PC calls the game's own `SinglePlayerPlusPlayer.Leave()`, and their character goes back to the party AI.
 - The leaver keeps playing solo on their copy of the host's save.
-- Only the host ending the session ends it for everyone.
+- Only the host ending co-op ends it for everyone. The host then leaves the Steam lobby 1.5 s after the end frame (guests stop on that frame first) and turns **Open to friends** off, so a friend who was still joining can't start a new session.
+- **Back to solo.** Whenever lockstep stops on a PC (a leave, the end, a lost connection), that PC moves its keyboard and pads to the game's P1, who controls the leader, and makes every other co-op player leave, so the party AI takes their character. If the game refuses a leave (a battle, a cutscene) it retries every second. A guest that is re-syncing is left alone: it drops in again.
 
 **Drop-in.** Lockstep syncs inputs, not world state, so a newcomer can't be streamed into a running game. It rebuilds the game instead, by replay if it can, by a short reload for everyone if not.
 
@@ -90,6 +91,7 @@ It is a BepInEx 6 (IL2CPP) plugin. The game ships Steamworks (`steam_api64.dll`,
   - Players join and confirm with their synced input. Keyboard players work too, through fallbacks from the regular UI actions.
   - The game's device shuffling is ignored during sessions.
   - On submit, each session slot is remapped to the player number its cursor chose, on every PC. Cursor, ready and the game's character assignment already run on synced input.
+  - Every online player stands in with the keyboard icon. Each icon shows the player's name under it and is tinted in their colour (P1 cyan, P2 amber, P3 pink), so a player's keyboard reads as theirs even in another player's column. Two players can pick the same character, as in the game; their icons stack in that column.
 
 **Verified** (loopback, 2–3 instances):
 
@@ -115,12 +117,16 @@ The menus use the game's own widgets, so they look, sound and navigate like the 
 - **Title screen:**
   - An **Online** entry, copied from the Options button.
   - Choosing it swaps the title list for the co-op entries, with a status line under them.
-  - Entries: **Host co-op session**, **Join a friend** (friends who are hosting), **Start co-op** (pick the save), **Invite friends** (Steam overlay), **Input delay**, **Close/Leave session**, **Back**.
+  - Entries: **Host**, **Join** (friends who are hosting), **Start** (pick the save), **Invite friends** (Steam overlay), **Input delay**, **Stop hosting** / **Leave co-op**, **Send logs to host** / **Ask for logs**, **Open to friends**, **Open logs folder**, **Back**. Once an update is downloaded, **Restart to update (0.1.45 -> 0.1.46)** comes first.
 - **Pause menu:**
   - An **Online** item, added with the game's own `PauseMenu.AddPauseMenuItem`.
   - It opens the game's standard two-choice popup.
-  - During a session the pause menu is driven by synced input, so its choices act as deterministic commands. *End session* stops co-op on every PC on the same frame, and everyone keeps playing solo from an identical state.
+  - During a session the pause menu is driven by synced input, so its choices act as deterministic commands. *End co-op* stops co-op on every PC on the same frame, and everyone keeps playing solo from an identical state. Its choices may depend only on synced state, so **Restart** (which depends on this PC's download) is offered there only outside a running session.
+  - The game's popup buttons are sized for "Yes"/"No"; the mod widens each to its label, up to 200 reference pixels (about 25 characters), and cuts a longer one with an ellipsis.
 - **Text:** the mod's strings go through the game's localization (`LocalizationManager.GetText` patched for a private `SosOnline` category).
+  - Every player-facing string is listed in [docs/messages.csv](docs/messages.csv): where it shows, its length and its source line. Wording changes are reviewed there first.
+  - Toasts (the notices at the top) hold at most 80 characters: one short sentence about what happened, at most what to do. Longer text is cut at a word and logged as a warning. They stay 2.5 s + 0.06 s per character (3.5–12 s).
+  - Player names are cleaned where they enter the mod (`UI/PlayerNames.cs`): no control, zero-width or line-break characters, `<` and `>` replaced so a name can't inject text markup, at most 24 characters, and "Player N" when the game's fonts can't draw most of it.
 - **F8** opens a small debug panel, and a one-line HUD shows players, ping and sync state during a session.
 
 ## Install
@@ -157,7 +163,9 @@ pwsh -File tools\package.ps1 -GameDir "W:\SteamLibrary\steamapps\common\Sea of S
 
 ### Automatic updates
 
-At every game start the mod asks GitHub for the [latest release](https://github.com/miguelguzmanr/sosonline/releases/latest). If it is newer, the mod downloads its zip in the background. It installs the DLL only if the DLL's signature matches the release key built into the mod. A toast then says *Update … downloaded. Restart the game to use it*, and the next start runs it. Nothing downloaded is loaded in the running game.
+At every game start the mod asks GitHub for the [latest release](https://github.com/miguelguzmanr/sosonline/releases/latest). If it is newer, the mod downloads its zip in the background. It installs the DLL only if the DLL's signature matches the release key built into the mod. A toast then says *Update … downloaded. Restart from the Online menu.*, and the next start runs it. Nothing downloaded is loaded in the running game.
+
+- **Restart to update (0.1.45 -> 0.1.46)** in the title screen's **Online** menu (and **Restart** in the pause menu's **Online** popup, outside a running session) quits the game; a hidden PowerShell waits for it to exit and starts it again through Steam (`steam://rungameid/1244090`).
 
 - To turn it off, set `AutoUpdate = false` under `[Updates]` in `BepInEx\config\sosonline.coop.cfg`.
 - Builds you made yourself with uncommitted changes (`…-modified`) and test runs never update.
@@ -180,17 +188,19 @@ pwsh -File tools\publish.ps1 -GameDir "W:\SteamLibrary\steamapps\common\Sea of S
 ## Playing
 
 **Start from your own game (no title screen).**
-1. **Host:** pause → **Online** → **Open to friends**. A Steam lobby stays open while you play (also on the next start: it's a setting, toggled in the title screen's **Online** menu). **Invite friends** opens the Steam overlay.
+1. **Host:** pause → **Online** → **Open**. A Steam lobby stays open while you play (also on the next start: it's a setting, toggled in the title screen's **Online** menu). **Invite friends** opens the Steam overlay.
 2. **Friend:** accept the invite, or use **Join Game** in the Steam friends list. From the title screen, **Online** → **Join a friend** works too. Accepting while in your own game asks once, then replaces your game with the host's.
 3. The friend drops in at the next moment the game allows saving (no battle, cutscene or loading): either they catch up on their own PC while the host keeps playing, or everyone sees a short fade. Then they take a party member automatically.
 
-**Or start together from the title screen:** Title screen → **Online** → **Host co-op session**, friends join, then **Start co-op** and pick a save.
+**Or start together from the title screen:** Title screen → **Online** → **Host**, friends join, then **Start** and pick a save.
 
 **During a session:**
-- **Pause** (Start / Esc) opens a pause screen on your PC only; the game keeps running for everyone and the others see "P2 is paused". It has **Options** (volumes, brightness, display: this PC only), **Pause for everyone** and **Leave session** (the host: **End session** for everyone). In battles and cutscenes the game's own pause still stops everyone.
+- **Pause** (Start / Esc) opens a pause screen on your PC only; the game keeps running for everyone and the others see "P2 is paused". It has **Options** (volumes, brightness, display: this PC only), **Pause for everyone** and **Leave co-op** (the host: **End co-op** for everyone). In battles and cutscenes the game's own pause still stops everyone.
 - **Pause for everyone** opens the game's own pause menu on every PC, as in local co-op: the game stops for everyone and only you move in it. Use it for **Assign Players**, **Return to title** and the like.
 - **Choosing who plays whom:** pause → **Pause for everyone** → **Assign Players**; each player moves their own cursor. A friend who rejoins gets the character they had back, if it's free.
-- **Leaving:** pause → **Leave session**. Your character goes back to the party AI and the others keep playing. When the last friend leaves, the host simply keeps playing; the lobby stays open.
+- **Leaving:** pause → **Leave co-op**. Your character goes back to the party AI and the others keep playing; your own game is yours again (your pad and keyboard drive the leader). When the last friend leaves, the host simply keeps playing; the lobby stays open.
+- **Ending:** the host's pause → **End co-op**. Everyone keeps playing on their own; the lobby closes and **Open to friends** turns off.
+- **Camping** works as in local co-op (tested on loopback: intro, camp, Rest and the end of camp on the same frames on both PCs).
 - If a friend's game gets out of sync, it re-syncs by itself with a short reload on their PC.
 
 Use a gamepad or keyboard; the mouse is not synchronized. Saves made during co-op are written by the host as usual. On guests they go to a separate session folder, so the guests' own saves are never touched and the host keeps the shared progress. Options stay each PC's own.
@@ -209,7 +219,7 @@ Nothing Steam-specific has been tested end to end yet (see *Not yet verified*). 
 
 Every start of the game writes its own log, so nothing is lost when you restart.
 
-**Friends: press a button.** While connected to the host's session (also after a crash: rejoin first), choose **Send logs to the host**. It's on the pause screen (Esc, outside battles and cutscenes) and in the title screen's **Online** menu. Your game zips your last two starts' logs and BepInEx's `LogOutput.log` (which also has the game's own messages), and sends them to the host only. If the game crashed since, the zip also includes the newest Windows crash dump of the game (`%LOCALAPPDATA%\CrashDumps\SeaOfStars.exe.*.dmp`, a snapshot of the game's memory at the crash). The host gets a toast and the zip in `BepInEx\SosOnline\logs\received`. The host can also choose **Ask friends for their logs**, which shows friends a reminder; they still decide.
+**Friends: press a button.** While connected to the host's session (also after a crash: rejoin first), choose **Send logs to host**. It's on the pause screen (Esc, outside battles and cutscenes) and in the title screen's **Online** menu. Your game zips your last two starts' logs and BepInEx's `LogOutput.log` (which also has the game's own messages), and sends them to the host only. If the game crashed since, the zip also includes the newest Windows crash dump of the game (`%LOCALAPPDATA%\CrashDumps\SeaOfStars.exe.*.dmp`, a snapshot of the game's memory at the crash). The host gets a toast and the zip in `BepInEx\SosOnline\logs\received`. The host can also choose **Ask for logs**, which shows friends a reminder; they still decide.
 
 **By hand** (the host's own logs, or without a session), from the same session on **both PCs**:
 
@@ -218,7 +228,7 @@ Every start of the game writes its own log, so nothing is lost when you restart.
 3. Say roughly what happened and when (the log lines carry the time of day).
 4. If the game crashed, also send `BepInEx\LogOutput.log` from the game folder (it has the game's own messages) and the newest `SeaOfStars.exe.*.dmp` from `%LOCALAPPDATA%\CrashDumps\` (Windows' crash dump of the game). Sea of Stars writes no `Player.log`.
 
-What's in them: everything the mod logged (joins, drop-ins, desyncs, pauses, leaves), the game's own errors, the mod build (the commit, e.g. `0.1.0+e3d3ca0`), the game version, Windows version and graphics card, and a session summary every minute (players, ping, input delay, sync checks). The state file has a snapshot of the game state every half second, so the host's and a guest's can be compared frame by frame. The logs contain the Steam names of the players in the session and Steam lobby ids (sometimes a player's Steam id); nothing else personal.
+What's in them: everything the mod logged (joins, drop-ins, desyncs, pauses, leaves, and `[coop]` lines saying who controls which character with which devices, written when that changes), the game's own errors, the mod build (the commit, e.g. `0.1.0+e3d3ca0`), the game version, Windows version and graphics card, and a session summary every minute (players, ping, input delay, sync checks). The state file has a snapshot of the game state every half second, so the host's and a guest's can be compared frame by frame. The logs contain the Steam names of the players in the session and Steam lobby ids (sometimes a player's Steam id); nothing else personal.
 
 If the friend runs a different build than the host, the host gets a message when they join: use the same zip on both PCs.
 
@@ -235,6 +245,13 @@ If the friend runs a different build than the host, the host gets a message when
 | `tests/battle-map.sh`, `tests/map-results.sh` | Maps the game's timed-hit and block grading: one run per press offset. |
 | `tests/battle-live.sh` | Two instances, a battle on both from frame 1500: prints the guest's corrections and mismatches (finding 8). |
 | `tests/dropin.sh` | Three instances: a third player joins 30 s in (`JOIN_DELAY`). `HOSTFLAGS`/`JOINFLAGS` add flags, e.g. `--sosonline-nocatchup` (reload in place), `--sosonline-loadatjoin`, `--sosonline-play=0` (join from its own game). Compares both guests' states with the host's. |
+| `tests/dropin-two.sh` | Host alone, then two joiners in one area; both catch up from the same area entry. |
+| `tests/stage1.sh` | The host plays its own save with the lobby open; guest A joins, leaves from the pause screen (co-op to solo), guest B joins later. |
+| `tests/menu-status.sh` | Pause screen and menu banner while a third player catches up. |
+| `tests/battle-turns.sh` | A battle where both players take turns over a simulated lagged link (`LAG`, `JITTER`, `SPIKES`); prints both PCs' turn decisions and the first differing snapshot. Run it 3–4 times: battle splits are intermittent. |
+| `tests/save-sync.sh` | A manual save (`SAVER=host` or `guest`) over a lagged link; both PCs must open and close the question on the same frames. |
+| `tests/resync.sh` | A forced divergence (`DIVERGE`): the guest re-syncs by a reload; compares it with the host afterwards. |
+| `tests/sweep.sh` | Every test above that checks the session, one after another (about 50 minutes), plus leaving, ending, Assign Players, camping and the title-screen menus: the check before a release. Results and logs per test in `BepInEx/SosOnline/sweep`. |
 | `tests/spike-b.sh` | Records a run, replays it from the area entry autosave, compares every frame. |
 
 Battle flags: `--sosonline-encounter=F` starts the nearest encounter on lockstep frame F (every peer). `--sosonline-bot` confirms menus and presses timed hits `--sosonline-botoffset` frames after the impact it sees; `--sosonline-bot=menu` only confirms menus. `--sosonline-trace` logs the combat timing calls, and `--sosonline-nocomp` disables client-side timing.
@@ -246,9 +263,15 @@ Session flags:
 | `--sosonline-leave=F` | Guest leaves over the network on frame F. |
 | `--sosonline-kill=F` | Guest's process is killed on frame F. |
 | `--sosonline-pauseleave=F` | Synced pause-menu leave of P2 on frame F. |
-| `--sosonline-assigntest=F` | Opens Assign Players from the pause menu on frame F. |
+| `--sosonline-assigntest=F` | Opens Assign Players on frame F (from the game's pause menu, or directly when it isn't open; pass it to every instance). |
+| `--sosonline-endsession=F` | The host ends co-op from its pause screen on frame F. |
+| `--sosonline-pausechoose=F:Label,…` | Chooses a local pause screen entry by its label on frame F (`_` for a space), e.g. `1760:Leave_co-op,1800:Leave`. |
+| `--sosonline-campat=F` | Uses the nearest campfire as if P1 pressed Interact (pass it to every instance). An early save only gets "The campfire feels cozy". |
+| `--sosonline-campstart=F`, `--sosonline-campstop=F` | The campfire's own camping toggle, past the story unlock: intro, camp, and the Rest choice when stopped. |
+| `--sosonline-fakeupdate=V` | Acts as if update V was downloaded (shows **Restart to update**). |
+| `--sosonline-name=TEXT` | A test player name; escapes like `\n` and `\u0020` for characters a command line can't carry. |
 
-`tests/session.sh` launches a host plus guests, staggering late joiners, and tiles their windows side by side, host on the left (`tests/place-window.ps1`; `NO_TILE=1` turns it off).
+`tests/session.sh` launches a host plus guests, staggering late joiners, and tiles their windows side by side, host on the left (`tests/place-window.ps1`; `NO_TILE=1` turns it off). It doesn't start a late joiner once the host's game has quit.
 
 Test instances never touch your real saves:
 - Each UDP test instance plays from its own sandbox copy (`<saves>\SosOnlineTest-<port>`) and its own mirror folder.
@@ -280,6 +303,10 @@ The command-line flags are documented in `SosOnline/TestHarness.cs`.
   - Identical screenshots on both instances.
 - Pause menu opened by the host appears on the guest (synced menus).
 
+### Verified (2026-11-16, build 3fd5a2c, the user's newest save in the Forbidden Cavern)
+
+Every loopback test in one sweep: saves (P1 and P2 saving), the live battle, drop-ins (catch-up, reload in place, a level load on the join frame, from the joiner's own game), two joiners, menu banners, Stage 1, leaving, ending (with a guest playing and with one still joining), a guest's game killed, Assign Players, the title-screen menus and the restart popup: all pass with 0 differences. Camping (intro, camp, Rest, end) runs on the same frames on both PCs. The battle-turns test splits in the Bosslug fight (see *Known limitations*); the re-sync test recovers but splits a second time after its first drop-in. Both also happen on v0.1.45.
+
 ### Not yet verified
 
 - **Steam P2P between two real accounts.** Only lobby creation was exercised; the messaging path is the same flat API but untested end to end.
@@ -287,7 +314,6 @@ The command-line flags are documented in `SosOnline/TestHarness.cs`.
 - **Long sessions, area transitions with heavy streaming, cutscenes.** Async loading is the most likely source of desyncs.
   - The host-snapshot check reports them in the log and the HUD.
   - Seen in testing: the initial level finished loading 1–2 frames apart on two instances. It converged once the party spawned, but a loading barrier would make it exact.
-- **Drop-in from a guest's own gameplay.** Tested joiners were on the title screen or still booting. Joining a level load already in progress on the join frame is not handled (the window is a few frames).
 - **Three players in combat**, and Assign Players with three players.
 
 ## Known limitations
@@ -295,7 +321,8 @@ The command-line flags are documented in `SosOnline/TestHarness.cs`.
 - Joining mid-session waits for a moment the game allows saving. If the party entered its current area recently (and nobody joined, left or swapped characters since), only the joiner waits while it catches up; otherwise everyone briefly reloads an autosave in place (a fade of about 1.5 s) and about 2 s of progress other than positions is undone.
 - Options are not available from the pause screen in battles and cutscenes for guests (the shared pause there would put the PCs' menus out of step).
 - If the host leaves, the session ends; the host's save is the shared one.
-- On Assign Players, every player's cursor shows the keyboard icon (the stand-in device used online).
+- On Assign Players, every online player shows the keyboard icon (the stand-in device used online), with their name and colour.
+- The Bosslug fight (Forbidden Cavern) can put a guest out of sync: the adds it summons can differ between PCs. The guest re-syncs by itself. Seen in 4 of 6 loopback runs over a lagged link, and in v0.1.45 too.
 - After a desync, the guest that diverged re-syncs with a reload in place on its PC; a desync of the host's own game can't be detected (the host is the reference).
 - If one PC can't keep 60 fps, everyone slows down with it (lockstep).
 - Mod and game versions must match on every PC (checked when joining).

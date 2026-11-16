@@ -8,7 +8,7 @@ GAME="/w/SteamLibrary/steamapps/common/Sea of Stars"; O="$GAME/BepInEx/SosOnline
 S="$(cygpath -m "$PWD/tests/scripts")"
 COMMON="--sosonline-delay=3 --sosonline-quit=${QUIT:-3000} $EXTRA"
 tests/session.sh 27100 "--sosonline-play=0 --sosonline-seed=777 --sosonline-rememberchar=${CHAR:-last} --sosonline-quitruns=2 --sosonline-script=$S/host-walk.txt $COMMON $HOSTFLAGS" \
-  "--sosonline-script=$S/guest-stage1-leave.txt $COMMON" "${A_DELAY:-25}" \
+  "--sosonline-script=$S/guest-stage1-leave.txt --sosonline-pausechoose=1760:Leave_co-op,1800:Leave $COMMON" "${A_DELAY:-25}" \
   "$COMMON" "${B_DELAY:-75}"
 sleep 10; while tasklist | grep -qi SeaOfStars; do sleep 3; done
 for p in 27100 27101 27102; do echo "--- $p"; grep -h -E "\[session\] (co-op starts|back to solo|slot|mirrored)|\[dropin\] .*(join at|joining at)|\[characters\]|\[resync\]|stopped at frame|\[saves\]" "$O/log-$p.txt" | cut -c1-170; done

@@ -153,6 +153,19 @@ internal static class LocalPause
         public System.Action<int> Change;
     }
 
+    /// <summary>
+    /// Test harness (--sosonline-pausechoose): choose the entry with this label on the open page, as a press would.
+    /// Chosen by label so a test doesn't break when entries are added or reordered.
+    /// </summary>
+    internal static bool ChooseForTest(string label)
+    {
+        if (!IsOpen) return false;
+        var entry = Entries().Find(e => e.Label == label);
+        if (entry?.Action == null) return false;
+        entry.Action();
+        return true;
+    }
+
     private static List<Entry> Entries()
     {
         var s = Session.Instance;

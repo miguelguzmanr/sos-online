@@ -1,8 +1,4 @@
-# Stage 1, guest A: drops into the host's game, walks, then leaves from the local pause screen.
+# Stage 1, guest A: drops into the host's game, walks, then opens the local pause screen at 1700.
+# stage1.sh chooses "Leave co-op" and then "Leave" by label (--sosonline-pausechoose), not by cursor moves.
 1150 MoveHorizontal 60 1
 1700 UI_Start 4
-1760 UIMoveVertical 6 -1
-1790 UIMoveVertical 6 -1
-1830 UI_Confirm 4
-1870 UIMoveVertical 6 1
-1910 UI_Confirm 4

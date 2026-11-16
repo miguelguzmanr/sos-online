@@ -14,6 +14,7 @@ launch() {
   ./SeaOfStars.exe $COMMON "$@" > /dev/null 2>&1 &
   local winpid
   winpid=$(cat /proc/$!/winpid 2>/dev/null)
+  [ "$index" = 0 ] && HOST_WINPID=$winpid
   if [ -z "$NO_TILE" ] && [ -n "$winpid" ]; then
     powershell -NoProfile -ExecutionPolicy Bypass -File "$PLACE" -ProcessId "$winpid" -Index "$index" < /dev/null > /dev/null 2>&1 &
   fi
@@ -25,6 +26,11 @@ n=1
 while [ $# -gt 0 ]; do
   gflags=$1; wait_s=${2:-4}; shift; [ $# -gt 0 ] && shift
   sleep "$wait_s"
+  # A joiner for a host that already quit would wait at the title screen until its 300 s timeout.
+  if [ -n "$HOST_WINPID" ] && ! tasklist //FI "PID eq $HOST_WINPID" 2>/dev/null | grep -qi SeaOfStars; then
+    echo "session.sh: the host has quit; not starting guest $n" >&2
+    n=$((n+1)); continue
+  fi
   launch $n --sosonline-udp=$((hp+n)) --sosonline-join=$hp $gflags
   n=$((n+1))
 done

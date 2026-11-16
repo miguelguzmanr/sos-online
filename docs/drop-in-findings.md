@@ -1,4 +1,4 @@
-# Drop-in: findings and Stage 3 handoff (2026-11-15)
+# Drop-in: findings and Stage 3 handoff (2026-11-15, §12 on 2026-11-16)
 
 Companion to [drop-in-plan.md](drop-in-plan.md) (status, risks) and [drop-in-spikes.md](drop-in-spikes.md) (spike results). This file records what was found while finishing Stage 2 and starting Stage 3, and what is left.
 
@@ -323,6 +323,39 @@ Result: 4 consecutive lagged runs with identical turn records and 0 mismatches, 
 
 **Not yet tested:** these fixes over Steam with two real PCs.
 
+## 12. After the first release with these fixes (2026-11-16)
+
+Reported by the user from playing v0.1.45 (they reinstalled v0.1.39 to try the updater), then found by tests.
+
+**Ending co-op re-opened it.** *End session* stopped lockstep but left everyone connected. On the next frame the host's `UpdateSoloCoop` saw a connected friend (one still dropping in, or any guest) in its own gameplay and started a new session. Now `Session.CloseAfterEnd`: the host leaves the lobby 1.5 s after the end frame (the guests stop on that frame first) and turns *Open to friends* off, like *Stop hosting*. A guest that ended with it doesn't get a second "host closed" notice.
+
+**After a leave or the end, characters stood still and a guest lost its own game.** Nothing put a PC back to a normal solo game when lockstep stopped:
+- During a session each PC's devices drive its own slot's player. A guest's pad and keyboard stayed on P2 afterwards: the guest drove Zale while the leader (Valere, P1) stood still with no devices.
+- The guest's own scheduled leave never ran on its PC: its lockstep stops on the leave frame, before that frame's scheduled actions.
+- When the host ended co-op, every PC kept the other players' characters on players without devices. They stood still (not the party AI) until someone used Assign Players.
+
+Now `Session.ReturnToSolo`, from `AfterLockstep` (not while a guest re-syncs, which drops in again; if the session ends meanwhile, `Reset` does it): this PC's devices go to P1 and every other co-op player calls the game's `Leave()`, retried every second while the game refuses (battle, cutscene). Verified with the new `[coop]` probe (`CoopProbe.cs`, always on, logs on change: each player's character and devices, each party member's state, `*` = player-controlled): after a guest leaves, after the host ends, and after a guest's game is killed, both PCs show `P1 VALERE [kb]` and `ZALE=FollowerCopyTargetState`.
+
+**Restart to update.** `AutoUpdate.Restart` quits and relaunches through Steam once the process has exited. Offered in the title screen's Online menu, and in the pause menu's Online popup only outside a running session: during a run that popup opens on every PC from synced input, so its choices must not depend on this PC's download.
+
+**Popup buttons too narrow.** The game's `GenericPopupScreen` sizes its buttons for "Yes"/"No". `NativeMenus.FitButtons` widens each button and its fixed-width children (the highlight) to the label, at most 200 reference pixels, then rebuilds the row.
+
+**Short text, safe names.**
+- Every player-facing string is in `docs/messages.csv`. The user reviewed all of it; about 110 strings changed ("co-op" instead of "co-op session", P1/P2, no frames or re-sync jargon).
+- Toasts: at most 80 characters (`Toast.MaxChars`), cut and logged when longer.
+- Names: `PlayerNames.Clean` where a name enters the mod. Before the game's fonts load, Latin-range characters stand in for the font check, so every PC decides the same way ("Player 1" for a Japanese-and-emoji name on both PCs).
+- The game's pixel fonts have no "→" or "@": `GameUi.Drawable` drops them, so the mod writes "->".
+
+**Assign Players.** Every online player stands in with the same keyboard icon. Each icon now shows the player's name (12 characters) and is tinted in their colour (P1 cyan 85,241,255 and P2 amber 255,190,19, sampled from the game's bubbles; P3 pink is approximate). The column's `VerticalLayoutGroup` ignores item heights, so its spacing grows to fit the tags when two players stack on one character. Tags, tint and spacing are undone offline. The pool method `OnExitPool` was not patched (small methods are often folded).
+
+**Save slot names (not changed).** The game's save screen shows "1  The Forbidden Cavern  11/15/2026 9:50 PM". The mod's *Online > Start* keeps "Slot 1" by the user's choice. Notes if it's revisited: the location comes from `SaveGameSlot.CheckpointData.level.GetLevelNameLocId()`, but `LocalizationManager.GetText` threw a null reference inside the interop call at the title screen (both overloads, with a controller and player passed). `SaveGameSlot.Timestamp` is .NET ticks in local time.
+
+**Camping.** The campfire near the user's save only says "The campfire feels cozy" (camping isn't unlocked yet in the story). Started through `CampingSpot.ToggleCamping()` instead (`CampingManager.StartCamping` only sets the flag): the intro, camp, the Rest choice (a held Confirm) and the end of camp run on the same frames on both PCs, with 0 mismatches, HP included.
+
+**Bosslug split (open).** Since the user's newest save moved into the Forbidden Cavern, `battle-turns.sh` reaches the Bosslug fight. The guest splits at frame 1800 in 4 of 6 runs (1 of 2 on v0.1.45): the Acid Bug adds differ; every turn decision and damage roll before that matches. The re-sync test also splits a second time after its first drop-in (party HP 0 on the guest at f8970), on v0.1.45 too. Next: call-probe the boss's AI between f1700 and f1800.
+
+**Stage 1 test.** Its guest script chose pause entries by cursor moves and reached *Pause for everyone* instead of *Leave co-op*; the host then quit early and the late joiner waited 300 s at the title screen. Now `--sosonline-pausechoose` chooses by label, and `session.sh` skips a late joiner whose host has quit.
+
 ## Tools added
 
 | Script / flag | Use |
@@ -338,6 +371,11 @@ Result: 4 consecutive lagged runs with identical turn records and 0 mismatches, 
 | `--sosonline-play=SLOT`, `--sosonline-joinafter=S` | Joiner plays its own game first |
 | `--sosonline-tracecalls=Class[.Method],…` | Log calls with the lockstep frame. Tracing all of `CombatManager` stalls the boot; trace specific methods |
 | `--sosonline-dashprobe`, `--sosonline-fixedlog=F1,F2` | The probes that found finding 8 |
+| `--sosonline-endsession=F` | The host ends co-op from its pause screen (§12) |
+| `--sosonline-pausechoose=F:Label,…` | Choose a local pause entry by label, `_` for a space (§12) |
+| `--sosonline-campat=F`, `--sosonline-campstart=F`, `--sosonline-campstop=F` | Campfire interaction; camping past the story unlock (§12) |
+| `--sosonline-fakeupdate=V`, `--sosonline-name=TEXT` | Restart-to-update UI; hostile player names (§12) |
+| `[coop]` log lines | Who controls which character with which devices, on change (§12) |
 
 **Run hygiene:**
 - Run `tests/display-prefs.sh save` before a test session and `restore` after.
