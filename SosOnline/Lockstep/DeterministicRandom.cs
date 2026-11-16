@@ -41,6 +41,41 @@ internal static class DeterministicRandom
         (typeof(ReshanCorrosiveBlend), nameof(ReshanCorrosiveBlend.BreakRandomLocks)),
         (typeof(RadiusShowerSpell), nameof(RadiusShowerSpell.GetRandomPositionAroundTarget)),
         (typeof(RandomLootTable), nameof(RandomLootTable.GetLootToGive)),
+        // Co-op battles: when more than one player could take the next round, the game picks one at random. Without
+        // these the PCs picked different players on the same frame (tests/battle-turns.sh, f2535, 2026-11-15).
+        (typeof(EncounterController), nameof(EncounterController.AdvancePlayers)),
+        (typeof(EncounterController), nameof(EncounterController.OnPlayersTurn)),
+        (typeof(EncounterController), nameof(EncounterController.ActivatePlayerTurn)),
+        (typeof(EncounterController), nameof(EncounterController.DoNextActorTurn)),
+        (typeof(EncounterController), nameof(EncounterController.EnterPlayerSelectBattleCommandState)),
+        (typeof(EncounterController), nameof(EncounterController.SetPlayersInDoNothingState)),
+        // Who acts next (a party member or an enemy) is decided here and in the coroutine below.
+        (typeof(CombatTurnsQueue), nameof(CombatTurnsQueue.GetNextActor)),
+        (typeof(CombatTurnsQueue), nameof(CombatTurnsQueue.BuildTurnBasedQueue)),
+        (typeof(CombatTurnsQueue), nameof(CombatTurnsQueue.IsSomeoneReady)),
+        // Enemy spells: how many turns a cast takes, and the turn bookkeeping around it. The PCs disagreed on when
+        // a cast went off with every logged event identical (tests/battle-turns.sh, f2756).
+        (typeof(EnemyCombatActor), nameof(EnemyCombatActor.GetMoveCastingTime)),
+        (typeof(EnemyCombatActor), nameof(EnemyCombatActor.UseOverrideCastingTime)),
+        (typeof(EnemyCombatActor), nameof(EnemyCombatActor.EnterChargeState)),
+        (typeof(EnemyCombatActor), nameof(EnemyCombatActor.UpdateChargeState)),
+        (typeof(EnemyCombatActor), nameof(EnemyCombatActor.OnDoCastingCombatMove)),
+        (typeof(EnemyCombatActor), nameof(EnemyCombatActor.OnSelfTurnDone)),
+        (typeof(EnemyCombatActor), nameof(EnemyCombatActor.EndTurn)),
+        (typeof(CombatActor), nameof(CombatActor.OnPlayerPartyTurnDone)),
+        (typeof(CombatActor), nameof(CombatActor.OnAnyCharacterTurnDone)),
+        (typeof(CombatActor), nameof(CombatActor.OnPlayerCharacterTurnDone)),
+        (typeof(CombatActor), nameof(CombatActor.OnEnemyCharacterTurnDone)),
+        (typeof(EncounterController), nameof(EncounterController.EndCurrentTurn)),
+        (typeof(EncounterController), nameof(EncounterController.OnPlayerCharacterTurnDone)),
+        (typeof(EncounterController), nameof(EncounterController.OnEnemyCharacterTurnDone)),
+        (typeof(EncounterController), nameof(EncounterController.OnEnemiesTurn)),
+    };
+
+    /// <summary>Compiler-generated coroutine steps (found by name prefix: the suffix can change between builds).</summary>
+    private static readonly (Type outer, string prefix)[] CoroutineTargets =
+    {
+        (typeof(EncounterController), "_DoNextTurnWhenNextActorIsReadyCoroutine_"),
     };
 
     private static int _depth, _frame = int.MinValue, _count;
@@ -71,6 +106,14 @@ internal static class DeterministicRandom
                 if (NativeCode.IsFolded(m)) { Plugin.Log.LogWarning($"[random] {type.Name}.{name} is folded with other methods; left alone"); continue; }
                 try { harmony.Patch(m, prefix: enter, postfix: exit); patched++; }
                 catch (Exception e) { Plugin.Log.LogWarning($"[random] {type.Name}.{name} not patched: {e.Message}"); }
+            }
+        foreach (var (outer, prefix) in CoroutineTargets)
+            foreach (var nested in outer.GetNestedTypes(BindingFlags.Public | BindingFlags.NonPublic).Where(t => t.Name.StartsWith(prefix, StringComparison.Ordinal)))
+            {
+                var m = nested.GetMethod("MoveNext", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                if (m == null || NativeCode.IsFolded(m)) { Plugin.Log.LogWarning($"[random] {nested.Name}.MoveNext not patched"); continue; }
+                try { harmony.Patch(m, prefix: enter, postfix: exit); patched++; }
+                catch (Exception e) { Plugin.Log.LogWarning($"[random] {nested.Name}.MoveNext not patched: {e.Message}"); }
             }
         Plugin.Log.LogInfo($"[random] {patched} gameplay random roll(s) made deterministic");
     }

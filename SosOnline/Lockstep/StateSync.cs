@@ -138,7 +138,10 @@ internal sealed class StateSnapshot
             if (a == null) continue;
             int hp = -1;
             try { hp = a.CombatTarget?.GetCurrentHP() ?? -1; } catch { }
-            parts.Add($"{a.gameObject.name}:{hp}");
+            // An enemy charging a spell takes less damage; the PCs once disagreed on it with every HP equal.
+            string cast = "";
+            try { var enemy = a.TryCast<EnemyCombatActor>(); if (enemy != null && enemy.IsCasting()) cast = "/cast"; } catch { }
+            parts.Add($"{a.gameObject.name}:{hp}{cast}");
         }
         return "on " + string.Join(",", parts);
     }

@@ -1,0 +1,6 @@
+# With --sosonline-saveat=600: pick the highlighted slot, hold Yes on the question, close the menus.
+700 UI_Confirm 4
+860 UI_Confirm 120
+1100 UI_Back 4
+1220 UI_Back 4
+1340 UI_Back 4

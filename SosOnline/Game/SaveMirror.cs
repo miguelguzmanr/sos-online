@@ -140,7 +140,16 @@ internal static class SaveMirror
     }
 
     [HarmonyPatch(typeof(SaveLoadStandalone), nameof(SaveLoadStandalone.SaveFile))]
-    private static class P_Save { private static void Prefix(SaveLoadStandalone __instance, ref string __1) { if (NativeCode.Is<SaveLoadStandalone>(__instance)) __1 = Redirect(__1); } }
+    private static class P_Save
+    {
+        private static void Prefix(SaveLoadStandalone __instance, ref string __1)
+        {
+            string before = __1;
+            try { if (NativeCode.Is<SaveLoadStandalone>(__instance)) __1 = Redirect(__1); }
+            catch (Exception e) { Plugin.Log.LogError($"[saves] redirect failed for {before}: {e}"); }
+            Plugin.Log.LogInfo($"[saves] write {before} -> {__1} (thread {Environment.CurrentManagedThreadId})");
+        }
+    }
 
     [HarmonyPatch(typeof(SaveLoadStandalone), nameof(SaveLoadStandalone.LoadFile))]
     private static class P_Load { private static void Prefix(SaveLoadStandalone __instance, ref string __0) { if (NativeCode.Is<SaveLoadStandalone>(__instance)) __0 = Redirect(__0); } }

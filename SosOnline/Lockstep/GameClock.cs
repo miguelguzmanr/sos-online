@@ -50,7 +50,42 @@ internal static class GameClock
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate double DoubleFn();
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate int IntFn();
 
-    private static DoubleFn _timeD, _unscaledD;
+    private static DoubleFn _timeD, _unscaledD, _realD;
+
+    /// <summary>
+    /// realtimeSinceStartup during lockstep: the session's unscaled time plus this constant (the same on every PC), so
+    /// it reads identically everywhere and starts above any real value a PC had (under ~14 h of play). It was the
+    /// game's wall clock: a PC waiting for the network kept counting it while frames stood still, so real-time waits
+    /// (WaitForSecondsRealtime in the battle's turn logic) ended on different frames, and the next actor differed
+    /// (tests/battle-turns.sh with lag, f2756, 2026-11-15).
+    /// </summary>
+    private const double RealShift = 50000;
+    private static double _realOffset;
+
+    /// <summary>
+    /// timeSinceLevelLoad while a session clock is set: game time since the last base, i.e. since the last level
+    /// load's release, which is the same on every PC. Unity counts it from each PC's own load end, about 4 s apart
+    /// in a test session (2026-11-15).
+    /// </summary>
+    private static DoubleFn _levelD;
+    private static double _levelStart;
+
+    /// <summary>
+    /// fixedTime trails time by whatever physics time a PC skipped before (frames longer than maximumDeltaTime, e.g.
+    /// while loading): about 4 s more on one test PC than the other, with the same phase within a frame. Inside a
+    /// physics step Unity's time also reads fixedTime, so FixedUpdate code saw times 4 s apart on the two PCs. During
+    /// a session both read the synced time minus the shared phase: whole skipped steps are added back
+    /// (<see cref="_fixedShift"/>, set with each base).
+    /// </summary>
+    private static DoubleFn _fixedD;
+    private static double _fixedShift;
+    private delegate byte BoolFn();
+    private static BoolFn _inFixed, _focusedOrig;
+
+    private static bool InFixedStep()
+    {
+        try { return _inFixed != null && _inFixed() != 0; } catch { return false; }
+    }
     private static FloatFn _unscaledDelta, _smoothDelta;
     private static IntFn _frame;
     private static readonly List<object> _keepAlive = new();
@@ -62,14 +97,33 @@ internal static class GameClock
         {
             // The original (trampoline) is only known once the detour is applied: until then, read 0. Any exception
             // thrown in here would crash the game, so the hooks stay trivial.
-            _timeD = Detour<DoubleFn>("get_timeAsDouble", () => _timeD == null ? 0 : _timeD() + (Set ? _offset : 0));
-            Detour<FloatFn>("get_time", () => (float)(_timeD() + (Set ? _offset : 0)));
+            var inFixed = IL2CPP.il2cpp_resolve_icall("UnityEngine.Time::get_inFixedTimeStep()");
+            if (inFixed != IntPtr.Zero) _inFixed = Marshal.GetDelegateForFunctionPointer<BoolFn>(inFixed);
+            _timeD = Detour<DoubleFn>("get_timeAsDouble", () => _timeD == null ? 0 : _timeD() + (Set ? _offset + (InFixedStep() ? _fixedShift : 0) : 0));
+            Detour<FloatFn>("get_time", () => (float)(_timeD() + (Set ? _offset + (InFixedStep() ? _fixedShift : 0) : 0)));
+            _fixedD = Detour<DoubleFn>("get_fixedTimeAsDouble", () => _fixedD == null ? 0 : _fixedD() + (Set ? _offset + _fixedShift : 0));
+            Detour<FloatFn>("get_fixedTime", () => (float)(_fixedD() + (Set ? _offset + _fixedShift : 0)));
             _unscaledD = Detour<DoubleFn>("get_unscaledTimeAsDouble", () => _unscaledD == null ? 0 : Unscaled());
             Detour<FloatFn>("get_unscaledTime", () => (float)Unscaled());
             _unscaledDelta = Detour<FloatFn>("get_unscaledDeltaTime", () => _ticking ? Step : _unscaledDelta == null ? 0 : _unscaledDelta());
             // Unity smooths deltaTime over each PC's own frame history; the game uses it for timers (the dash).
             _smoothDelta = Detour<FloatFn>("get_smoothDeltaTime", () => _ticking ? UnityEngine.Time.deltaTime : _smoothDelta == null ? 0 : _smoothDelta());
             _frame = Detour<IntFn>("get_frameCount", () => _frame == null ? 0 : _frame() + (Set ? _frameOffset : 0));
+            _realD = Detour<DoubleFn>("get_realtimeSinceStartupAsDouble", () => _realD == null ? 0 : Real());
+            _levelD = Detour<DoubleFn>("get_timeSinceLevelLoadAsDouble", () => _levelD == null ? 0 : Level());
+            Detour<FloatFn>("get_timeSinceLevelLoad", () => (float)Level());
+            Detour<FloatFn>("get_realtimeSinceStartup", () => (float)Real());
+            // Application.isFocused: the game's saving (among others) waits while the window isn't focused. During
+            // lockstep every PC must behave the same whichever window has focus (a save completed only on the PC
+            // whose player answered, 2026-11-15).
+            var focused = IL2CPP.il2cpp_resolve_icall("UnityEngine.Application::get_isFocused()");
+            if (focused != IntPtr.Zero)
+            {
+                BoolFn replacement = () => InputOverride.Active ? (byte)1 : (_focusedOrig == null ? (byte)1 : _focusedOrig());
+                _keepAlive.Add(replacement);
+                _keepAlive.Add(INativeDetour.CreateAndApply(focused, replacement, out _focusedOrig));
+                _keepAlive.Add(_focusedOrig);
+            }
             Plugin.Log.LogInfo("[clock] time getters hooked");
         }
         catch (Exception e)
@@ -80,6 +134,10 @@ internal static class GameClock
     }
 
     private static double Unscaled() => _ticking ? _unscaled : _unscaledD() + (Set ? _unscaledOffset : 0);
+
+    private static double Level() => _ticking && _timeD != null ? Math.Max(0, _timeD() + _offset - _levelStart) : _levelD();
+
+    private static double Real() => _ticking ? _unscaled + RealShift : _realD() + _realOffset;
 
     private static T Detour<T>(string getter, T replacement) where T : Delegate
     {
@@ -104,15 +162,62 @@ internal static class GameClock
         double before = Now;
         _offset = timeBase - _timeD();
         _unscaled = timeBase;
+        _levelStart = timeBase;
+        if (_aligning)
+        {
+            _aligning = false;
+            UnityEngine.Time.captureDeltaTime = Step;
+        }
+        if (_fixedD != null)
+        {
+            // Whole fixed steps fixedTime trails time by; the rest (the phase) is the same on every PC.
+            double dt = UnityEngine.Time.fixedDeltaTime, lag = _timeD() - _fixedD();
+            _fixedShift = dt > 0 ? Math.Floor(lag / dt + 1e-6) * dt : 0;
+        }
         _frameOffset = FrameBase + lockstepFrame - _frame();
         Set = true;
         _ticking = true;
-        Plugin.Log.LogInfo($"[clock] f{lockstepFrame}: game time {before:F3} -> {timeBase:F3}");
+        double phaseNow = _fixedD != null && UnityEngine.Time.fixedDeltaTime > 0 ? Mod(_timeD() - _fixedD(), UnityEngine.Time.fixedDeltaTime) : double.NaN;
+        Plugin.Log.LogInfo($"[clock] f{lockstepFrame}: game time {before:F3} -> {timeBase:F3}, physics phase {phaseNow:F5}");
     }
+
+    /// <summary>
+    /// Physics runs every fixedDeltaTime (0.02 s) against 1/60 s frames, so one frame in six gets no physics step;
+    /// which one depends on the phase between time and fixedTime. Boundaries are 1/300 s apart, and two PCs' phases
+    /// were ~0.001 s apart: about one session in three the PCs stepped physics on different frames and battles split
+    /// (tests/battle-turns.sh, 2026-11-15). On the frame before each load release (the game is held in loading),
+    /// every PC stretches that one frame so its phase lands on <see cref="TargetPhase"/>, midway between boundaries.
+    /// </summary>
+    private const double TargetPhase = 0.005;
+    private static bool _aligning;
+    private static int _alignTicks;
+
+    /// <summary>Call on the frame before a load release: the next frame's step brings the physics phase to target.</summary>
+    public static void AlignPhysicsPhase()
+    {
+        if (!Enabled || _timeD == null || _fixedD == null) return;
+        try
+        {
+            double dt = UnityEngine.Time.fixedDeltaTime;
+            float scale = UnityEngine.Time.timeScale;
+            if (dt <= 0 || scale <= 0) { Plugin.Log.LogWarning($"[clock] physics phase not aligned (time scale {scale})"); return; }
+            double phase = Mod(_timeD() - _fixedD(), dt);
+            // Game time advances captureDeltaTime * timeScale: pick the step whose scaled length lands on the target.
+            double extra = Mod(TargetPhase - phase - Step * scale, dt);
+            UnityEngine.Time.captureDeltaTime = (float)(Step + extra / scale);
+            _aligning = true;
+            _alignTicks = 0;
+        }
+        catch (Exception e) { Plugin.Log.LogWarning($"[clock] physics phase not aligned: {e.Message}"); }
+    }
+
+    private static double Mod(double x, double m) => ((x % m) + m) % m;
 
     /// <summary>Lockstep applied a frame (every PC, once per frame).</summary>
     public static void Tick()
     {
+        // The stretched step lasts one frame; restored by SetBase, or here if no release followed.
+        if (_aligning && ++_alignTicks > 1) { _aligning = false; UnityEngine.Time.captureDeltaTime = Step; }
         if (_ticking) _unscaled += Step;
     }
 
@@ -122,6 +227,7 @@ internal static class GameClock
         if (!_ticking || _unscaledD == null) return;
         _ticking = false;
         _unscaledOffset = _unscaled - _unscaledD();
+        if (_realD != null) _realOffset = _unscaled + RealShift - _realD(); // carry on from the session's value
     }
 
     /// <summary>

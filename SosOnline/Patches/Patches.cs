@@ -67,6 +67,38 @@ internal static class InputManagerPatches
 }
 
 /// <summary>
+/// Manual saves never finished in lockstep: after Yes on "Overwrite this save data?", SaveManager.UpdateDataAsync
+/// started and the write never followed, on every PC but (in real sessions) the one whose player pressed Yes. The
+/// guest then stayed paused in the save menu and re-synced in a loop (2026-11-15).
+/// Found by bisecting in tests/save-sync.sh: with any Harmony patch on SaveSelectionScreen.ConsumeUIPopupInputs
+/// (called every frame while a save-screen popup is up) the save completes on every PC, on the same frame;
+/// without it, it never does. Why is not known (the game's native code can't be read from here). This empty
+/// patch keeps it patched; tests/save-sync.sh checks the save completes on both PCs.
+/// </summary>
+[HarmonyPatch(typeof(SaveSelectionScreen), nameof(SaveSelectionScreen.ConsumeUIPopupInputs))]
+internal static class SaveCompletesPatch
+{
+    private static void Postfix() { }
+}
+
+/// <summary>
+/// The game's UI input module skips input while its window isn't focused, and the game's pop-up questions (the save
+/// question among them) take their answers through it. A player alt-tabbed to chat never saw the other player's
+/// answer: that PC stayed on the question while the other went on, every time someone saved (2026-11-15). During
+/// lockstep the input comes from the session, not the window.
+/// </summary>
+[HarmonyPatch(typeof(UnityEngine.EventSystems.CustomUIInputModule), nameof(UnityEngine.EventSystems.CustomUIInputModule.ShouldIgnoreEventsOnNoFocus))]
+internal static class UiFocusPatch
+{
+    private static bool Prefix(UnityEngine.EventSystems.CustomUIInputModule __instance, ref bool __result)
+    {
+        if (!InputOverride.Active || !NativeCode.Is<UnityEngine.EventSystems.CustomUIInputModule>(__instance)) return true;
+        __result = false;
+        return false;
+    }
+}
+
+/// <summary>
 /// Focus loss / Steam overlay must not pause the game on one machine only. (SteamPlatform's own IsInFocus and
 /// OnGameOverlayActivated are folded with unrelated methods in the native build, so the wrapper is hooked instead.)
 /// </summary>

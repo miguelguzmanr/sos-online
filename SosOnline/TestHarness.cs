@@ -103,6 +103,13 @@ internal static class TestHarness
         if (Args.ContainsKey("noclock")) GameClock.Enabled = false;
         if (Args.ContainsKey("nocatchup")) Session.Instance.CatchUpEnabled = false;
         if (Args.TryGetValue("botoffset", out var bo)) CombatBot.ImpactOffset = int.Parse(bo);
+        if (Args.TryGetValue("botphase", out var bp)) CombatBot.Phase = int.Parse(bp);
+        if (Args.ContainsKey("castprobe") || Args.ContainsKey("callprobe")) Lockstep.CombatTrace.CastProbe = true;
+        if (Args.TryGetValue("readprobe", out var rp)) { var r = rp.Split(','); Lockstep.InputOverride.ReadProbeFrom = int.Parse(r[0]); Lockstep.InputOverride.ReadProbeTo = int.Parse(r[1]); }
+        if (Args.TryGetValue("botswitch", out var bsw)) CombatBot.SwitchEvery = int.Parse(bsw);
+        if (Args.TryGetValue("lag", out var lag)) Net.UdpTransport.LagMs = int.Parse(lag);
+        if (Args.TryGetValue("jitter", out var jit)) Net.UdpTransport.JitterMs = int.Parse(jit);
+        if (Args.TryGetValue("spikes", out var spk)) Net.UdpTransport.SpikePercent = int.Parse(spk);
         if (Args.TryGetValue("stateevery", out var se)) StateSync.Interval = Math.Max(1, int.Parse(se));
 
         Directory.CreateDirectory(OutDir);
@@ -472,6 +479,35 @@ internal static class TestHarness
         var session = Session.Instance;
         TrackTransitions(frame);
         LogFixedSteps(frame);
+        // --sosonline-saveby=SLOT: 10 frames after the save screen opened, that player has the menu controls (in real
+        // play the player who uses the save point gets them).
+        if (Args.TryGetValue("saveat", out var sa) && int.TryParse(sa, out int saFrame) && frame == saFrame + 10
+            && Args.TryGetValue("saveby", out var by) && int.TryParse(by, out int bySlot))
+        {
+            Game.GameBridge.Coop?.SetUIInputsPlayer(Game.GameBridge.PlayerForSlot(bySlot));
+            Plugin.Log.LogInfo($"[test] f{frame} menu controls to slot {bySlot}");
+        }
+        if (At("saveat", frame))
+        {
+            // Every PC on this frame: open the nearest save point's save screen, as if the leader had used it.
+            try
+            {
+                var leader = Game.GameBridge.Party?.Leader;
+                Savepoint best = null;
+                float bestD = float.MaxValue;
+                foreach (var sp in UnityEngine.Object.FindObjectsOfType<Savepoint>())
+                {
+                    float d = leader == null ? 0 : (sp.transform.position - leader.transform.position).sqrMagnitude;
+                    if (d < bestD) { bestD = d; best = sp; }
+                }
+                var es = UnityEngine.EventSystems.EventSystem.current;
+                var mod = es?.currentInputModule;
+                Plugin.Log.LogInfo($"[test] event system {es?.name}, input module {mod?.GetIl2CppType()?.FullName}, all: {string.Join(", ", (es?.GetComponents<UnityEngine.EventSystems.BaseInputModule>() ?? new UnityEngine.EventSystems.BaseInputModule[0]).Select(m => m.GetIl2CppType().FullName))}");
+                if (best != null) { best.ShowSaveScreen(); Plugin.Log.LogInfo($"[test] f{frame} save screen opened ({Mathf.Sqrt(bestD):F1} m away)"); }
+                else Plugin.Log.LogWarning($"[test] f{frame} no save point");
+            }
+            catch (Exception e) { Plugin.Log.LogWarning($"[test] save screen failed: {e.Message}"); }
+        }
         ReloadSpike(frame);
         SpikeB.OnFrame(frame);
         FastForward.OnFrame(frame);

@@ -22,6 +22,15 @@ internal static class CombatBot
     /// <summary>Frames after the visible impact at which the bot presses.</summary>
     public static int ImpactOffset = 1;
 
+    /// <summary>--sosonline-botphase: offset of this bot's menu presses in the 45-frame schedule, so two players
+    /// press at different moments (in a real battle they race for the turn) instead of on the same frames.</summary>
+    public static int Phase;
+
+    /// <summary>--sosonline-botswitch=N: every Nth menu press is a move to the other character first, the way a player
+    /// takes a character that isn't theirs (0: never).</summary>
+    public static int SwitchEvery;
+    private static int _menuPresses;
+
     public static InputSnapshot Apply(int frame, InputSnapshot snap)
     {
         if (frame - _actorsFrame > 30)
@@ -54,8 +63,30 @@ internal static class CombatBot
 
         // Outside timing phases, confirm menus (attack → target) on a fixed schedule of *target* frames,
         // so the battle timeline doesn't depend on the input delay.
-        if (!timedPhase && frame > 640 && frame % 45 == 0)
-            Press(snap, "UI_Confirm");
+        if (!timedPhase && frame > 640 && (frame - Phase) % 45 == 0)
+        {
+            _menuPresses++;
+            if (SwitchEvery > 0 && _menuPresses % SwitchEvery == 0)
+            {
+                // Move the selection to the next character; the confirm comes at the next scheduled press.
+                int h = ActionTable.IndexOf("UIMoveHorizontal");
+                if (h >= 0)
+                {
+                    snap.Axis[h] = InputSnapshot.Quantize(1f);
+                    snap.AxisRaw[h] = InputSnapshot.Quantize(1f);
+                    snap.Bits[h] |= ActionBits.Button | ActionBits.ButtonDown;
+                }
+                int m = ActionTable.IndexOf("MoveHorizontal");
+                if (m >= 0)
+                {
+                    snap.Axis[m] = InputSnapshot.Quantize(1f);
+                    snap.AxisRaw[m] = InputSnapshot.Quantize(1f);
+                    snap.Bits[m] |= ActionBits.Button | ActionBits.ButtonDown;
+                }
+                Plugin.Log.LogInfo($"[bot] f{frame} switch character");
+            }
+            else Press(snap, "UI_Confirm");
+        }
         return snap;
     }
 

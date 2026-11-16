@@ -94,17 +94,68 @@ internal sealed class UdpTransport : ITransport
         Raw(peer, packet);
     }
 
+    // ---- Simulated network (tests): --sosonline-lag=MS, --sosonline-jitter=MS, --sosonline-spikes=PERCENT.
+    // Loopback delivers in well under a millisecond, so anything that depends on real time instead of the session's
+    // clock only breaks over the internet. Each outgoing packet waits lag + random jitter (and, for a share of them,
+    // a 150-300 ms spike like a real connection's), in order per peer.
+    public static int LagMs, JitterMs, SpikePercent;
+    private readonly Random _rng = new(Environment.TickCount);
+    private readonly List<(DateTime due, ulong peer, byte[] packet)> _delayed = new();
+    private readonly Dictionary<ulong, DateTime> _lastDue = new();
+
     private void Raw(ulong peer, byte[] packet)
+    {
+        if (LagMs > 0 || JitterMs > 0 || SpikePercent > 0)
+        {
+            double ms = LagMs + (JitterMs > 0 ? _rng.Next(JitterMs + 1) : 0);
+            if (SpikePercent > 0 && _rng.Next(100) < SpikePercent) ms += 150 + _rng.Next(151);
+            var due = DateTime.UtcNow.AddMilliseconds(ms);
+            if (_lastDue.TryGetValue(peer, out var last) && last > due) due = last; // in order, like one route
+            _lastDue[peer] = due;
+            _delayed.Add((due, peer, packet));
+            return;
+        }
+        RawNow(peer, packet);
+    }
+
+    private void RawNow(ulong peer, byte[] packet)
     {
         try { _socket.Send(packet, packet.Length, new IPEndPoint(IPAddress.Loopback, (int)peer)); } catch (SocketException) { }
     }
 
+    private void FlushDelayed()
+    {
+        if (_delayed.Count == 0) return;
+        var now = DateTime.UtcNow;
+        int sent = 0;
+        foreach (var (due, peer, packet) in _delayed)
+        {
+            if (due > now) break; // in due order per peer; across peers close enough for a test
+            RawNow(peer, packet);
+            sent++;
+        }
+        if (sent > 0) _delayed.RemoveRange(0, sent);
+    }
+
     public void Poll(Action<ulong, byte[]> onMessage)
     {
+        FlushDelayed();
         var now = DateTime.UtcNow;
+        // Resend what hasn't been acknowledged after a round trip, then wait another round trip (not every poll).
+        double resendMs = 100 + 2 * (LagMs + JitterMs);
         foreach (var (id, p) in _peers)
+        {
+            List<uint> due = null;
             foreach (var (seq, entry) in p.Unacked)
-                if ((now - entry.sent).TotalMilliseconds > 100) Raw(id, entry.data);
+                if ((now - entry.sent).TotalMilliseconds > resendMs) (due ??= new List<uint>()).Add(seq);
+            if (due == null) continue;
+            foreach (var seq in due)
+            {
+                var entry = p.Unacked[seq];
+                Raw(id, entry.data);
+                p.Unacked[seq] = (entry.data, now);
+            }
+        }
 
         while (_socket.Available > 0)
         {

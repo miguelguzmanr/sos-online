@@ -41,6 +41,7 @@ public sealed class Plugin : BasePlugin
             TimingCompensation.Install(harmony);
             DeterministicRandom.Install(harmony);
             CombatTrace.Install(harmony);
+            if (TestHarness.TryArg("castprobe", out _) || TestHarness.TryArg("callprobe", out _)) CombatTrace.InstallCallProbe(harmony);
             NativeCode.AuditPatches(harmony, Guid);
             SteamInvites.ParseCommandLine();
             Log.LogInfo($"Sea of Stars Online Co-op {SessionLogs.Build} loaded. Press F8 in game. Logs: {SessionLogs.Folder}");

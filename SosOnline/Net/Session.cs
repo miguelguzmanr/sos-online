@@ -1207,6 +1207,7 @@ internal sealed class Session
 
     private void OnFrameApplied(int frame)
     {
+        CombatTrace.OnFrame(frame);
         if (_catchUp != null && frame == _catchUp.L) CatchUpEntry(frame);
         if (frame == _entryFrame)
         {
@@ -1371,6 +1372,8 @@ internal sealed class Session
             LoadBarrierLateReleases++;
             Plugin.Log.LogError($"[barrier] load {seq}: release frame {frame} already passed (now f{Engine.Frame})");
         }
+        // The frame before: line up the physics phase on every PC (GameClock.AlignPhysicsPhase).
+        if (frame - 1 >= Engine.Frame) Engine.Schedule(frame - 1, GameClock.AlignPhysicsPhase);
         Engine.Schedule(frame, () =>
         {
             if (_heldSeq != seq)

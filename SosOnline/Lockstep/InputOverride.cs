@@ -103,6 +103,7 @@ internal static class InputOverride
         if (s == null) return true;
         int ch = ChannelByPlayerId.TryGetValue(p.id, out int c) ? c : -1;
         result = ch >= 0 && index >= 0 && index < _hold.GetLength(1) ? _hold[ch, index, (int)which] * FrameTime : 0.0;
+        if (ReadProbeTo >= 0) ProbeRead(p, index, which.ToString(), result > 0);
         return false;
     }
 
@@ -125,11 +126,27 @@ internal static class InputOverride
     }
 
     // Shared prefix bodies. Returning false skips the original Rewired implementation.
+    /// <summary>Test probe (--sosonline-readprobe=F1,F2): log which synced reads the game makes in that frame range.</summary>
+    public static int ReadProbeFrom = int.MaxValue, ReadProbeTo = int.MinValue;
+    private static readonly HashSet<string> _reads = new();
+    private static int _readsFrame = -1;
+
+    private static void ProbeRead(Player p, int index, string kind, bool result)
+    {
+        int f = Net.Session.Instance.Engine.AppliedFrame;
+        if (f < ReadProbeFrom || f > ReadProbeTo) return;
+        if (f != _readsFrame) { _readsFrame = f; _reads.Clear(); }
+        string name = index >= 0 && index < ActionTable.Names.Length ? ActionTable.Names[index] : index.ToString();
+        string key = $"player {p.id} {name} {kind}={result}";
+        if (_reads.Add(key)) Plugin.Log.LogInfo($"[read] f{f} {key}");
+    }
+
     private static bool BitById(Player p, int id, ActionBits bit, ref bool result)
     {
         var s = Resolve(p);
         if (s == null) return true;
         result = Has(s, ActionTable.IndexOf(id), bit);
+        if (ReadProbeTo >= 0) ProbeRead(p, ActionTable.IndexOf(id), bit.ToString(), result);
         return false;
     }
 
@@ -138,6 +155,7 @@ internal static class InputOverride
         var s = Resolve(p);
         if (s == null) return true;
         result = Has(s, ActionTable.IndexOf(name), bit);
+        if (ReadProbeTo >= 0) ProbeRead(p, ActionTable.IndexOf(name), bit.ToString(), result);
         return false;
     }
 
