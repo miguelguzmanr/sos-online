@@ -433,7 +433,7 @@ internal sealed class Session
         if (InSession)
         {
             if (LobbyId == lobby) return;
-            if (Phase == Phase.Running) { Toast.Show("Finish the current co-op session before joining another one."); return; }
+            if (Phase == Phase.Running) { Toast.Show("Leave co-op before joining another game."); return; }
             Leave();
         }
         Reset();
@@ -856,7 +856,7 @@ internal sealed class Session
                         : $"Connected as P{LocalSlot + 1}. Waiting for the host to start…";
                     Toast.Show(WaitingForResync
                         ? $"Queued in {SlotName[0] ?? Transport.Describe(HostId)}'s game. You'll join as soon as their game allows saving."
-                        : $"Joined {SlotName[0] ?? Transport.Describe(HostId)}'s session as player {LocalSlot + 1}.");
+                        : $"Joined {SlotName[0] ?? Transport.Describe(HostId)}'s game as P{LocalSlot + 1}.");
                     Plugin.Log.LogInfo($"[session] welcomed as slot {LocalSlot}");
                 }
                 break;

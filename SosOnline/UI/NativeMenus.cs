@@ -625,7 +625,7 @@ internal static class NativeMenus
                     "Leave", () => s.LeaveSlotDeterministic(slot));
                 return;
             }
-            string waiting = s.HasPending ? $"\nJoining: {string.Join(", ", s.PendingNames)} (they drop in as soon as the game allows saving)." : "";
+            string waiting = s.HasPending ? $"\nJoining: {string.Join(", ", s.PendingNames)}" : "";
             Confirm($"{PlayersLine(s)}{waiting}", "End co-op",
                 () => s.EndSessionDeterministic("the host ended it"));
             return;
@@ -634,7 +634,7 @@ internal static class NativeMenus
         {
             // Not synced (no lockstep runs here), so the choice may depend on this PC's download. Friends get the
             // update too, so playing together waits for the restart anyway.
-            Confirm($"Updated from {SosOnline.Update.AutoUpdate.Current.ToString(3)} to {SosOnline.Update.AutoUpdate.Downloaded.ToString(3)}.\nEveryone needs the same version to play together.",
+            Confirm($"Update {SosOnline.Update.AutoUpdate.Downloaded.ToString(3)} is ready.\nEveryone needs the same version to play together.",
                 "Restart", SosOnline.Update.AutoUpdate.Restart);
             return;
         }

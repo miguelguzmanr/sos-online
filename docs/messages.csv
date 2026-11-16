@@ -1,70 +1,70 @@
 ﻿id,kind,where,text,current_text,chars,has_placeholders,est_chars_filled,limit,over_limit,file,line,review_notes
-1,toast,Notice at the top of the screen,Co-op ended. You may continue playing.,Co-op session ended. You keep playing on your own.,38,,38,80,,SosOnline/Net/Session.cs,388,
-2,toast,Notice at the top of the screen,Co-op ended. Open to friends is now off.,Co-op session ended. Open to friends is now off.,40,,40,80,,SosOnline/Net/Session.cs,411,
-3,toast,Notice at the top of the screen,Finish the current co-op session before joining another one.,Finish the current co-op session before joining another one.,60,,60,80,,SosOnline/Net/Session.cs,432,"Suggest: 'Leave co-op before joining another game.' (""co-op"" instead of ""co-op session"", like rows 1-2)."
-4,toast,Notice at the top of the screen,Join a session first.,Join a session first: logs go to the host.,21,,21,80,,SosOnline/Net/Session.cs,479,
+1,toast,Notice at the top of the screen,Co-op ended. You may continue playing.,Co-op ended. You may continue playing.,38,,38,80,,SosOnline/Net/Session.cs,388,
+2,toast,Notice at the top of the screen,Co-op ended. Open to friends is now off.,Co-op ended. Open to friends is now off.,40,,40,80,,SosOnline/Net/Session.cs,411,
+3,toast,Notice at the top of the screen,Leave co-op before joining another game.,Leave co-op before joining another game.,40,,40,80,,SosOnline/Net/Session.cs,432,Applied the suggestion.
+4,toast,Notice at the top of the screen,Join a session first.,Join a session first.,21,,21,80,,SosOnline/Net/Session.cs,479,
 5,toast,Notice at the top of the screen,Your logs are already on their way.,Your logs are already on their way.,35,,35,80,,SosOnline/Net/Session.cs,480,
 6,toast,Notice at the top of the screen,Packing your logs…,Packing your logs…,18,,18,80,,SosOnline/Net/Session.cs,481,
 7,toast,Notice at the top of the screen,No friends connected.,No friends connected.,21,,21,80,,SosOnline/Net/Session.cs,487,
-8,toast,Notice at the top of the screen,"Asked {string.Join("", "", _peers.Values.Select(p => p.Name))} for logs.","Asked {string.Join("", "", _peers.Values.Select(p => p.Name))} for their logs.",16,yes,28,80,,SosOnline/Net/Session.cs,493,
-9,toast,Notice at the top of the screen,"Sending logs to {SlotName[0] ?? ""the host""} ({Math.Max(1, zip.Length / 1024)} KB)…","Sending your logs to {SlotName[0] ?? ""the host""} ({Math.Max(1, zip.Length / 1024)} KB)…",23,yes,47,80,,SosOnline/Net/Session.cs,516,
-10,toast,Notice at the top of the screen,{name} has a different version ({modVersion}).,{name} has a different mod version ({modVersion}).,28,yes,52,80,,SosOnline/Net/Session.cs,741,
+8,toast,Notice at the top of the screen,"Asked {string.Join("", "", _peers.Values.Select(p => p.Name))} for logs.","Asked {string.Join("", "", _peers.Values.Select(p => p.Name))} for logs.",16,yes,28,80,,SosOnline/Net/Session.cs,493,
+9,toast,Notice at the top of the screen,"Sending logs to {SlotName[0] ?? ""the host""} ({Math.Max(1, zip.Length / 1024)} KB)…","Sending logs to {SlotName[0] ?? ""the host""} ({Math.Max(1, zip.Length / 1024)} KB)…",23,yes,47,80,,SosOnline/Net/Session.cs,516,
+10,toast,Notice at the top of the screen,{name} has a different version ({modVersion}).,{name} has a different version ({modVersion}).,28,yes,52,80,,SosOnline/Net/Session.cs,741,
 11,toast,Notice at the top of the screen,Received {peer.Name}'s logs (Open logs folder).,Received {peer.Name}'s logs (Open logs folder).,36,yes,48,80,,SosOnline/Net/Session.cs,805,
 12,toast,Notice at the top of the screen,{peer.Name} keeps going out of sync. Retrying in a minute.,{peer.Name} keeps going out of sync. Retrying in a minute.,47,yes,59,80,,SosOnline/Net/Session.cs,827,
-13,toast,Notice at the top of the screen,Queued in {SlotName[0] ?? Transport.Describe(HostId)}'s game. You'll join as soon as their game allows saving.,Joined {SlotName[0] ?? Transport.Describe(HostId)}'s game. You'll drop in as soon as their game allows saving.,67,yes,79,80,,SosOnline/Net/Session.cs,853,
-14,toast,Notice at the top of the screen,Joined {SlotName[0] ?? Transport.Describe(HostId)}'s session as player {LocalSlot + 1}.,Joined {SlotName[0] ?? Transport.Describe(HostId)}'s session as player {LocalSlot + 1}.,29,yes,53,80,,SosOnline/Net/Session.cs,854,
+13,toast,Notice at the top of the screen,Queued in {SlotName[0] ?? Transport.Describe(HostId)}'s game. You'll join as soon as their game allows saving.,Queued in {SlotName[0] ?? Transport.Describe(HostId)}'s game. You'll join as soon as their game allows saving.,67,yes,79,80,,SosOnline/Net/Session.cs,853,
+14,toast,Notice at the top of the screen,Joined {SlotName[0] ?? Transport.Describe(HostId)}'s game as P{LocalSlot + 1}.,Joined {SlotName[0] ?? Transport.Describe(HostId)}'s game as P{LocalSlot + 1}.,20,yes,44,80,,SosOnline/Net/Session.cs,854,"'game' and 'P2', like rows 13 and 100."
 15,toast,Notice at the top of the screen,"{SlotName[0] ?? ""The host""} received your logs. Thanks!","{SlotName[0] ?? ""The host""} received your logs. Thanks!",28,yes,40,80,,SosOnline/Net/Session.cs,859,
-16,toast,Notice at the top of the screen,"{SlotName[0] ?? ""The host""} asks for your logs (check the Online menu).","{SlotName[0] ?? ""The host""} asks for your logs (Online menu).",44,yes,56,80,,SosOnline/Net/Session.cs,862,
-17,toast,Notice at the top of the screen,You're in! Joining the party…,You're in. Joining the party…,29,,29,80,,SosOnline/Net/Session.cs,947,
+16,toast,Notice at the top of the screen,"{SlotName[0] ?? ""The host""} asks for your logs (check the Online menu).","{SlotName[0] ?? ""The host""} asks for your logs (check the Online menu).",44,yes,56,80,,SosOnline/Net/Session.cs,862,
+17,toast,Notice at the top of the screen,You're in! Joining the party…,You're in! Joining the party…,29,,29,80,,SosOnline/Net/Session.cs,947,
 18,toast,Notice at the top of the screen,{peer.Name} {why}. The AI plays their character.,{peer.Name} {why}. The AI plays their character.,32,yes,56,80,,SosOnline/Net/Session.cs,1112,
-19,toast,Notice at the top of the screen,Joining…,Dropping in…,8,,8,80,,SosOnline/Net/Session.cs,1197,
-20,toast,Notice at the top of the screen,Co-op started. Joining the party…,Co-op session started. Joining the party…,33,,33,80,,SosOnline/Net/Session.cs,1197,
-21,toast,Notice at the top of the screen,Co-op started.,Co-op session started.,14,,14,80,,SosOnline/Net/Session.cs,1197,
+19,toast,Notice at the top of the screen,Joining…,Joining…,8,,8,80,,SosOnline/Net/Session.cs,1197,
+20,toast,Notice at the top of the screen,Co-op started. Joining the party…,Co-op started. Joining the party…,33,,33,80,,SosOnline/Net/Session.cs,1197,
+21,toast,Notice at the top of the screen,Co-op started.,Co-op started.,14,,14,80,,SosOnline/Net/Session.cs,1197,
 22,toast,Notice at the top of the screen,Your game got out of sync. Re-syncing…,Your game got out of sync. Re-syncing…,38,,38,80,,SosOnline/Net/Session.cs,1359,
-23,toast,Notice at the top of the screen,{names} is joining.,{names} is joining. Keep playing.,12,yes,24,80,,SosOnline/Net/Session.cs,1590,
+23,toast,Notice at the top of the screen,{names} is joining.,{names} is joining.,12,yes,24,80,,SosOnline/Net/Session.cs,1590,
 24,toast,Notice at the top of the screen,Everyone left. Friends can still join.,Everyone left. Friends can still join.,38,,38,80,,SosOnline/Net/Session.cs,1598,
-25,toast,Notice at the top of the screen,You left co-op but may continue playing.,You left the co-op session. You keep playing on your own.,40,,40,80,,SosOnline/Net/Session.cs,1777,
+25,toast,Notice at the top of the screen,You left co-op but may continue playing.,You left co-op but may continue playing.,40,,40,80,,SosOnline/Net/Session.cs,1777,
 26,toast,Notice at the top of the screen,Joining: {names}…,Joining: {names}…,10,yes,22,80,,SosOnline/Net/Session.cs,1864,
-27,toast,Notice at the top of the screen,"{string.Join("", "", _peers.Values.Where(p => slots.Contains(p.Slot)).Select(p => p.Name))} queued to join after this.","{string.Join("", "", _peers.Values.Where(p => slots.Contains(p.Slot)).Select(p => p.Name))} joins after this.",27,yes,39,80,,SosOnline/Net/Session.cs,2055,
+27,toast,Notice at the top of the screen,"{string.Join("", "", _peers.Values.Where(p => slots.Contains(p.Slot)).Select(p => p.Name))} queued to join after this.","{string.Join("", "", _peers.Values.Where(p => slots.Contains(p.Slot)).Select(p => p.Name))} queued to join after this.",27,yes,39,80,,SosOnline/Net/Session.cs,2055,
 28,toast,Notice at the top of the screen,Press Join on your controller to play.,Press Join on your controller to play.,38,,38,80,,SosOnline/Net/Session.cs,2101,
-29,toast,Notice at the top of the screen,{peer.Name} is joining.,{peer.Name} is joining. Keep playing.,12,yes,24,80,,SosOnline/Net/Session.cs,2148,
+29,toast,Notice at the top of the screen,{peer.Name} is joining.,{peer.Name} is joining.,12,yes,24,80,,SosOnline/Net/Session.cs,2148,
 30,toast,Notice at the top of the screen,{peer.Name} joined.,{peer.Name} joined.,8,yes,20,80,,SosOnline/Net/Session.cs,2261,
-31,toast,Notice at the top of the screen,"Leave this co-op session first, then accept the invite.","Leave this co-op session first, then accept the invite.",55,,55,80,,SosOnline/Steam/SteamInvites.cs,50,"Suggest: 'Leave co-op first, then accept the invite.'"
+31,toast,Notice at the top of the screen,"Leave co-op first, then accept the invite.","Leave co-op first, then accept the invite.",42,,42,80,,SosOnline/Steam/SteamInvites.cs,50,Applied the suggestion.
 32,toast,Notice at the top of the screen,Open Options from your own pause screen.,Open Options from your own pause screen.,40,,40,80,,SosOnline/UI/NativeMenus.cs,589,
 33,toast,Notice at the top of the screen (after an update downloads),Update {name.Version.ToString(3)} downloaded. Restart from the Online menu.,Update {name.Version.ToString(3)} downloaded. Restart from the Online menu.,49,yes,61,80,,SosOnline/Update/AutoUpdate.cs,195,
 34,error,"Notice, and the Online menu's status line",Steam is not available: {reason},Steam is not available: {reason},24,yes,36,80,,SosOnline/Net/Session.cs,227,
-35,error,"Notice, and the Online menu's status line",Go to the Title screen first.,Go to the title screen first.,29,,29,80,,SosOnline/Net/Session.cs,268,
+35,error,"Notice, and the Online menu's status line",Go to the Title screen first.,Go to the Title screen first.,29,,29,80,,SosOnline/Net/Session.cs,268,
 36,error,"Notice, and the Online menu's status line",Input system not ready yet.,Input system not ready yet.,27,,27,80,,SosOnline/Net/Session.cs,269,
 37,error,"Notice, and the Online menu's status line",{SteamApi.FriendName(friendId)} is not hosting a session.,{SteamApi.FriendName(friendId)} is not hosting a session.,26,yes,38,80,,SosOnline/Net/Session.cs,421,
 38,error,"Notice, and the Online menu's status line",Could not create a Steam lobby.,Could not create a Steam lobby.,31,,31,80,,SosOnline/Net/Session.cs,636,
 39,error,"Notice, and the Online menu's status line",Could not join the lobby (full or closed).,Could not join the lobby (full or closed).,42,,42,80,,SosOnline/Net/Session.cs,651,
-40,error,"Notice, and the Online menu's status line",Version mismatch. Your mod version doesn't match the mod version of the host.,The host runs a different version of the mod.,77,,77,80,,SosOnline/Net/Session.cs,656,
-41,error,"Notice, and the Online menu's status line",Can't join: {reason},Host refused: {reason},12,yes,24,80,,SosOnline/Net/Session.cs,865,Reasons are added at the end (from Session.cs:712-717).
+40,error,"Notice, and the Online menu's status line",Version mismatch. Your mod version doesn't match the mod version of the host.,Version mismatch. Your mod version doesn't match the mod version of the host.,77,,77,80,,SosOnline/Net/Session.cs,656,
+41,error,"Notice, and the Online menu's status line",Can't join: {reason},Can't join: {reason},12,yes,24,80,,SosOnline/Net/Session.cs,865,Reasons are added at the end (from Session.cs:712-717).
 42,error,"Notice, and the Online menu's status line",The host closed the session.,The host closed the session.,28,,28,80,,SosOnline/Net/Session.cs,1035,
 43,error,"Notice, and the Online menu's status line",Lost connection to the host ({why}).,Lost connection to the host ({why}).,31,yes,43,80,,SosOnline/Net/Session.cs,1116,
 44,error,"Notice, and the Online menu's status line",Co-op stopped: {reason},Co-op stopped: {reason},15,yes,27,80,,SosOnline/Net/Session.cs,1149,
 45,error,"Notice, and the Online menu's status line",Desync detected: {reason},Desync detected: {reason},17,yes,29,80,,SosOnline/Net/Session.cs,1361,
 46,error,"Notice, and the Online menu's status line",Lost connection to the host.,Lost connection to the host.,28,,28,80,,SosOnline/Net/Session.cs,1796,
-47,error,"Notice, and the Online menu's status line",Could not reload the autosave for joining.,Could not reload the autosave for the drop-in.,42,,42,80,,SosOnline/Net/Session.cs,2079,
-48,popup,Game-style popup (Steam invite while hosting friends; appended),\nYour friends will continue playing without you.,\nThe friends playing with you go back to their own games.,48,,48,,,SosOnline/Steam/SteamInvites.cs,72,
-49,popup,Game-style popup (pause menu > Online),Join your friend's game?\nAny progress since your last save will be lost.{mine},Join your friend's game?\nYour own game stops here: anything since your last save is lost.{mine},72,yes,84,,,SosOnline/Steam/SteamInvites.cs,74,
-50,popup,Game-style popup (pause menu > Online),Restart the game now?,Restart the game now? This PC leaves the co-op session.,21,,21,,,SosOnline/UI/NativeMenus.cs,486,
-51,popup,Game-style popup (pause menu > Online),"{PlayersLine(s)}\nLeave co-op, P{slot + 1}?","{PlayersLine(s)}\nLeave the co-op session, P{slot + 1}? Your character goes back to the party AI; the others keep playing.",16,yes,40,,,SosOnline/UI/NativeMenus.cs,624,
+47,error,"Notice, and the Online menu's status line",Could not reload the autosave for joining.,Could not reload the autosave for joining.,42,,42,80,,SosOnline/Net/Session.cs,2079,
+48,popup,Game-style popup (Steam invite while hosting friends; appended),\nYour friends will continue playing without you.,\nYour friends will continue playing without you.,49,,49,,,SosOnline/Steam/SteamInvites.cs,72,
+49,popup,Game-style popup (pause menu > Online),Join your friend's game?\nAny progress since your last save will be lost.{mine},Join your friend's game?\nAny progress since your last save will be lost.{mine},73,yes,85,,,SosOnline/Steam/SteamInvites.cs,74,
+50,popup,Game-style popup (pause menu > Online),Restart the game now?,Restart the game now?,21,,21,,,SosOnline/UI/NativeMenus.cs,486,
+51,popup,Game-style popup (pause menu > Online),"{PlayersLine(s)}\nLeave co-op, P{slot + 1}?","{PlayersLine(s)}\nLeave co-op, P{slot + 1}?",17,yes,41,,,SosOnline/UI/NativeMenus.cs,624,
 52,popup,Game-style popup (pause menu > Online),{PlayersLine(s)}{waiting},{PlayersLine(s)}{waiting},0,yes,24,,,SosOnline/UI/NativeMenus.cs,629,
-53,popup,Game-style popup (pause menu > Online),Updated from {SosOnline.Update.AutoUpdate.Current.ToString(3)} to {SosOnline.Update.AutoUpdate.Downloaded.ToString(3)}.\nEveryone needs the same version to play together.,Update {SosOnline.Update.AutoUpdate.Current.ToString(3)} -> {SosOnline.Update.AutoUpdate.Downloaded.ToString(3)} is downloaded.\nFriends need the same version to play together.,68,yes,92,,,SosOnline/UI/NativeMenus.cs,637,Typo: need -> needs. Note: the update only applies after the restart; 'Update {new} is ready.' would be more accurate.
-54,popup,Game-style popup (pause menu > Online),Open the game to friends?\nThey can join at any point if a save is possible.,"Open your game to friends?\nA Steam lobby stays open while you play, and friends who join drop in right here.",75,,75,,,SosOnline/UI/NativeMenus.cs,643,
-55,popup,Game-style popup (pause menu > Online),\nFriends who join drop in right here.,\nFriends who join drop in right here.,37,,37,,,SosOnline/UI/NativeMenus.cs,648,
-56,popup,"Game-style popup (pause menu > Online, host; appended when friends are joining)",\nJoining: {names} (they drop in as soon as the game allows saving).,\nJoining: {names} (they drop in as soon as the game allows saving).,60,yes,72,,,SosOnline/UI/NativeMenus.cs,628,Suggest: '\nJoining: {names}' (row 13's 'as soon as their game allows saving' already tells them).
+53,popup,Game-style popup (pause menu > Online),Update {SosOnline.Update.AutoUpdate.Downloaded.ToString(3)} is ready.\nEveryone needs the same version to play together.,Update {SosOnline.Update.AutoUpdate.Downloaded.ToString(3)} is ready.\nEveryone needs the same version to play together.,67,yes,79,,,SosOnline/UI/NativeMenus.cs,637,"The update applies only after the restart, so it says 'Update {new} is ready.' instead of 'Updated from {old} to {new}.'"
+54,popup,Game-style popup (pause menu > Online),Open the game to friends?\nThey can join at any point if a save is possible.,Open the game to friends?\nThey can join at any point if a save is possible.,76,,76,,,SosOnline/UI/NativeMenus.cs,643,
+55,popup,Game-style popup (pause menu > Online),\nFriends who join drop in right here.,\nFriends who join drop in right here.,38,,38,,,SosOnline/UI/NativeMenus.cs,648,
+56,popup,"Game-style popup (pause menu > Online, host; appended when friends are joining)",\nJoining: {names},\nJoining: {names},10,yes,22,,,SosOnline/UI/NativeMenus.cs,628,Applied the suggestion.
 57,popup choice,Game-style popup (Steam invite while playing),Join,Join,4,,4,25,,SosOnline/Steam/SteamInvites.cs,75,
 58,popup choice,Game-style popup (default second choice),Back,Back,4,,4,25,,SosOnline/UI/NativeMenus.cs,151,
 59,popup choice,Game-style popup (pause menu > Online),Not now,Not now,7,,7,25,,SosOnline/Steam/SteamInvites.cs,75,
-60,popup choice,Game-style popup (pause menu > Online),End co-op,End session for everyone,9,,9,25,,SosOnline/UI/NativeMenus.cs,629,
-61,popup choice,Game-style popup (pause menu > Online),Restart,Restart to update,7,,7,25,,SosOnline/UI/NativeMenus.cs,638,Popup above says the update is downloaded; 'Restart' is enough.
-62,popup choice,Game-style popup (pause menu > Online),Open,Open to friends,4,,4,25,,SosOnline/UI/NativeMenus.cs,644,Answers 'Open the game to friends?'.
-63,popup choice,Game-style popup (pause menu > Online),Invite,Invite friends,6,,6,25,,SosOnline/UI/NativeMenus.cs,648,Host's Online popup (status + 'Friends who join...'): pairs with 'Stop hosting'.
-64,popup choice,Game-style popup (pause menu > Online),Stop hosting,Close session,12,,12,25,,SosOnline/UI/NativeMenus.cs,651,'Close session' read like closing the popup.
-65,popup choice,Game-style popup (pause menu > Online),Leave,Leave session,5,,5,25,,SosOnline/UI/NativeMenus.cs,651,"Guest's Online popup: status line above, so one word is enough."
-66,popup choice,"Game-style popup (pause menu > Online, guest)",Leave,Leave session,5,,5,25,,SosOnline/UI/NativeMenus.cs,625,"Answers 'Leave co-op, P2?'."
+60,popup choice,Game-style popup (pause menu > Online),End co-op,End co-op,9,,9,25,,SosOnline/UI/NativeMenus.cs,629,
+61,popup choice,Game-style popup (pause menu > Online),Restart,Restart,7,,7,25,,SosOnline/UI/NativeMenus.cs,638,Popup above says the update is downloaded; 'Restart' is enough.
+62,popup choice,Game-style popup (pause menu > Online),Open,Open,4,,4,25,,SosOnline/UI/NativeMenus.cs,644,Answers 'Open the game to friends?'.
+63,popup choice,Game-style popup (pause menu > Online),Invite,Invite,6,,6,25,,SosOnline/UI/NativeMenus.cs,648,Host's Online popup (status + 'Friends who join...'): pairs with 'Stop hosting'.
+64,popup choice,Game-style popup (pause menu > Online),Stop hosting,Stop hosting,12,,12,25,,SosOnline/UI/NativeMenus.cs,651,'Close session' read like closing the popup.
+65,popup choice,Game-style popup (pause menu > Online),Leave,Leave,5,,5,25,,SosOnline/UI/NativeMenus.cs,651,"Guest's Online popup: status line above, so one word is enough."
+66,popup choice,"Game-style popup (pause menu > Online, guest)",Leave,Leave,5,,5,25,,SosOnline/UI/NativeMenus.cs,625,"Answers 'Leave co-op, P2?'."
 67,popup choice,Game-style popup (restart while in a session),Restart,Restart,7,,7,25,,SosOnline/UI/NativeMenus.cs,486,
 68,menu entry,Title screen > Online page,Host,Host,4,,4,,,SosOnline/UI/NativeMenus.cs,492,
 69,menu entry,Title screen > Online page,Join,Join,4,,4,,,SosOnline/UI/NativeMenus.cs,493,
@@ -72,83 +72,83 @@
 71,menu entry,Title screen > Online page,Start,Start,5,,5,,,SosOnline/UI/NativeMenus.cs,504,
 72,menu entry,Title screen > Online page,Invite friends,Invite friends,14,,14,,,SosOnline/UI/NativeMenus.cs,505,
 73,menu entry,Title screen > Online page,"Input delay: {(s.ConfiguredDelay == 0 ? ""auto"" : s.ConfiguredDelay.ToString())}","Input delay: {(s.ConfiguredDelay == 0 ? ""auto"" : s.ConfiguredDelay.ToString())}",13,yes,25,,,SosOnline/UI/NativeMenus.cs,506,
-74,menu entry,Title screen > Online page,Stop hosting,Close session,12,,12,,,SosOnline/UI/NativeMenus.cs,507,Same as row 64.
-75,menu entry,Title screen > Online page,Leave co-op,Leave session,11,,11,,,SosOnline/UI/NativeMenus.cs,509,Also the pause screen's main entry (LocalPause.cs:189).
-76,menu entry,Title screen > Online page,Send logs to host,Send logs to the host,17,,17,,,SosOnline/UI/NativeMenus.cs,512,Also on the local pause screen.
-77,menu entry,Title screen > Online page,Ask for logs,Ask friends for their logs,12,,12,,,SosOnline/UI/NativeMenus.cs,513,Also on the local pause screen. Friends are the only ones to ask.
+74,menu entry,Title screen > Online page,Stop hosting,Stop hosting,12,,12,,,SosOnline/UI/NativeMenus.cs,507,Same as row 64.
+75,menu entry,Title screen > Online page,Leave co-op,Leave co-op,11,,11,,,SosOnline/UI/NativeMenus.cs,509,Also the pause screen's main entry (LocalPause.cs:189).
+76,menu entry,Title screen > Online page,Send logs to host,Send logs to host,17,,17,,,SosOnline/UI/NativeMenus.cs,512,Also on the local pause screen.
+77,menu entry,Title screen > Online page,Ask for logs,Ask for logs,12,,12,,,SosOnline/UI/NativeMenus.cs,513,Also on the local pause screen. Friends are the only ones to ask.
 78,menu entry,Title screen > Online page,"Open to friends: {(Settings.OpenToFriends ? ""on"" : ""off"")}","Open to friends: {(Settings.OpenToFriends ? ""on"" : ""off"")}",17,yes,29,,,SosOnline/UI/NativeMenus.cs,515,
 79,menu entry,Title screen > Online page,Open logs folder,Open logs folder,16,,16,,,SosOnline/UI/NativeMenus.cs,516,
 80,menu entry,Title screen > Online page,Back,Back,4,,4,,,SosOnline/UI/NativeMenus.cs,517,
 81,menu entry,Title screen > Online page,Refresh,Refresh,7,,7,,,SosOnline/UI/NativeMenus.cs,530,
 82,menu entry,Title screen > Online page,{delay} frames ({delay * 17} ms),{delay} frames ({delay * 17} ms),13,yes,37,,,SosOnline/UI/NativeMenus.cs,550,
-83,menu entry,Title screen > Online page,Auto,Automatic,4,,4,,,SosOnline/UI/NativeMenus.cs,550,Matches 'Input delay: auto'.
+83,menu entry,Title screen > Online page,Auto,Auto,4,,4,,,SosOnline/UI/NativeMenus.cs,550,Matches 'Input delay: auto'.
 84,menu entry,Title screen and pause menu entry,Online,Online,6,,6,,,SosOnline/UI/NativeMenus.cs,38,
 85,status,Online menu status line (some are also shown as a notice),Hosting on UDP port {Transport.LocalId},Hosting on UDP port {Transport.LocalId},20,yes,32,,,SosOnline/Net/Session.cs,248,
-86,status,Online menu status line (some are also shown as a notice),Creating lobby…,Creating Steam lobby…,15,,15,,,SosOnline/Net/Session.cs,254,
-87,status,Online menu status line (some are also shown as a notice),Sending save…,Sending save data ({fileCount} files)…,13,,13,,,SosOnline/Net/Session.cs,274,File count doesn't help the player.
-88,status,Online menu status line (some are also shown as a notice),Co-op ended.,Co-op session ended.,12,,12,,,SosOnline/Net/Session.cs,410,Like row 1.
-89,status,Online menu status line (some are also shown as a notice),"Joining {label ?? ""co-op""}…","Joining {label ?? ""session""}…",9,yes,21,,,SosOnline/Net/Session.cs,440,"SteamInvites.cs:62 passes ""your friend's session"": change it to ""your friend's game""."
+86,status,Online menu status line (some are also shown as a notice),Creating lobby…,Creating lobby…,15,,15,,,SosOnline/Net/Session.cs,254,
+87,status,Online menu status line (some are also shown as a notice),Sending save…,Sending save…,13,,13,,,SosOnline/Net/Session.cs,274,File count doesn't help the player.
+88,status,Online menu status line (some are also shown as a notice),Co-op ended.,Co-op ended.,12,,12,,,SosOnline/Net/Session.cs,410,Like row 1.
+89,status,Online menu status line (some are also shown as a notice),"Joining {label ?? ""co-op""}…","Joining {label ?? ""co-op""}…",9,yes,21,,,SosOnline/Net/Session.cs,440,"SteamInvites.cs:62 passes ""your friend's session"": change it to ""your friend's game""."
 90,status,Online menu status line (some are also shown as a notice),Connecting to UDP port {hostPort}…,Connecting to UDP port {hostPort}…,24,yes,36,,,SosOnline/Net/Session.cs,451,
-91,status,Online menu status line (some are also shown as a notice),Left co-op.,Left the session.,11,,11,,,SosOnline/Net/Session.cs,466,
-92,status,Online menu status line (some are also shown as a notice),Ready! Go to the Title screen to start.,Save data received. Return to the title screen to start!,39,,39,,,SosOnline/Net/Session.cs,601,
-93,status,Online menu status line (some are also shown as a notice),Joining…,Save data received. Dropping in…,8,,8,,,SosOnline/Net/Session.cs,609,Like row 19.
-94,status,Online menu status line (some are also shown as a notice),Waiting for the host…,Save data received. Waiting for host…,21,,21,,,SosOnline/Net/Session.cs,609,
-95,status,Online menu status line (some are also shown as a notice),Hosting. Friends can join from the Online menu.,Hosting. Invite friends or have them join from the co-op menu.,47,,47,,,SosOnline/Net/Session.cs,643,"The menu is called Online, not co-op."
+91,status,Online menu status line (some are also shown as a notice),Left co-op.,Left co-op.,11,,11,,,SosOnline/Net/Session.cs,466,
+92,status,Online menu status line (some are also shown as a notice),Ready! Go to the Title screen to start.,Ready! Go to the Title screen to start.,39,,39,,,SosOnline/Net/Session.cs,601,
+93,status,Online menu status line (some are also shown as a notice),Joining…,Joining…,8,,8,,,SosOnline/Net/Session.cs,609,Like row 19.
+94,status,Online menu status line (some are also shown as a notice),Waiting for the host…,Waiting for the host…,21,,21,,,SosOnline/Net/Session.cs,609,
+95,status,Online menu status line (some are also shown as a notice),Hosting. Friends can join from the Online menu.,Hosting. Friends can join from the Online menu.,47,,47,,,SosOnline/Net/Session.cs,643,"The menu is called Online, not co-op."
 96,status,Online menu status line (some are also shown as a notice),Connecting to {Transport.Describe(HostId)}…,Connecting to {Transport.Describe(HostId)}…,15,yes,27,,,SosOnline/Net/Session.cs,663,
-97,status,Online menu status line (some are also shown as a notice),{name} is joining as P{slot + 1}…,{name} is joining (player {slot + 1})…,17,yes,41,,,SosOnline/Net/Session.cs,734,P1/P2/P3 like the rest of the UI.
-98,status,Online menu status line (some are also shown as a notice),{name} joined as P{slot + 1}.,{name} joined (player {slot + 1}).,13,yes,37,,,SosOnline/Net/Session.cs,734,
-99,status,Online menu status line (some are also shown as a notice),"{SlotName[0] ?? ""The host""} is playing. Joining soon…","{SlotName[0] ?? ""The host""} is playing. You drop in in a moment…",26,yes,38,,,SosOnline/Net/Session.cs,845,
-100,status,Online menu status line (some are also shown as a notice),Connected as P{LocalSlot + 1}. You'll join as soon as the game allows saving.,Connected as player {LocalSlot + 1}. You'll drop in as soon as the game allows saving.,62,yes,74,,,SosOnline/Net/Session.cs,850,Wording from row 13.
-101,status,Online menu status line (some are also shown as a notice),Connected as P{LocalSlot + 1}. Waiting for the host to start…,Connected as player {LocalSlot + 1}. Waiting for the host to start…,46,yes,58,,,SosOnline/Net/Session.cs,851,
-102,status,Online menu status line (some are also shown as a notice),Receiving save…,Receiving save data ({_receivedFiles})…,15,,15,,,SosOnline/Net/Session.cs,892,File count doesn't help the player.
-103,status,Online menu status line (some are also shown as a notice),The host is starting. Go to the Title screen!,Host is starting. Go to the title screen!,45,,45,,,SosOnline/Net/Session.cs,901,
-104,status,Online menu status line (some are also shown as a notice),Playing co-op.,Co-op running.,14,,14,,,SosOnline/Net/Session.cs,946,
-105,status,Online menu status line (some are also shown as a notice),Joining after the battle or loading ends…,The party is loading or in a battle. You'll drop in in a moment…,41,,41,,,SosOnline/Net/Session.cs,956,
+97,status,Online menu status line (some are also shown as a notice),{name} is joining as P{slot + 1}…,{name} is joining as P{slot + 1}…,17,yes,41,,,SosOnline/Net/Session.cs,734,P1/P2/P3 like the rest of the UI.
+98,status,Online menu status line (some are also shown as a notice),{name} joined as P{slot + 1}.,{name} joined as P{slot + 1}.,13,yes,37,,,SosOnline/Net/Session.cs,734,
+99,status,Online menu status line (some are also shown as a notice),"{SlotName[0] ?? ""The host""} is playing. Joining soon…","{SlotName[0] ?? ""The host""} is playing. Joining soon…",26,yes,38,,,SosOnline/Net/Session.cs,845,
+100,status,Online menu status line (some are also shown as a notice),Connected as P{LocalSlot + 1}. You'll join as soon as the game allows saving.,Connected as P{LocalSlot + 1}. You'll join as soon as the game allows saving.,62,yes,74,,,SosOnline/Net/Session.cs,850,Wording from row 13.
+101,status,Online menu status line (some are also shown as a notice),Connected as P{LocalSlot + 1}. Waiting for the host to start…,Connected as P{LocalSlot + 1}. Waiting for the host to start…,46,yes,58,,,SosOnline/Net/Session.cs,851,
+102,status,Online menu status line (some are also shown as a notice),Receiving save…,Receiving save…,15,,15,,,SosOnline/Net/Session.cs,892,File count doesn't help the player.
+103,status,Online menu status line (some are also shown as a notice),The host is starting. Go to the Title screen!,The host is starting. Go to the Title screen!,45,,45,,,SosOnline/Net/Session.cs,901,
+104,status,Online menu status line (some are also shown as a notice),Playing co-op.,Playing co-op.,14,,14,,,SosOnline/Net/Session.cs,946,
+105,status,Online menu status line (some are also shown as a notice),Joining after the battle or loading ends…,Joining after the battle or loading ends…,41,,41,,,SosOnline/Net/Session.cs,956,
 106,status,Online menu status line (some are also shown as a notice),{peer.Name} {why}.,{peer.Name} {why}.,2,yes,26,,,SosOnline/Net/Session.cs,1111,
-107,status,Online menu status line (some are also shown as a notice),Co-op ended: {reason},Co-op stopped: {reason},13,yes,25,,,SosOnline/Net/Session.cs,1204,Reasons rewritten to read after this (rows 190-199). Same prefix in Session.cs:1149 (error).
-108,status,Online menu status line (some are also shown as a notice),Couldn't catch up. Reloading to join…,Catching up failed. You'll drop in with a short reload instead…,37,,37,,,SosOnline/Net/Session.cs,1344,
-109,status,Online menu status line (some are also shown as a notice),Out of sync. Reloading to rejoin…,Out of sync. Re-syncing with a short reload…,33,,33,,,SosOnline/Net/Session.cs,1358,'Re-sync' is our term; players know 'out of sync' and 'rejoin'.
+107,status,Online menu status line (some are also shown as a notice),Co-op ended: {reason},Co-op ended: {reason},13,yes,25,,,SosOnline/Net/Session.cs,1204,Reasons rewritten to read after this (rows 190-199). Same prefix in Session.cs:1149 (error).
+108,status,Online menu status line (some are also shown as a notice),Couldn't catch up. Reloading to join…,Couldn't catch up. Reloading to join…,37,,37,,,SosOnline/Net/Session.cs,1344,
+109,status,Online menu status line (some are also shown as a notice),Out of sync. Reloading to rejoin…,Out of sync. Reloading to rejoin…,33,,33,,,SosOnline/Net/Session.cs,1358,'Re-sync' is our term; players know 'out of sync' and 'rejoin'.
 110,status,Online menu status line (some are also shown as a notice),Playing solo. Friends can still join.,Playing solo. Friends can still join.,37,,37,,,SosOnline/Net/Session.cs,1597,
-111,status,Online menu status line (some are also shown as a notice),Waiting for the host's save to rejoin…,Re-syncing: waiting for the host's save…,38,,38,,,SosOnline/Net/Session.cs,1773,
+111,status,Online menu status line (some are also shown as a notice),Waiting for the host's save to rejoin…,Waiting for the host's save to rejoin…,38,,38,,,SosOnline/Net/Session.cs,1773,
 112,status,Online menu status line (some are also shown as a notice),{names} joined.,{names} joined.,8,yes,20,,,SosOnline/Net/Session.cs,1984,
-113,status,Online menu status line (some are also shown as a notice),{peer.Name} is joining…,{peer.Name} is catching up…,12,yes,24,,,SosOnline/Net/Session.cs,2147,Host side; 'catching up' is internal.
+113,status,Online menu status line (some are also shown as a notice),{peer.Name} is joining…,{peer.Name} is joining…,12,yes,24,,,SosOnline/Net/Session.cs,2147,Host side; 'catching up' is internal.
 114,status,Online menu status line (some are also shown as a notice),{peer.Name} joined.,{peer.Name} joined.,8,yes,20,,,SosOnline/Net/Session.cs,2260,
 115,status,Online menu status line (some are also shown as a notice),Catching up with the party…,Catching up with the party…,27,,27,,,SosOnline/Net/Session.cs,2312,
-116,status,Title screen > Online page status line (no session),"Play with up to two friends online.\nEach player controls a party member, like local co-op.","Online co-op: play together with up to two friends.\nEach player controls a party member, like local co-op.",90,,90,,,SosOnline/UI/NativeMenus.cs,663,
-117,pause entry,Local pause screen (Esc during co-op),End,End session for everyone,3,,3,,,SosOnline/UI/LocalPause.cs,165,Answers 'End co-op for everyone?' (row 144).
-118,pause entry,Local pause screen (Esc during co-op),Leave,Leave session,5,,5,,,SosOnline/UI/LocalPause.cs,165,Answers 'Leave co-op?' (row 145). The main page's 'Leave session' (LocalPause.cs:189) becomes 'Leave co-op' (row 75).
+116,status,Title screen > Online page status line (no session),"Play with up to two friends online.\nEach player controls a party member, like local co-op.","Play with up to two friends online.\nEach player controls a party member, like local co-op.",91,,91,,,SosOnline/UI/NativeMenus.cs,663,
+117,pause entry,Local pause screen (Esc during co-op),End,End,3,,3,,,SosOnline/UI/LocalPause.cs,165,Answers 'End co-op for everyone?' (row 144).
+118,pause entry,Local pause screen (Esc during co-op),Leave,Leave,5,,5,,,SosOnline/UI/LocalPause.cs,165,Answers 'Leave co-op?' (row 145). The main page's 'Leave session' (LocalPause.cs:189) becomes 'Leave co-op' (row 75).
 119,pause entry,Local pause screen (Esc during co-op),Back,Back,4,,4,,,SosOnline/UI/LocalPause.cs,173,
 120,pause entry,Local pause screen (Esc during co-op),Resume,Resume,6,,6,,,SosOnline/UI/LocalPause.cs,184,
 121,pause entry,Local pause screen (Esc during co-op),Options,Options,7,,7,,,SosOnline/UI/LocalPause.cs,185,
 122,pause entry,Local pause screen (Esc during co-op),Pause for everyone,Pause for everyone,18,,18,,,SosOnline/UI/LocalPause.cs,188,
-123,pause entry,Local pause screen (Esc during co-op),End co-op,End session,9,,9,,,SosOnline/UI/LocalPause.cs,189,Main page entry; host's confirm follows.
-124,screen,Catch-up / re-sync screen (full screen),The others keep playing while you join.,The others keep playing; nobody waits for you.,39,,39,,,SosOnline/UI/CatchUpScreen.cs,50,
+123,pause entry,Local pause screen (Esc during co-op),End co-op,End co-op,9,,9,,,SosOnline/UI/LocalPause.cs,189,Main page entry; host's confirm follows.
+124,screen,Catch-up / re-sync screen (full screen),The others keep playing while you join.,The others keep playing while you join.,39,,39,,,SosOnline/UI/CatchUpScreen.cs,50,
 125,screen,Catch-up / re-sync screen (full screen),Loading the area,Loading the area,16,,16,,,SosOnline/UI/CatchUpScreen.cs,54,
 126,screen,Catch-up / re-sync screen (full screen),Joining the game,Joining the game,16,,16,,,SosOnline/UI/CatchUpScreen.cs,72,
 127,screen,Catch-up / re-sync screen (full screen),Joining {host}'s game,Joining {host}'s game,15,yes,27,,,SosOnline/UI/CatchUpScreen.cs,72,
-128,screen,Catch-up / re-sync screen (full screen),Rejoining {host}'s game,Re-syncing with {host},17,yes,29,,,SosOnline/UI/CatchUpScreen.cs,90,
-129,screen,Catch-up / re-sync screen (full screen),Your game got out of sync,Your game got out of step,25,,25,,,SosOnline/UI/CatchUpScreen.cs,91,Same words as the toast (row 22).
-130,screen,Catch-up / re-sync screen (full screen),You'll rejoin as soon as {host}'s game allows saving.,You rejoin automatically as soon as {host}'s game allows saving (after battles and cutscenes).,47,yes,59,,,SosOnline/UI/CatchUpScreen.cs,92,Battles and cutscenes are the obvious cases; the player sees the game anyway.
-131,screen,Catch-up / re-sync screen (full screen),Esc: Leave co-op,Esc: leave the session instead.,16,,16,,,SosOnline/UI/CatchUpScreen.cs,93,
-132,screen,Catch-up / re-sync screen (full screen),Loading the party's save for this area.,Loading the save from where the party entered this area.,39,,39,,,SosOnline/UI/CatchUpScreen.cs,136,
+128,screen,Catch-up / re-sync screen (full screen),Rejoining {host}'s game,Rejoining {host}'s game,17,yes,29,,,SosOnline/UI/CatchUpScreen.cs,90,
+129,screen,Catch-up / re-sync screen (full screen),Your game got out of sync,Your game got out of sync,25,,25,,,SosOnline/UI/CatchUpScreen.cs,91,Same words as the toast (row 22).
+130,screen,Catch-up / re-sync screen (full screen),You'll rejoin as soon as {host}'s game allows saving.,You'll rejoin as soon as {host}'s game allows saving.,47,yes,59,,,SosOnline/UI/CatchUpScreen.cs,92,Battles and cutscenes are the obvious cases; the player sees the game anyway.
+131,screen,Catch-up / re-sync screen (full screen),Esc: Leave co-op,Esc: Leave co-op,16,,16,,,SosOnline/UI/CatchUpScreen.cs,93,
+132,screen,Catch-up / re-sync screen (full screen),Loading the party's save for this area.,Loading the party's save for this area.,39,,39,,,SosOnline/UI/CatchUpScreen.cs,136,
 133,screen,Catch-up / re-sync screen (full screen),Joining the party,Joining the party,17,,17,,,SosOnline/UI/CatchUpScreen.cs,137,
-134,screen,Catch-up / re-sync screen (full screen),Caught up. You'll take control in a moment.,Caught up. You take over a party member in a moment.,43,,43,,,SosOnline/UI/CatchUpScreen.cs,137,
-135,screen,Catch-up / re-sync screen (full screen),Replaying the party's moves: {done:N0} of {done + left:N0},Replaying what the party did here: {done:N0} of {done + left:N0} frames,33,yes,57,,,SosOnline/UI/CatchUpScreen.cs,138,'frames' is technical.
+134,screen,Catch-up / re-sync screen (full screen),Caught up. You'll take control in a moment.,Caught up. You'll take control in a moment.,43,,43,,,SosOnline/UI/CatchUpScreen.cs,137,
+135,screen,Catch-up / re-sync screen (full screen),Replaying the party's moves: {done:N0} of {done + left:N0},Replaying the party's moves: {done:N0} of {done + left:N0},33,yes,57,,,SosOnline/UI/CatchUpScreen.cs,138,'frames' is technical.
 136,screen,Catch-up / re-sync screen (full screen),", {rate / 60:F0}x speed",", {rate / 60:F0}x speed",9,yes,21,,,SosOnline/UI/CatchUpScreen.cs,139,
 137,screen,Catch-up / re-sync screen (full screen),", about {Mathf.CeilToInt((float)eta)} s left.",", about {Mathf.CeilToInt((float)eta)} s left.",16,yes,28,,,SosOnline/UI/CatchUpScreen.cs,140,
-138,screen,Catch-up / re-sync screen (full screen),Replaying the party's moves · {done:N0} of {done + left:N0},Replaying what the party did in this area · {done:N0} of {done + left:N0} frames,34,yes,58,,,SosOnline/UI/CatchUpScreen.cs,213,Same as row 135.
+138,screen,Catch-up / re-sync screen (full screen),Replaying the party's moves · {done:N0} of {done + left:N0},Replaying the party's moves · {done:N0} of {done + left:N0},34,yes,58,,,SosOnline/UI/CatchUpScreen.cs,213,Same as row 135.
 139,screen,Catch-up / re-sync screen (full screen), · {rate / 60:F0}× speed, · {rate / 60:F0}× speed,10,yes,22,,,SosOnline/UI/CatchUpScreen.cs,214,
 140,screen,Catch-up / re-sync screen (full screen), · about {Mathf.CeilToInt((float)eta)} s left, · about {Mathf.CeilToInt((float)eta)} s left,16,yes,28,,,SosOnline/UI/CatchUpScreen.cs,215,
 141,screen,Catch-up / re-sync screen (step title),Loading the area,Loading the area,16,,16,,,SosOnline/Net/Session.cs,110,
 142,screen,Catch-up / re-sync screen (step title),Joining the party,Joining the party,17,,17,,,SosOnline/Net/Session.cs,113,
 143,screen,Catch-up / re-sync screen (step title),Catching up,Catching up,11,,11,,,SosOnline/Net/Session.cs,116,
-144,screen,Local pause screen (Esc during co-op),End co-op for everyone?,End the co-op session?,23,,23,,,SosOnline/UI/LocalPause.cs,290,
-145,screen,Local pause screen (Esc during co-op),Leave co-op?,Leave the co-op session?,12,,12,,,SosOnline/UI/LocalPause.cs,290,
+144,screen,Local pause screen (Esc during co-op),End co-op for everyone?,End co-op for everyone?,23,,23,,,SosOnline/UI/LocalPause.cs,290,
+145,screen,Local pause screen (Esc during co-op),Leave co-op?,Leave co-op?,12,,12,,,SosOnline/UI/LocalPause.cs,290,
 146,screen,Local pause screen (Esc during co-op),Paused,Paused,6,,6,,,SosOnline/UI/LocalPause.cs,291,
-147,screen,Local pause screen (Esc during co-op),These settings only change on this PC.,Left and right change a setting. Only this PC changes.,38,,38,,,SosOnline/UI/LocalPause.cs,296,
-148,screen,Local pause screen (Esc during co-op),Everyone may continue playing solo.,Everyone keeps playing on their own from here.,35,,35,,,SosOnline/UI/LocalPause.cs,297,Wording from row 1.
-149,screen,Local pause screen (Esc during co-op),The AI takes over your character.,Your character goes back to the party AI; the others keep playing.,33,,33,,,SosOnline/UI/LocalPause.cs,297,
-150,screen,Local pause screen (Esc during co-op),Only you are paused. The game keeps running.,Only you are paused. The game keeps running for everyone.,44,,44,,,SosOnline/UI/LocalPause.cs,298,
+147,screen,Local pause screen (Esc during co-op),These settings only change on this PC.,These settings only change on this PC.,38,,38,,,SosOnline/UI/LocalPause.cs,296,
+148,screen,Local pause screen (Esc during co-op),Everyone may continue playing solo.,Everyone may continue playing solo.,35,,35,,,SosOnline/UI/LocalPause.cs,297,Wording from row 1.
+149,screen,Local pause screen (Esc during co-op),The AI takes over your character.,The AI takes over your character.,33,,33,,,SosOnline/UI/LocalPause.cs,297,
+150,screen,Local pause screen (Esc during co-op),Only you are paused. The game keeps running.,Only you are paused. The game keeps running.,44,,44,,,SosOnline/UI/LocalPause.cs,298,
 151,screen,Local pause screen (Esc during co-op) (Options page title),Options,Options,7,,7,,,SosOnline/UI/LocalPause.cs,289,
 152,banner,Menu banner (who has which menu open),Pause menu,Pause menu,10,,10,,,SosOnline/UI/MenuStatus.cs,25,
 153,banner,Menu banner (who has which menu open),Menu,Menu,4,,4,,,SosOnline/UI/MenuStatus.cs,26,
@@ -168,13 +168,13 @@
 167,banner,Menu banner (who has which menu open),Menu: Inventory,Menu: Inventory,15,,15,,,SosOnline/UI/MenuStatus.cs,126,
 168,banner,Menu banner (who has which menu open),Menu: Relics,Menu: Relics,12,,12,,,SosOnline/UI/MenuStatus.cs,127,
 169,banner,Menu banner (who has which menu open),"{(Paused ? ""Paused for everyone"" : ""Everyone sees this menu"")}{(Path.Length > 0 ? $"": {Path}"" : """")}","{(Paused ? ""Paused for everyone"" : ""Everyone sees this menu"")}{(Path.Length > 0 ? $"": {Path}"" : """")}",0,yes,24,,,SosOnline/UI/MenuStatus.cs,141,
-170,banner,Menu banner (who has which menu open),The others wait until you close it.,The other players wait until you close it.,35,,35,,,SosOnline/UI/MenuStatus.cs,142,
+170,banner,Menu banner (who has which menu open),The others wait until you close it.,The others wait until you close it.,35,,35,,,SosOnline/UI/MenuStatus.cs,142,
 171,banner,Menu banner (who has which menu open),"P{Slot + 1} {s.SlotName[Slot] ?? """"}","P{Slot + 1} {s.SlotName[Slot] ?? """"}",2,yes,26,,,SosOnline/UI/MenuStatus.cs,143,
 172,banner,Menu banner (who has which menu open),Someone,Someone,7,,7,,,SosOnline/UI/MenuStatus.cs,143,
 173,banner,Menu banner (who has which menu open),"{who} {(Paused ? ""paused the game"" : ""opened a menu"")}{(Path.Length > 0 ? $"": {Path}"" : """")}","{who} {(Paused ? ""paused the game"" : ""opened a menu"")}{(Path.Length > 0 ? $"": {Path}"" : """")}",1,yes,37,,,SosOnline/UI/MenuStatus.cs,144,
-174,banner,Menu banner (who has which menu open),They're in control until they close it.,They have the controls until they close it.,39,,39,,,SosOnline/UI/MenuStatus.cs,145,
+174,banner,Menu banner (who has which menu open),They're in control until they close it.,They're in control until they close it.,39,,39,,,SosOnline/UI/MenuStatus.cs,145,
 175,banner,Menu banner (who has which menu open),"{who} {(slots.Count == 1 ? ""is"" : ""are"")} paused","{who} {(slots.Count == 1 ? ""is"" : ""are"")} paused",8,yes,32,,,SosOnline/UI/MenuStatus.cs,160,
-176,banner,Menu banner (who has which menu open),The game keeps running.,"{(names.Length > 0 ? names : ""They"")} {(slots.Count == 1 ? ""has"" : ""have"")} the pause screen open. The game keeps running.",23,,23,,,SosOnline/UI/MenuStatus.cs,161,The main line already says who is paused; the names were a repeat.
+176,banner,Menu banner (who has which menu open),The game keeps running.,The game keeps running.,23,,23,,,SosOnline/UI/MenuStatus.cs,161,The main line already says who is paused; the names were a repeat.
 177,option,Local pause > Options,Master volume,Master volume,13,,13,,,SosOnline/UI/LocalOptions.cs,22,
 178,option,Local pause > Options,Music,Music,5,,5,,,SosOnline/UI/LocalOptions.cs,23,
 179,option,Local pause > Options,Sound effects,Sound effects,13,,13,,,SosOnline/UI/LocalOptions.cs,24,
@@ -188,45 +188,45 @@
 187,option,Local pause > Options (value of a setting),< {value} >,< {value} >,4,yes,16,,,SosOnline/UI/LocalPause.cs,277,
 188,reason,Notice as '<name> <reason>. The AI plays their character.',timed out,timed out,9,,9,,,SosOnline/Net/Session.cs,595,
 189,reason,Notice as '<name> <reason>. The AI plays their character.',lost connection,lost connection,15,,15,,,SosOnline/Net/Session.cs,1809,
-190,reason,Online menu status line as 'Co-op stopped: <reason>',the host ended it,ended by host,17,,17,,,SosOnline/Net/Session.cs,374,
-191,reason,Online menu status line as 'Co-op stopped: <reason>',you left,left the session,8,,8,,,SosOnline/Net/Session.cs,462,
-192,reason,Online menu status line as 'Co-op stopped: <reason>',joining was postponed,drop-in postponed,21,,21,,,SosOnline/Net/Session.cs,954,
-193,reason,Online menu status line as 'Co-op stopped: <reason>',the host left,host left,13,,13,,,SosOnline/Net/Session.cs,1036,
-194,reason,Online menu status line as 'Co-op stopped: <reason>',lost the host,host lost,13,,13,,,SosOnline/Net/Session.cs,1117,Next to 'Lost connection to the host' (row 46) this may be redundant.
-195,reason,Online menu status line as 'Co-op stopped: <reason>',out of sync while joining,catch-up diverged,25,,25,,,SosOnline/Net/Session.cs,1342,
-196,reason,Online menu status line as 'Co-op stopped: <reason>',everyone left,the last guest left,13,,13,,,SosOnline/Net/Session.cs,1596,Row 24 already says 'Everyone left. Friends can still join.'
-197,reason,Online menu status line as 'Co-op stopped: <reason>',couldn't catch up,catch-up failed,17,,17,,,SosOnline/Net/Session.cs,2318,
-198,reason,Online menu status line as 'Co-op stopped: <reason>',the host ended it,The host ended the co-op session,17,,17,,,SosOnline/UI/LocalPause.cs,168,
-199,reason,Online menu status line as 'Co-op stopped: <reason>' (guest),the host ended it,Host ended the co-op session,17,,17,,,SosOnline/Net/Session.cs,371,Sent to guests; shown after 'Co-op ended: '.
-200,steam,Friends' Steam list (rich presence),Hosting co-op,Hosting online co-op,13,,13,,,SosOnline/Net/Session.cs,638,Steam rich presence: friends already see the game's name.
+190,reason,Online menu status line as 'Co-op stopped: <reason>',the host ended it,the host ended it,17,,17,,,SosOnline/Net/Session.cs,374,
+191,reason,Online menu status line as 'Co-op stopped: <reason>',you left,you left,8,,8,,,SosOnline/Net/Session.cs,462,
+192,reason,Online menu status line as 'Co-op stopped: <reason>',joining was postponed,joining was postponed,21,,21,,,SosOnline/Net/Session.cs,954,
+193,reason,Online menu status line as 'Co-op stopped: <reason>',the host left,the host left,13,,13,,,SosOnline/Net/Session.cs,1036,
+194,reason,Online menu status line as 'Co-op stopped: <reason>',lost the host,lost the host,13,,13,,,SosOnline/Net/Session.cs,1117,Next to 'Lost connection to the host' (row 46) this may be redundant.
+195,reason,Online menu status line as 'Co-op stopped: <reason>',out of sync while joining,out of sync while joining,25,,25,,,SosOnline/Net/Session.cs,1342,
+196,reason,Online menu status line as 'Co-op stopped: <reason>',everyone left,everyone left,13,,13,,,SosOnline/Net/Session.cs,1596,Row 24 already says 'Everyone left. Friends can still join.'
+197,reason,Online menu status line as 'Co-op stopped: <reason>',couldn't catch up,couldn't catch up,17,,17,,,SosOnline/Net/Session.cs,2318,
+198,reason,Online menu status line as 'Co-op stopped: <reason>',the host ended it,the host ended it,17,,17,,,SosOnline/UI/LocalPause.cs,168,
+199,reason,Online menu status line as 'Co-op stopped: <reason>' (guest),the host ended it,the host ended it,17,,17,,,SosOnline/Net/Session.cs,371,Sent to guests; shown after 'Co-op ended: '.
+200,steam,Friends' Steam list (rich presence),Hosting co-op,Hosting co-op,13,,13,,,SosOnline/Net/Session.cs,638,Steam rich presence: friends already see the game's name.
 201,overlay,Catch-up screen fallback (before the game's art loads),Joining the game,Joining the game,16,,16,,,SosOnline/UI/CatchUpScreen.cs,194,
 202,overlay,Catch-up screen fallback (before the game's art loads),Joining {host}'s game,Joining {host}'s game,15,yes,27,,,SosOnline/UI/CatchUpScreen.cs,194,
-203,overlay,Catch-up screen fallback (before the game's art loads),The others keep playing while you join.,The others keep playing; nobody waits for you.,39,,39,,,SosOnline/UI/CatchUpScreen.cs,219,Same as row 124.
+203,overlay,Catch-up screen fallback (before the game's art loads),The others keep playing while you join.,The others keep playing while you join.,39,,39,,,SosOnline/UI/CatchUpScreen.cs,219,Same as row 124.
 204,overlay,F8 overlay (developer menu),Sea of Stars: Online Co-op,Sea of Stars: Online Co-op,26,,26,,,SosOnline/UI/Overlay.cs,102,
 205,overlay,F8 overlay (developer menu),Signed in as {SteamApi.LocalName},Signed in as {SteamApi.LocalName},13,yes,25,,,SosOnline/UI/Overlay.cs,103,
 206,overlay,F8 overlay (developer menu),Steam not detected,Steam not detected,18,,18,,,SosOnline/UI/Overlay.cs,103,
 207,overlay,F8 overlay (developer menu),Cancel,Cancel,6,,6,,,SosOnline/UI/Overlay.cs,113,
-208,overlay,F8 overlay (developer menu),Leave co-op,Leave session,11,,11,,,SosOnline/UI/Overlay.cs,119,
-209,overlay,F8 overlay (developer menu),Open logs folder,Open logs folder (to share if something went wrong),16,,16,,,SosOnline/UI/Overlay.cs,128,The parenthesis didn't help decide anything.
-210,overlay,F8 overlay (developer menu),Host,Host a session,4,,4,,,SosOnline/UI/Overlay.cs,136,
+208,overlay,F8 overlay (developer menu),Leave co-op,Leave co-op,11,,11,,,SosOnline/UI/Overlay.cs,119,
+209,overlay,F8 overlay (developer menu),Open logs folder,Open logs folder,16,,16,,,SosOnline/UI/Overlay.cs,128,The parenthesis didn't help decide anything.
+210,overlay,F8 overlay (developer menu),Host,Host,4,,4,,,SosOnline/UI/Overlay.cs,136,
 211,overlay,F8 overlay (developer menu),Friends in Sea of Stars:,Friends in Sea of Stars:,24,,24,,,SosOnline/UI/Overlay.cs,138,
 212,overlay,F8 overlay (developer menu),Join,Join,4,,4,,,SosOnline/UI/Overlay.cs,146,
-213,overlay,F8 overlay (developer menu),Invite friends,Invite friends (Steam overlay),14,,14,,,SosOnline/UI/Overlay.cs,169,
-214,overlay,F8 overlay (developer menu),Waiting for everyone to load…,Waiting for everyone to load the save data…,29,,29,,,SosOnline/UI/Overlay.cs,179,
-215,overlay,F8 overlay (developer menu),Go to the Title screen to start.,Return to the title screen to start the co-op game.,32,,32,,,SosOnline/UI/Overlay.cs,183,
+213,overlay,F8 overlay (developer menu),Invite friends,Invite friends,14,,14,,,SosOnline/UI/Overlay.cs,169,
+214,overlay,F8 overlay (developer menu),Waiting for everyone to load…,Waiting for everyone to load…,29,,29,,,SosOnline/UI/Overlay.cs,179,
+215,overlay,F8 overlay (developer menu),Go to the Title screen to start.,Go to the Title screen to start.,32,,32,,,SosOnline/UI/Overlay.cs,183,
 216,overlay,F8 overlay (developer menu),Start co-op from save:,Start co-op from save:,22,,22,,,SosOnline/UI/Overlay.cs,187,
-217,overlay,F8 overlay (developer menu),Stop hosting,Close session,12,,12,,,SosOnline/UI/Overlay.cs,193,
+217,overlay,F8 overlay (developer menu),Stop hosting,Stop hosting,12,,12,,,SosOnline/UI/Overlay.cs,193,
 218,overlay,F8 overlay (developer menu),"Sync checks {s.Sync.Checks} · corrections {s.Sync.Corrections}{(s.Sync.Desynced ? "" · DESYNC: "" + s.Sync.LastDesyncReason : """")}","Sync checks {s.Sync.Checks} · corrections {s.Sync.Corrections}{(s.Sync.Desynced ? "" · DESYNC: "" + s.Sync.LastDesyncReason : """")}",27,yes,63,,,SosOnline/UI/Overlay.cs,200,
-219,overlay,F8 overlay (developer menu),End co-op,End co-op (everyone keeps playing solo),9,,9,,,SosOnline/UI/Overlay.cs,202,
+219,overlay,F8 overlay (developer menu),End co-op,End co-op,9,,9,,,SosOnline/UI/Overlay.cs,202,
 220,overlay,F8 overlay / fallback text,not hosting,not hosting,11,,11,,,SosOnline/UI/Overlay.cs,148,
 221,overlay,F8 overlay / fallback text,"Input delay: {(s.ConfiguredDelay == 0 ? ""auto"" : s.ConfiguredDelay + "" frames"")}","Input delay: {(s.ConfiguredDelay == 0 ? ""auto"" : s.ConfiguredDelay + "" frames"")}",13,yes,25,,,SosOnline/UI/Overlay.cs,172,
 222,overlay,F8 overlay / fallback text,"Online co-op · {string.Join("", "", names)}{ping} · {sync}{stall}","Online co-op · {string.Join("", "", names)}{ping} · {sync}{stall}",18,yes,66,,,SosOnline/UI/Overlay.cs,213,
 223,overlay,F8 overlay HUD line (parts),synced | DESYNC | waiting {ms} ms | {ping} ms,synced | DESYNC | waiting {ms} ms | {ping} ms,35,yes,59,,,SosOnline/UI/Overlay.cs,210,
-224,error,Notice as 'Can't join: <reason>' (from the host),version mismatch. Restart the game to update.,"different mod versions (host {SessionLogs.Build}, you {modVersion}). Restart the game to get the latest version automatically, or install the same zip",57,,57,80,,SosOnline/Net/Session.cs,712,Was about 165 chars with the prefix (cut at 80). Versions are in the logs.
-225,error,Notice as 'Can't join: <reason>' (from the host),different Sea of Stars version.,"game version mismatch (host {Application.version}, you {gameVersion})",43,,43,80,,SosOnline/Net/Session.cs,713,
-226,error,Notice as 'Can't join: <reason>' (from the host),different game setup.,input configuration mismatch,33,,33,80,,SosOnline/Net/Session.cs,714,Action-table hash: usually another mod or game version.
-227,error,Notice as 'Can't join: <reason>' (from the host),the game is starting. Try again in a moment.,"the session is starting, try again in a moment",56,,56,80,,SosOnline/Net/Session.cs,715,
-228,error,Notice as 'Can't join: <reason>' (from the host),the game is full.,the session is full,29,,29,80,,SosOnline/Net/Session.cs,717,
+224,error,Notice as 'Can't join: <reason>' (from the host),version mismatch. Restart the game to update.,version mismatch. Restart the game to update.,45,,45,80,,SosOnline/Net/Session.cs,712,Was about 165 chars with the prefix (cut at 80). Versions are in the logs.
+225,error,Notice as 'Can't join: <reason>' (from the host),different Sea of Stars version.,different Sea of Stars version.,31,,31,80,,SosOnline/Net/Session.cs,713,
+226,error,Notice as 'Can't join: <reason>' (from the host),different game setup.,different game setup.,21,,21,80,,SosOnline/Net/Session.cs,714,Action-table hash: usually another mod or game version.
+227,error,Notice as 'Can't join: <reason>' (from the host),the game is starting. Try again in a moment.,the game is starting. Try again in a moment.,44,,44,80,,SosOnline/Net/Session.cs,715,
+228,error,Notice as 'Can't join: <reason>' (from the host),the game is full.,the game is full.,17,,17,80,,SosOnline/Net/Session.cs,717,
 229,menu entry,Title screen > Online page and pause menu Online popup,Restart to update ({Current.ToString(3)} -> {_downloaded.ToString(3)}),Restart to update ({Current.ToString(3)} -> {_downloaded.ToString(3)}),24,yes,48,,,SosOnline/Update/AutoUpdate.cs,56,Fine as is.
 230,status,Online menu status line,Ping {s.Peers.Max(p => p.rtt):F0} ms,Ping {s.Peers.Max(p => p.rtt):F0} ms,8,yes,20,,,SosOnline/UI/NativeMenus.cs,666,
-231,menu entry,Title screen > Online > Start (save list),Slot {i + 1} (autosave),Slot {i + 1} (autosave),16,yes,28,,,SosOnline/Game/GameBridge.cs,443,Check it matches the game's own save slot names.
+231,menu entry,Title screen > Online > Start (save list),Slot {i + 1} (autosave),Slot {i + 1} (autosave),16,yes,28,,,SosOnline/Game/GameBridge.cs,443,"Checked: the game's save screen numbers its slots 1-3 and shows the location and the save's date and time ('1  The Forbidden Cavern  11/15/2026 9:50 PM'); empty slots say 'No data'. Kept 'Slot N' as is, by choice."

@@ -140,11 +140,13 @@ internal static class TestHarness
             case 4: Shot("ui-online"); _uiAt = now + 1; break;
             case 5: UI.NativeMenus.ClickEntry("Host"); _uiAt = now + 5; break;
             case 6: Shot("ui-hosting"); _uiAt = now + 1; break;
-            case 7: Plugin.Log.LogInfo($"[test] lobby={Session.Instance.LobbyId} phase={Session.Instance.Phase}"); Session.Instance.Leave(); _uiAt = now + 2; break;
-            case 8: Shot("ui-left"); _uiAt = now + 1; break;
-            case 9: UI.NativeMenus.OpenPauseMenuForTest(); _uiAt = now + 2; break;
-            case 10: Shot("ui-popup"); _uiAt = now + 1; break;
-            case 11: Plugin.Log.LogInfo("[test] ui test done"); Application.Quit(); break;
+            case 7: UI.NativeMenus.ClickEntry("Start"); _uiAt = now + 2; break;
+            case 8: Shot("ui-saves"); Plugin.Log.LogInfo("[test] saves: " + string.Join(" | ", GameBridge.ListSaveSlots().Select(s => s.label))); _uiAt = now + 1; break;
+            case 9: Plugin.Log.LogInfo($"[test] lobby={Session.Instance.LobbyId} phase={Session.Instance.Phase}"); Session.Instance.Leave(); _uiAt = now + 2; break;
+            case 10: Shot("ui-left"); _uiAt = now + 1; break;
+            case 11: UI.NativeMenus.OpenPauseMenuForTest(); _uiAt = now + 2; break;
+            case 12: Shot("ui-popup"); _uiAt = now + 1; break;
+            case 13: Plugin.Log.LogInfo("[test] ui test done"); Application.Quit(); break;
         }
         _uiStep++;
     }
