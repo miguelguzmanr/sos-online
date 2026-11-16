@@ -35,9 +35,22 @@ internal static class Toast
     private static TMPro.TextMeshProUGUI _text;
     private static string _laidOut;
 
+    /// <summary>
+    /// Longest notice, in characters. A notice is read at a glance during play: one short sentence about what
+    /// happened, and at most what to do. Details belong in the log or the Online menu. Longer text is cut at a word
+    /// and logged as a warning so it gets rewritten.
+    /// </summary>
+    public const int MaxChars = 80;
+
     public static void Show(string message)
     {
         if (string.IsNullOrEmpty(message)) return;
+        if (message.Length > MaxChars)
+        {
+            Plugin.Log.LogWarning($"[toast] over {MaxChars} characters ({message.Length}), shortened: {message}");
+            int cut = message.LastIndexOf(' ', MaxChars - 3);
+            message = message[..(cut > MaxChars / 2 ? cut : MaxChars - 3)].TrimEnd(',', ';', ':', '.') + "...";
+        }
         Plugin.Log.LogInfo("[toast] " + message);
         Pending.Enqueue(message);
     }

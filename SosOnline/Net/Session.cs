@@ -229,7 +229,10 @@ internal sealed class Session
         return true;
     }
 
-    private string LocalName => UsingUdp ? $"Player@{Transport.LocalId}" : SteamApi.LocalName;
+    private string LocalName =>
+        // --sosonline-name: a test name, with escapes (backslash-n, backslash-u3042) for characters a command line can't carry.
+        TestHarness.TryArg("name", out var testName) ? PlayerNames.Clean(System.Text.RegularExpressions.Regex.Unescape(testName), "Player 1")
+        : UsingUdp ? $"Player@{Transport.LocalId}" : PlayerNames.Clean(SteamApi.LocalName, "Player 1");
 
     // ------------------------------------------------------------------ host
 
@@ -372,6 +375,7 @@ internal sealed class Session
             Send(peer.Id, ms, true);
         }
         StopLockstep("ended by host");
+        CloseAfterEnd();
     }
 
     /// <summary>
@@ -382,7 +386,33 @@ internal sealed class Session
     {
         if (Phase != Phase.Running) return;
         StopLockstep(reason);
-        Toast.Show("Co-op session ended. Everyone keeps playing on their own.");
+        _endedAt = Now;
+        if (IsHost) CloseAfterEnd();
+        else Toast.Show("Co-op session ended. You keep playing on your own.");
+    }
+
+    /// <summary>Seconds the host waits after ending before it disconnects: guests reach the end frame first.</summary>
+    private const double CloseDelay = 1.5;
+
+    /// <summary>Host: the session was ended for everyone; disconnect once guests had time to stop on the same frame.</summary>
+    private double _closeAt = -1;
+
+    /// <summary>When this PC last stopped lockstep because the host ended the session (guests: the host's Bye is expected).</summary>
+    private double _endedAt = -1000;
+
+    /// <summary>
+    /// Host: "End session" means the session is over, not back to solo with the lobby open. Before, everyone stayed
+    /// connected, so the host's game saw a connected friend (a guest still dropping in, or any guest) and started a
+    /// new session from its gameplay right away. The lobby closes and Open to friends turns off, like "Close session".
+    /// </summary>
+    private void CloseAfterEnd()
+    {
+        if (!IsHost) return;
+        Settings.OpenToFriends = false;
+        _closeAt = Now + CloseDelay;
+        Status = "Co-op session ended.";
+        Toast.Show("Co-op session ended. Open to friends is now off.");
+        Plugin.Log.LogInfo($"[session] ended by the host: closing the lobby in {CloseDelay:F1} s; open to friends off");
     }
 
     // ------------------------------------------------------------------ guest
@@ -391,8 +421,9 @@ internal sealed class Session
     {
         if (!EnsureSteam()) return;
         ulong lobby = SteamApi.FriendLobby(friendId);
-        if (lobby == 0) { SetError($"{SteamApi.FriendName(friendId)} is not hosting a session."); return; }
-        JoinLobby(lobby, SteamApi.FriendName(friendId));
+        string friend = PlayerNames.Clean(SteamApi.FriendName(friendId), "Your friend");
+        if (lobby == 0) { SetError($"{friend} is not hosting a session."); return; }
+        JoinLobby(lobby, friend);
     }
 
     /// <summary>Join a lobby by id (friend list, Steam invite, or +connect_lobby).</summary>
@@ -449,7 +480,7 @@ internal sealed class Session
     /// <summary>Guest: zip this PC's logs and send them to the host (the player's own choice).</summary>
     public void SendLogsToHost()
     {
-        if (!InSession || IsHost) { Toast.Show("Join a friend's session first: logs go to the host."); return; }
+        if (!InSession || IsHost) { Toast.Show("Join a session first: logs go to the host."); return; }
         if (!LogShare.Begin()) { Toast.Show("Your logs are already on their way."); return; }
         Toast.Show("Packing your logs…");
     }
@@ -492,6 +523,7 @@ internal sealed class Session
     public void Update()
     {
         UpdateLogShare();
+        TrySoloLeaves();
         // A guest goes back to its own saves once it has left and is on the title screen again.
         if (!InSession && SaveMirror.Active && GameBridge.AtTitleScreen)
             SaveMirror.SetActiveAndReload(false);
@@ -511,6 +543,13 @@ internal sealed class Session
         }
         _lastUpdate = now;
         if (!Pump()) return;
+
+        if (_closeAt >= 0 && now >= _closeAt)
+        {
+            Leave();
+            Status = "Co-op session ended.";
+            return;
+        }
 
         if (Role == Role.Guest && Phase == Phase.Connecting && now >= _nextHello)
         {
@@ -670,7 +709,7 @@ internal sealed class Session
                 string modVersion = r.ReadString();
                 string gameVersion = r.ReadString();
                 uint actionHash = r.ReadUInt32();
-                string name = r.ReadString();
+                string rawName = r.ReadString();
                 if (peer != null) { SendWelcome(peer); return; } // duplicate hello
                 string reason = null;
                 if (proto != Protocol.Version)
@@ -679,6 +718,7 @@ internal sealed class Session
                 else if (ActionTable.Ready && actionHash != 0 && actionHash != ActionTable.Hash) reason = "input configuration mismatch";
                 else if (Phase == Phase.AwaitingReady) reason = "the session is starting, try again in a moment";
                 int slot = Array.FindIndex(SlotPeer, 1, id => id == 0);
+                string name = PlayerNames.Clean(rawName, $"Player {Math.Max(slot, 1) + 1}");
                 if (reason == null && slot < 0) reason = "the session is full";
                 if (reason != null)
                 {
@@ -703,7 +743,7 @@ internal sealed class Session
                 {
                     // Not refused (the protocol matched), but a different build is the first suspect if anything breaks.
                     Plugin.Log.LogWarning($"[session] {name} runs mod build {modVersion}, this PC {SessionLogs.Build}");
-                    Toast.Show($"{name} runs a different build of the mod ({modVersion}). Use the same zip if anything goes wrong.");
+                    Toast.Show($"{name} has a different mod version ({modVersion}).");
                 }
                 break;
             }
@@ -767,7 +807,7 @@ internal sealed class Session
                 string path = LogShare.Receive(from, peer.Name, id, index, count, piece);
                 if (path == null) return;
                 Plugin.Log.LogInfo($"[logs] received {peer.Name}'s logs: {path}");
-                Toast.Show($"Received {peer.Name}'s logs: {System.IO.Path.Combine("logs", "received", System.IO.Path.GetFileName(path))}");
+                Toast.Show($"Received {peer.Name}'s logs (Open logs folder).");
                 var (w, ms) = Protocol.Begin(Msg.LogReceived);
                 Send(from, ms, true);
                 break;
@@ -789,7 +829,7 @@ internal sealed class Session
                 {
                     peer.HoldUntil = now + ResyncHold;
                     Plugin.Log.LogWarning($"[resync] {peer.Name}: {peer.ResyncTimes.Count} re-syncs in {ResyncWindow:F0} s; next drop-in in {ResyncHold:F0} s");
-                    Toast.Show($"{peer.Name} keeps going out of sync. They drop in again in a minute. If it keeps happening, end the session and start again from the title screen.");
+                    Toast.Show($"{peer.Name} keeps going out of sync. Retrying in a minute.");
                 }
                 LeaveScheduled(peer);
                 break;
@@ -824,7 +864,7 @@ internal sealed class Session
                 Toast.Show($"{SlotName[0] ?? "The host"} received your logs. Thanks!");
                 break;
             case Msg.LogRequest:
-                Toast.Show($"{SlotName[0] ?? "The host"} asks for your logs: press Esc (or title screen → Online) → Send logs to the host.");
+                Toast.Show($"{SlotName[0] ?? "The host"} asks for your logs (Online menu).");
                 break;
             case Msg.Reject:
                 SetError("Host refused: " + r.ReadString());
@@ -834,7 +874,8 @@ internal sealed class Session
                 for (int s = 0; s < InputOverride.SlotCount; s++)
                 {
                     SlotPeer[s] = r.ReadUInt64();
-                    SlotName[s] = r.ReadString();
+                    string slotName = r.ReadString();
+                    SlotName[s] = string.IsNullOrEmpty(slotName) ? null : PlayerNames.Clean(slotName, $"Player {s + 1}");
                 }
                 if (_peers.TryGetValue(HostId, out var hp)) hp.Name = SlotName[0];
                 break;
@@ -995,7 +1036,9 @@ internal sealed class Session
                 break;
             }
             case Msg.Bye:
-                SetError("The host closed the session.");
+                // Right after the host ended the session: the end toast already said so.
+                if (Now - _endedAt < 10) { Plugin.Log.LogInfo("[session] the host closed the ended session"); Status = "Co-op session ended."; }
+                else SetError("The host closed the session.");
                 if (Phase == Phase.Running) StopLockstep("host left");
                 Reset();
                 break;
@@ -1072,7 +1115,7 @@ internal sealed class Session
             if (Phase == Phase.AwaitingReady) TryBeginLockstep();
             _joiners.Remove(id);
             Status = $"{peer.Name} {why}.";
-            Toast.Show(Phase == Phase.Running ? $"{peer.Name} {why}. Their character rejoins the party AI." : Status);
+            Toast.Show(Phase == Phase.Running ? $"{peer.Name} {why}. The AI plays their character." : Status);
         }
         else
         {
@@ -1101,6 +1144,8 @@ internal sealed class Session
         // An area log from an earlier run counts frames of that run.
         if (IsHost) _area.Clear("a new run started");
         _resyncing = false;
+        _soloRestored = false;
+        _soloLeavesPending = false;
         _desyncNotifiedFrame = -1;
         Engine.SendInput = BroadcastInput;
         Engine.PollNetwork = Pump;
@@ -1180,9 +1225,65 @@ internal sealed class Session
             LoadBarrier.Release();
         }
         GameBridge.UnlockTime();
+        // A guest that re-syncs drops in again by a reload; anyone else plays alone from here.
+        if (!_resyncing) ReturnToSolo();
         try { GameBridge.Input?.AutoAssignUnassignedControllers(); } catch { }
         if (InSession) Phase = Phase.Lobby;
         foreach (var peer in _peers.Values) peer.Ready = false;
+    }
+
+    // ------------------------------------------------------------------ back to a solo game
+
+    /// <summary>This PC's game was put back to solo since the last run started (devices on P1, other players gone).</summary>
+    private bool _soloRestored = true;
+    private bool _soloLeavesPending;
+    private double _nextSoloTry, _soloLeavesUntil;
+
+    /// <summary>
+    /// After lockstep stops, this PC plays alone: all its devices go to the game's P1 (who controls the leader), and
+    /// every other co-op player leaves so the party AI takes their character.
+    ///
+    /// Before, nothing did this. During a session each PC's devices drive its own slot's player, so a guest's pad and
+    /// keyboard stayed on P2 after leaving: the leader stood still and the guest drove a follower. A guest's own
+    /// scheduled leave didn't run either (its lockstep stops on that same frame, before scheduled actions). And when the
+    /// host ended the session, the other players' characters stayed with players that have no devices, standing still
+    /// until someone reassigned players. The game can refuse a leave (a battle or a cutscene), so leaves are retried.
+    /// </summary>
+    private void ReturnToSolo()
+    {
+        if (_soloRestored) return;
+        _soloRestored = true;
+        GameBridge.ResetSlotPlayers();
+        var first = GameBridge.GamePlayer(0);
+        if (first != null) ControllerRouting.RouteLocalDevicesTo(first);
+        _soloLeavesPending = true;
+        _nextSoloTry = 0;
+        _soloLeavesUntil = Now + 600;
+        Plugin.Log.LogInfo("[session] back to a solo game: this PC's devices on P1, other players leave");
+        TrySoloLeaves();
+    }
+
+    /// <summary>Makes every co-op player but P1 leave; again every second until the game lets them (or a run starts).</summary>
+    private void TrySoloLeaves()
+    {
+        if (!_soloLeavesPending || Now < _nextSoloTry) return;
+        if (Engine.Running || Now > _soloLeavesUntil) { _soloLeavesPending = false; return; }
+        _nextSoloTry = Now + 1;
+        bool waiting = false;
+        for (int i = 1; i < InputOverride.SlotCount; i++)
+        {
+            try
+            {
+                var player = GameBridge.GamePlayer(i);
+                var cp = player == null ? null : GameBridge.Coop?.GetSinglePlayerPlusPlayer(player);
+                if (cp == null || !cp.Playing) continue;
+                cp.Leave();
+                if (cp.Playing) waiting = true;
+                else Plugin.Log.LogInfo($"[session] P{i + 1} left this PC's game; the party AI takes their character");
+            }
+            catch (Exception e) { waiting = true; Plugin.Log.LogWarning($"[session] P{i + 1} could not leave yet: {e.Message}"); }
+        }
+        if (!waiting) _soloLeavesPending = false;
     }
 
     private void BroadcastInput(int frame, int slot, InputSnapshot input, InputSnapshot system)
@@ -1466,7 +1567,7 @@ internal sealed class Session
     /// </summary>
     private void UpdateSoloCoop()
     {
-        if (!IsHost) return;
+        if (!IsHost || _closeAt >= 0) return; // ended: closing, not starting again
         // Wait for a few round trips: the first reply after connecting can be very slow (1630 ms on 2026-11-15), and
         // the input delay picked from it stays for the whole session.
         if (HostInGameplay && _peers.Count > 0 && ActionTable.Ready && _peers.Values.All(p => p.RttSamples.Count >= RttForDelay))
@@ -1500,7 +1601,7 @@ internal sealed class Session
         _hadGuests = false;
         StopLockstep("the last guest left");
         Status = "Playing solo. Friends can still join.";
-        Toast.Show("Everyone left. You keep playing; friends can still join.");
+        Toast.Show("Everyone left. Friends can still join.");
         Plugin.Log.LogInfo("[session] back to solo");
     }
 
@@ -1679,7 +1780,7 @@ internal sealed class Session
             Plugin.Log.LogInfo("[resync] left the run; waiting to drop in again");
             return;
         }
-        Toast.Show("You left the co-op session. You keep playing on your own (saves go to the session copy).");
+        Toast.Show("You left the co-op session. You keep playing on your own.");
         AfterLockstep();
         Leave();
     }
@@ -2003,7 +2104,7 @@ internal sealed class Session
         if (GameBridge.IsPlaying(LocalSlot)) { _autoJoin = false; return snap; }
         if (Engine.AppliedFrame < _autoJoinFrom || GameBridge.LoadingLevel || GameBridge.Party?.Leader == null) return snap;
         if (frame < _nextJoinTry) return snap;
-        if (++_joinTries > 12) { _autoJoin = false; Toast.Show("Press Join on your controller to take over a party member."); return snap; }
+        if (++_joinTries > 12) { _autoJoin = false; Toast.Show("Press Join on your controller to play."); return snap; }
         _nextJoinTry = frame + 90;
         int join = ActionTable.IndexOf("Join");
         if (join >= 0) snap.Bits[join] |= ActionBits.Button | ActionBits.ButtonDown;
@@ -2323,11 +2424,13 @@ internal sealed class Session
 
     private void Reset()
     {
+        if (_resyncing && !Engine.Running) { _resyncing = false; ReturnToSolo(); }
         _peers.Clear();
         Role = Role.None;
         Phase = Phase.Idle;
         LobbyId = HostId = 0;
         _pendingCall = 0;
+        _closeAt = -1;
         _nextHello = _nextPing = _nextLobbyPoll = 0;
         _awaitingMirrorReload = false;
         _dropIn = DropInStep.None;

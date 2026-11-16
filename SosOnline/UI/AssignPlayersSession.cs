@@ -61,6 +61,11 @@ internal static class AssignPlayersSession
             __result = false;
             return false;
         }
+
+        private static void Postfix(AssignControllersScreen __instance)
+        {
+            if (!InSession && NativeCode.Is<AssignControllersScreen>(__instance)) HideNameTags(__instance);
+        }
     }
 
     /// <summary>Rebuild the screen's players identically on every peer.</summary>
@@ -69,7 +74,8 @@ internal static class AssignPlayersSession
     {
         private static void Postfix(AssignControllersScreen __instance)
         {
-            if (!InSession || !NativeCode.Is<AssignControllersScreen>(__instance)) return;
+            if (!NativeCode.Is<AssignControllersScreen>(__instance)) return;
+            if (!InSession) { HideNameTags(__instance); return; }
             try
             {
                 var items = new List<AssignControllersScreenController>();
@@ -222,5 +228,105 @@ internal static class AssignPlayersSession
         if (coop == null || standIn == null) return;
         screen.AddController(standIn.Cast<Controller>(), coop);
         Plugin.Log.LogInfo($"[assign] P{slot + 1} joined the screen");
+        for (int i = 0; i < screen.controllerUIItems.Count; i++)
+        {
+            var item = screen.controllerUIItems[i];
+            if (item?.player?.Player?.id == coop.Player?.id) NameTag(item, slot);
+        }
+    }
+
+    private const string NameTagName = "SosOnline_NameTag";
+    private const int NameTagMaxChars = 12;
+
+    /// <summary>A player column is about 80 reference pixels wide: wider names end in an ellipsis, inside it.</summary>
+    private const float NameTagWidth = 76f;
+
+    /// <summary>
+    /// Every online player stands in with the same keyboard icon, so two players looked identical. Each icon gets
+    /// the player's name under it (the Steam name, or "P2" without one). The game pools these items, so a reused one
+    /// keeps its tag and only the text changes; offline its tag is hidden again (<see cref="P_ExitPool"/>).
+    /// </summary>
+    private static void NameTag(AssignControllersScreenController item, int slot)
+    {
+        try
+        {
+            if (!GameUi.Ready) return;
+            var existing = item.transform.Find(NameTagName);
+            TMPro.TextMeshProUGUI text;
+            if (existing != null) text = existing.GetComponent<TMPro.TextMeshProUGUI>();
+            else
+            {
+                text = GameUi.Text(item.transform, NameTagName, true, TMPro.TextAlignmentOptions.Top);
+                var rt = text.rectTransform;
+                rt.anchorMin = rt.anchorMax = new UnityEngine.Vector2(0.5f, 0f);
+                rt.pivot = new UnityEngine.Vector2(0.5f, 1f);
+                rt.anchoredPosition = new UnityEngine.Vector2(0, -2);
+                rt.sizeDelta = new UnityEngine.Vector2(NameTagWidth, 12);
+                text.enableWordWrapping = false;
+                text.overflowMode = TMPro.TextOverflowModes.Ellipsis;
+                text.raycastTarget = false;
+            }
+            // Names are already clean (PlayerNames.Clean); here they must also fit a column: few characters, cut
+            // without splitting one, and only what the small font can draw. Nothing left: the player number.
+            string name = GameUi.Drawable(PlayerNames.Shorten(Session.Instance.SlotName[slot] ?? "", NameTagMaxChars), true).Trim();
+            if (name.Length == 0 || name == "...") name = $"P{slot + 1}";
+            text.richText = false;
+            text.text = name;
+            text.gameObject.SetActive(true);
+
+            // The keyboard and its name in the player's colour (the game's P1/P2/P3 bubbles), so a player's keyboard
+            // reads as theirs even in another player's column.
+            var color = PlayerColor(slot);
+            text.color = color;
+            var icon = item.icon?.controllerIcon;
+            if (icon != null) icon.color = color;
+
+            // Two players in one column are stacked by the column's vertical layout (it ignores the items' own
+            // heights): more spacing leaves room for the tag under each icon.
+            var group = item.transform.parent?.GetComponent<UnityEngine.UI.VerticalLayoutGroup>();
+            if (group != null && !_spacedGroups.ContainsKey(group.Pointer))
+            {
+                _spacedGroups[group.Pointer] = (group, group.spacing);
+                group.spacing += TagSpace;
+            }
+        }
+        catch (Exception e) { Plugin.Log.LogWarning($"[assign] name tag: {e.Message}"); }
+    }
+
+    private const float TagSpace = 10f;
+
+    /// <summary>Columns given extra spacing for name tags, with their own spacing (put back offline).</summary>
+    private static readonly Dictionary<IntPtr, (UnityEngine.UI.VerticalLayoutGroup group, float spacing)> _spacedGroups = new();
+
+    /// <summary>The game's player colours (sampled from its P1/P2 bubbles; P3 from its pink "Ready!").</summary>
+    private static UnityEngine.Color PlayerColor(int slot)
+    {
+        int player = slot >= 0 && slot < GameBridge.SlotPlayerIndex.Length ? GameBridge.SlotPlayerIndex[slot] : slot;
+        return player switch
+        {
+            0 => new UnityEngine.Color(85 / 255f, 241 / 255f, 1f),
+            1 => new UnityEngine.Color(1f, 190 / 255f, 19 / 255f),
+            _ => new UnityEngine.Color(1f, 92 / 255f, 170 / 255f),
+        };
+    }
+
+    /// <summary>Offline, an item the game reuses from its pool (a local pad joining) must not show an online name.</summary>
+    private static void HideNameTags(AssignControllersScreen screen)
+    {
+        try
+        {
+            for (int i = 0; i < screen.controllerUIItems.Count; i++)
+            {
+                var item = screen.controllerUIItems[i];
+                var tag = item?.transform.Find(NameTagName);
+                if (tag == null || !tag.gameObject.activeSelf) continue;
+                tag.gameObject.SetActive(false);
+                if (item.icon?.controllerIcon != null) item.icon.controllerIcon.color = UnityEngine.Color.white;
+            }
+            foreach (var (group, spacing) in _spacedGroups.Values)
+                try { if (group != null) group.spacing = spacing; } catch { }
+            _spacedGroups.Clear();
+        }
+        catch { }
     }
 }

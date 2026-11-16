@@ -100,6 +100,7 @@ public sealed class OnlineBehaviour : MonoBehaviour
             Overlay.Update();
             NativeMenus.Update();
             SteamInvites.Update();
+            CoopProbe.Update();
             TestHarness.Update();
         }
         catch (Exception e)

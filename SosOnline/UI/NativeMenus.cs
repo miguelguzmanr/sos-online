@@ -77,6 +77,7 @@ internal static class NativeMenus
                     catch (Exception e) { Plugin.Log.LogError($"[menu] {e}"); }
                 };
                 screen.onPopupAnswered = answered;
+                FitButtons(screen);
             };
             ui.InstantiateViewAsync(Il2CppType.Of<GenericPopupScreen>(), EScreenLayers.MODAL, p.Cast<IViewParams>(), true,
                 AnimatorUpdateMode.UnscaledTime, done);
@@ -88,6 +89,63 @@ internal static class NativeMenus
             Plugin.Log.LogError($"[menu] popup failed: {e}");
             return false;
         }
+    }
+
+    /// <summary>Space left and right of a choice's label inside its highlight, in the popup's reference pixels.</summary>
+    private const float ChoicePadX = 20f;
+
+    /// <summary>
+    /// Widest a popup choice may grow (padding included), about two thirds of the popup, so two choices still fit
+    /// side by side. Keep labels within it (about 25 characters); a longer one is cut with an ellipsis and logged.
+    /// </summary>
+    private const float MaxChoiceWidth = 200f;
+
+    private static bool _loggedPopupLayout;
+
+    /// <summary>
+    /// The game's popup buttons have a fixed width made for its own short choices ("Yes", "No"): a longer label of
+    /// ours ran past the highlight. Widens each button, and every fixed-width part of it (the highlight), to its
+    /// label; stretched parts follow the button. The buttons' container lays them out again.
+    /// </summary>
+    private static void FitButtons(GenericPopupScreen screen)
+    {
+        try
+        {
+            var buttons = screen.buttons;
+            if (buttons == null) return;
+            Canvas.ForceUpdateCanvases();
+            for (int i = 0; i < buttons.Count; i++)
+            {
+                var b = buttons[i];
+                var text = b?.textfield;
+                if (text == null) continue;
+                var rt = b.GetComponent<RectTransform>();
+                float width = rt.rect.width;
+                float need = Mathf.Ceil(text.GetPreferredValues(text.text, float.PositiveInfinity, float.PositiveInfinity).x + 2 * ChoicePadX);
+                if (!_loggedPopupLayout)
+                    Plugin.Log.LogInfo($"[menu] popup choice '{text.text}': button {width:F0}, label {need - 2 * ChoicePadX:F0}, text rect {text.rectTransform.rect.width:F0}");
+                if (need > MaxChoiceWidth)
+                {
+                    Plugin.Log.LogWarning($"[menu] popup choice '{text.text}' is too long for a button ({need:F0} > {MaxChoiceWidth:F0}); shortened");
+                    need = MaxChoiceWidth;
+                    text.enableWordWrapping = false;
+                    text.overflowMode = TextOverflowModes.Ellipsis;
+                }
+                if (need <= width) continue;
+
+                // Fixed-width children as wide as the button (highlight, label box) grow with it.
+                foreach (var child in b.GetComponentsInChildren<RectTransform>(true))
+                    if (child != rt && Mathf.Approximately(child.anchorMin.x, child.anchorMax.x) && Mathf.Abs(child.rect.width - width) < 2f)
+                        child.SetSizeWithCurrentAnchors(RectTransform.Axis.Horizontal, need);
+                rt.SetSizeWithCurrentAnchors(RectTransform.Axis.Horizontal, need);
+                var le = b.GetComponent<LayoutElement>() ?? b.gameObject.AddComponent<LayoutElement>();
+                le.minWidth = le.preferredWidth = need;
+            }
+            _loggedPopupLayout = true;
+            if (screen.buttonsContainer != null)
+                LayoutRebuilder.ForceRebuildLayoutImmediate(screen.buttonsContainer.GetComponent<RectTransform>());
+        }
+        catch (Exception e) { Plugin.Log.LogWarning($"[menu] popup buttons not resized: {e.Message}"); }
     }
 
     private static void Confirm(string message, string yes, Action onYes, string no = "Back", Action onNo = null) =>
@@ -186,10 +244,13 @@ internal static class NativeMenus
 
     internal static void OpenTitleMenu() => ShowPage(MainPage);
 
+    /// <summary>Test harness: press the visible entry with this label.</summary>
+    internal static void ClickEntry(string label) => ClickEntry(_labels.FindIndex(l => l == label));
+
     /// <summary>Test harness: press the n-th visible entry.</summary>
     internal static void ClickEntry(int index)
     {
-        if (index < _entries.Count && _entries[index].gameObject.activeSelf) _entries[index].onClick.Invoke();
+        if (index >= 0 && index < _entries.Count && _entries[index].gameObject.activeSelf) _entries[index].onClick.Invoke();
     }
 
     private static void ShowPage(Func<IEnumerable<(string label, Action action)>> page)
@@ -418,6 +479,13 @@ internal static class NativeMenus
     private static IEnumerable<(string, Action)> MainPage()
     {
         var s = Session.Instance;
+        // Not a synced menu (the title screen runs no lockstep), so a per-PC entry is fine here.
+        if (SosOnline.Update.AutoUpdate.RestartLabel is { } restart)
+            yield return (restart, () =>
+            {
+                if (s.InSession) Confirm("Restart the game now? This PC leaves the co-op session.", "Restart", SosOnline.Update.AutoUpdate.Restart);
+                else SosOnline.Update.AutoUpdate.Restart();
+            });
         switch (s.Phase)
         {
             case Phase.Idle:
@@ -518,7 +586,7 @@ internal static class NativeMenus
             if (slot <= 0) return true;
             Plugin.Log.LogInfo($"[menu] f{Session.Instance.Engine.AppliedFrame} Options from the shared pause blocked for P{slot + 1}");
             if (slot == Session.Instance.LocalSlot)
-                Toast.Show("Options open from your own pause screen, outside battles and cutscenes.");
+                Toast.Show("Open Options from your own pause screen.");
             return false;
         }
     }
@@ -539,6 +607,9 @@ internal static class NativeMenus
     /// While lockstep runs this executes on every peer on the same frame (the pause menu is driven by synced input),
     /// so it only does deterministic things.
     /// </summary>
+    /// <summary>Test harness: the pause menu's Online popup, as if chosen from the pause menu.</summary>
+    internal static void OpenPauseMenuForTest() => OpenPauseMenu();
+
     private static void OpenPauseMenu()
     {
         var s = Session.Instance;
@@ -557,6 +628,14 @@ internal static class NativeMenus
             string waiting = s.HasPending ? $"\nJoining: {string.Join(", ", s.PendingNames)} (they drop in as soon as the game allows saving)." : "";
             Confirm($"{PlayersLine(s)}{waiting}", "End session for everyone",
                 () => s.EndSessionDeterministic("The host ended the co-op session"));
+            return;
+        }
+        if (!s.InSession && SosOnline.Update.AutoUpdate.Downloaded != null)
+        {
+            // Not synced (no lockstep runs here), so the choice may depend on this PC's download. Friends get the
+            // update too, so playing together waits for the restart anyway.
+            Confirm($"Update {SosOnline.Update.AutoUpdate.Current.ToString(3)} -> {SosOnline.Update.AutoUpdate.Downloaded.ToString(3)} is downloaded.\nFriends need the same version to play together.",
+                "Restart to update", SosOnline.Update.AutoUpdate.Restart);
             return;
         }
         if (!s.InSession)

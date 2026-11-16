@@ -47,7 +47,7 @@ internal static class SteamInvites
             if (Session.Instance.Phase == Phase.Running)
             {
                 // A popup is a game view: opened on this PC only, it would put this PC out of step with the session.
-                UI.Toast.Show("Co-op invite: leave this co-op session first (pause screen), then accept it again.");
+                UI.Toast.Show("Leave this co-op session first, then accept the invite.");
                 _pendingLobby = 0;
                 return;
             }

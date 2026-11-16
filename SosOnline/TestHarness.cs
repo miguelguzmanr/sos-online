@@ -21,6 +21,7 @@ namespace SosOnline;
 ///   --sosonline-delay=N           fixed input delay in frames
 ///   --sosonline-script=FILE       scripted local input: "frame [sys] action holdFrames [axis]" per line
 ///   --sosonline-shots=F1,F2,...   screenshot at those lockstep frames
+///   --sosonline-endsession=F      host: "End session" (local pause screen) at lockstep frame F
 ///   --sosonline-quitruns=N        with --sosonline-quit: once lockstep has stopped, quit only after N runs have ended
 ///   --sosonline-quit=F            quit at lockstep frame F (if lockstep stops before F: the remaining frames later, at
 ///                                 least one second, counted in Unity frames)
@@ -92,6 +93,7 @@ internal static class TestHarness
             SaveMirror.MirrorFolder = $"SosOnlineSession-{port}";
             SpikeB.CopyIntoSandbox();
         }
+        if (Args.TryGetValue("fakeupdate", out var fu)) SosOnline.Update.AutoUpdate.FakeDownloaded(Version.Parse(fu));
         if (Args.TryGetValue("delay", out var d)) Session.Instance.ConfiguredDelay = int.Parse(d);
         if (Args.TryGetValue("guests", out var g)) _guests = int.Parse(g);
         if (Args.TryGetValue("start", out var s)) _startSlot = s;
@@ -136,11 +138,13 @@ internal static class TestHarness
             case 2: Shot("ui-title"); _uiAt = now + 1; break;
             case 3: UI.NativeMenus.OpenTitleMenu(); _uiAt = now + 2; break;
             case 4: Shot("ui-online"); _uiAt = now + 1; break;
-            case 5: UI.NativeMenus.ClickEntry(0); _uiAt = now + 5; break; // Host
+            case 5: UI.NativeMenus.ClickEntry("Host"); _uiAt = now + 5; break;
             case 6: Shot("ui-hosting"); _uiAt = now + 1; break;
             case 7: Plugin.Log.LogInfo($"[test] lobby={Session.Instance.LobbyId} phase={Session.Instance.Phase}"); Session.Instance.Leave(); _uiAt = now + 2; break;
             case 8: Shot("ui-left"); _uiAt = now + 1; break;
-            case 9: Plugin.Log.LogInfo("[test] ui test done"); Application.Quit(); break;
+            case 9: UI.NativeMenus.OpenPauseMenuForTest(); _uiAt = now + 2; break;
+            case 10: Shot("ui-popup"); _uiAt = now + 1; break;
+            case 11: Plugin.Log.LogInfo("[test] ui test done"); Application.Quit(); break;
         }
         _uiStep++;
     }
@@ -513,6 +517,7 @@ internal static class TestHarness
         FastForward.OnFrame(frame);
         if (At("leave", frame)) { Plugin.Log.LogInfo($"[test] leaving at {frame}"); session.Leave(); }
         if (At("kill", frame)) { Plugin.Log.LogInfo($"[test] killing process at {frame}"); System.Diagnostics.Process.GetCurrentProcess().Kill(); }
+        if (At("endsession", frame) && session.IsHost) { Plugin.Log.LogInfo($"[test] host ends the session at {frame}"); session.EndSessionScheduled("The host ended the co-op session"); }
         if (At("pauseleave", frame)) { Plugin.Log.LogInfo($"[test] synced pause-menu leave of P2 at {frame}"); session.LeaveSlotDeterministic(1); }
         if (At("hpdiverge", frame)) DivergeHp(frame);
         if (At("uiprobe", frame)) ProbeUi(frame);
@@ -520,7 +525,19 @@ internal static class TestHarness
         {
             var pm = UnityEngine.Object.FindObjectsOfType<PauseMenu>().FirstOrDefault();
             Plugin.Log.LogInfo($"[test] opening Assign Players at {frame} (pause menu {(pm != null ? "open" : "missing")})");
-            pm?.AssignControllers();
+            if (pm != null) pm.AssignControllers();
+            else
+            {
+                // In co-op Start opens the local pause screen, not the game's: open the screen directly (pass the flag
+                // to every instance, so it opens on the same frame everywhere).
+                try
+                {
+                    Manager<UIManager>.instance?.InstantiateViewAsync(Il2CppInterop.Runtime.Il2CppType.Of<AssignControllersScreen>(),
+                        EScreenLayers.MODAL, null, true, AnimatorUpdateMode.UnscaledTime,
+                        (Action<View>)(view => view?.TryCast<AssignControllersScreen>()?.Init()));
+                }
+                catch (Exception e) { Plugin.Log.LogWarning($"[test] Assign Players: {e.Message}"); }
+            }
         }
         if (frame % 300 == 0 && session.Engine.Running)
         {

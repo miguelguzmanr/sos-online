@@ -25,7 +25,7 @@ internal sealed class SteamTransport : ITransport
 
     public ulong LocalId => SteamApi.LocalSteamId;
 
-    public string Describe(ulong peer) => SteamApi.FriendName(peer) is { Length: > 0 } n ? n : peer.ToString();
+    public string Describe(ulong peer) => SteamApi.FriendName(peer) is { Length: > 0 } n ? UI.PlayerNames.Clean(n, "the host") : peer.ToString();
 
     public void Send(ulong peer, byte[] data, int length, bool reliable) => SteamApi.Send(peer, data, length, reliable, Channel);
 

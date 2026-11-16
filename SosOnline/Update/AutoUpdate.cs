@@ -8,6 +8,7 @@ using System.Security.Cryptography;
 using System.Text.Json;
 using System.Threading.Tasks;
 using SosOnline.UI;
+using UnityEngine;
 
 namespace SosOnline.Update;
 
@@ -43,6 +44,45 @@ internal static class AutoUpdate
 
     /// <summary>"Update 0.1.40 is ready…" once one was installed this session, otherwise null.</summary>
     public static string Installed { get; private set; }
+
+    /// <summary>The version installed for the next start this session, or null. Read on the main thread only.</summary>
+    public static Version Downloaded => _downloaded;
+    private static volatile Version _downloaded;
+
+    /// <summary>Test harness (--sosonline-fakeupdate=V): act as if V had been downloaded.</summary>
+    internal static void FakeDownloaded(Version v) => _downloaded = v;
+
+    /// <summary>"Restart to update (0.1.39 -> 0.1.45)", for the Online menus (the game's menu font has no "→").</summary>
+    public static string RestartLabel => _downloaded == null ? null : $"Restart to update ({Current.ToString(3)} -> {_downloaded.ToString(3)})";
+
+    /// <summary>
+    /// Quits the game and starts it again through Steam, so the downloaded build runs. A hidden PowerShell waits for
+    /// this process to exit (Steam won't start a game it still sees running), then asks Steam to launch the game.
+    /// Leaves the co-op session first.
+    /// </summary>
+    public static void Restart()
+    {
+        if (_downloaded == null) return;
+        Plugin.Log.LogInfo($"[update] restarting the game for {_downloaded.ToString(3)}");
+        try { Net.Session.Instance.Leave(); } catch { }
+        try
+        {
+            int pid = System.Diagnostics.Process.GetCurrentProcess().Id;
+            string shell = Path.Combine(Environment.SystemDirectory, "WindowsPowerShell", "v1.0", "powershell.exe");
+            string script = $"Wait-Process -Id {pid} -ErrorAction SilentlyContinue; Start-Sleep -Seconds 2; Start-Process 'steam://rungameid/{Steam.SteamApi.AppId}'";
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(shell, $"-NoProfile -NonInteractive -WindowStyle Hidden -Command \"{script}\"")
+            {
+                UseShellExecute = false,
+                CreateNoWindow = true,
+            });
+        }
+        catch (Exception e)
+        {
+            // The game still quits: the update runs from the next start either way.
+            Plugin.Log.LogWarning($"[update] could not schedule the relaunch: {e.Message}");
+        }
+        Application.Quit();
+    }
 
     public static void Start()
     {
@@ -152,7 +192,8 @@ internal static class AutoUpdate
             File.Move(old, target, true); // put the running build back
             throw;
         }
-        Installed = $"Update {name.Version.ToString(3)} downloaded. Restart the game to use it (everyone in a session needs the same version).";
+        Installed = $"Update {name.Version.ToString(3)} downloaded. Restart from the Online menu.";
+        _downloaded = name.Version;
         Plugin.Log.LogInfo($"[update] installed {name.Version.ToString(3)}; it runs from the next start");
         Notices.Enqueue(Installed);
     }
