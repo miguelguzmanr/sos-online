@@ -17,7 +17,7 @@ namespace SosOnline.Net;
 ///
 /// The log is valid until the next level load. Roster changes the inputs don't reproduce (a Stage 3 merge, a player
 /// whose connection dropped) are logged with their frames in <see cref="Roster"/>, and the joiner applies them on
-/// the same frames. A leave chosen in the (synced) pause menu is input, so the replay reproduces it by itself. A
+/// the same frames, and so are the characters the host gives back (<see cref="Characters"/>). A leave chosen in the (synced) pause menu is input, so the replay reproduces it by itself. A
 /// Stage 2 drop-in reloads everyone, which starts a new log at its load release.
 /// </summary>
 internal sealed class AreaLog
@@ -39,6 +39,12 @@ internal sealed class AreaLog
 
     /// <summary>Roster changes on frames after L, in the order they were decided: (frame, slot, joins or leaves).</summary>
     public List<(int frame, int slot, bool join)> Roster { get; } = new();
+
+    /// <summary>
+    /// Characters the host gave back on frames after L (a guest that drops in again gets the one it played before):
+    /// (frame, slot, character). Not input either, so a joiner applies them on their frames like roster changes.
+    /// </summary>
+    public List<(int frame, int slot, string character)> Characters { get; } = new();
 
     /// <summary>The host's state snapshots since L: a joiner checks its replay against them as it goes.</summary>
     public List<StateSnapshot> Snapshots { get; } = new();
@@ -63,6 +69,7 @@ internal sealed class AreaLog
         Snapshots.Clear();
         // The occupied slots recorded at L cover changes up to L; one decided earlier for a later frame still applies.
         Roster.RemoveAll(e => e.frame <= frame);
+        Characters.RemoveAll(e => e.frame <= frame);
     }
 
     /// <summary>Host: slot <paramref name="slot"/> joins (or leaves) the session on <paramref name="frame"/>.</summary>
@@ -72,17 +79,28 @@ internal sealed class AreaLog
         if (L >= 0) Plugin.Log.LogInfo($"[catchup] roster change logged: P{slot + 1} {(join ? "joins" : "leaves")} at f{frame}");
     }
 
+    /// <summary>Host: slot <paramref name="slot"/> gets <paramref name="character"/> back on <paramref name="frame"/>.</summary>
+    public void LogCharacter(int frame, int slot, string character)
+    {
+        Characters.Add((frame, slot, character));
+        if (L >= 0) Plugin.Log.LogInfo($"[catchup] character change logged: P{slot + 1} plays {character} from f{frame}");
+    }
+
     public void WriteRoster(BinaryWriter w)
     {
         w.Write(Roster.Count);
         foreach (var (frame, slot, join) in Roster) { w.Write(frame); w.Write((byte)slot); w.Write(join); }
+        w.Write(Characters.Count);
+        foreach (var (frame, slot, character) in Characters) { w.Write(frame); w.Write((byte)slot); w.Write(character); }
     }
 
-    public static List<(int frame, int slot, bool join)> ReadRoster(BinaryReader r)
+    public static (List<(int frame, int slot, bool join)> roster, List<(int frame, int slot, string character)> characters) ReadRoster(BinaryReader r)
     {
         var list = new List<(int, int, bool)>();
         for (int n = r.ReadInt32(); n > 0; n--) list.Add((r.ReadInt32(), r.ReadByte(), r.ReadBoolean()));
-        return list;
+        var chars = new List<(int, int, string)>();
+        for (int n = r.ReadInt32(); n > 0; n--) chars.Add((r.ReadInt32(), r.ReadByte(), r.ReadString()));
+        return (list, chars);
     }
 
     /// <summary>A new lockstep run starts: its frames count from its own start, so nothing of the old run applies.</summary>
@@ -94,6 +112,7 @@ internal sealed class AreaLog
         SaveFiles.Clear();
         Snapshots.Clear();
         Roster.Clear();
+        Characters.Clear();
     }
 
     public void Invalidate(string reason)

@@ -14,6 +14,7 @@ internal static class RewiredUpdatePatch
     {
         if (__0 != UpdateLoopType.Update || !NativeCode.Is<InputManager_Base>(__instance)) return;
         if (!ActionTable.Ready) ActionTable.TryBuild();
+        GameClock.OnFrame();
         Session.Instance.Engine.Tick();
     }
 }

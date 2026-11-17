@@ -69,13 +69,12 @@ Run on the same build before committing. Every test passes with 0 differences (b
 
 ## Open items, by priority
 
-0. **The summon slot order after a replay** (above): investigating next. Start with the call probe on `SummonMoveHelper` (`ReserveSummonSlot`, `DoPermanentSlotReservation`, `HasSummonSlotAvailable`) and the f390 Bosslug activation.
+Fixed since the merge into `main` (not committed yet; findings §13): summon slots (`resync.sh` 6/6, `battle-turns.sh` 2/2, `battle-live.sh` clean), the session clock (battle clock lines identical on both PCs), characters given back kept in the area log, the dead "same point" rule removed, P3's colour. Tested: Esc on the waiting screen (real key press).
 
-1. **Verify over Steam with the friend** (as before, plus): a re-sync during a battle (the catch-up's log blocks over the relay are untested), a lost battle (game over) while a friend waits to join.
-2. **The session clock's last bits differ between PCs** (about 1e-14 in `time`). No split traced to it. If one is: track session time as base + the sum of each frame's float delta (findings §13).
-3. **A replaying joiner saw the Bosslug NPC active one snapshot early** (f390, `npcs`). One-off, not a failure; two in a row would fail a replay.
-4. **Diverging again at the same point** (the fourth fallback) is implemented but not exercised by a test: in the tests the replay itself diverged first.
-5. Earlier items not touched: guest crash after a re-sync in a battle (yesterday's), Esc on the waiting screen, `MinAutoDelay` 4, P3's colour.
+1. **Verify over Steam with the friend** (as before, plus): a re-sync during a battle (the catch-up's log blocks over the relay are untested), a lost battle (game over) while a friend waits to join, and windows of different sizes (logic clipping, below).
+2. **Party AI after a leave mid-battle replays differently now and then.** A second re-sync in the same area replays the guest's first leave; once, the AI's Valere moved 3.3 m differently right after it (f1680). Falls back to the reload. Next: call-probe the party AI between the leave and the next turn.
+3. **Logic clipping** (`LogicClippingManager`): off-screen NPC logic is paused, by camera frustum. A replay sees the Bosslug a snapshot early (f390, never two in a row). Turning clipping off broke replays (off-screen Luslugs wander differently). Might also differ live between PCs with different window sizes.
+4. Earlier items not touched: guest crash after a re-sync in a battle (no repro), `MinAutoDelay` 4 (after Steam), the "joined" toast over the Assign Players title.
 
 ## Testing
 

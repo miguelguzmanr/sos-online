@@ -298,7 +298,7 @@ internal static class AssignPlayersSession
     /// <summary>Columns given extra spacing for name tags, with their own spacing (put back offline).</summary>
     private static readonly Dictionary<IntPtr, (UnityEngine.UI.VerticalLayoutGroup group, float spacing)> _spacedGroups = new();
 
-    /// <summary>The game's player colours (sampled from its P1/P2 bubbles; P3 from its pink "Ready!").</summary>
+    /// <summary>The game's player colours, sampled from its P1/P2/P3 badges (P3 checked with three players, 2026-11-16).</summary>
     private static UnityEngine.Color PlayerColor(int slot)
     {
         int player = slot >= 0 && slot < GameBridge.SlotPlayerIndex.Length ? GameBridge.SlotPlayerIndex[slot] : slot;
@@ -306,7 +306,7 @@ internal static class AssignPlayersSession
         {
             0 => new UnityEngine.Color(85 / 255f, 241 / 255f, 1f),
             1 => new UnityEngine.Color(1f, 190 / 255f, 19 / 255f),
-            _ => new UnityEngine.Color(1f, 92 / 255f, 170 / 255f),
+            _ => new UnityEngine.Color(1f, 108 / 255f, 174 / 255f),
         };
     }
 

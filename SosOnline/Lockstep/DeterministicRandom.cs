@@ -88,6 +88,20 @@ internal static class DeterministicRandom
         (typeof(Bosslug), nameof(Bosslug.UpdateNextMove)),
     };
 
+    /// <summary>
+    /// Which free slots a summon takes, in which order. The Bosslug's second summon reserved its slots as [1 2] on one
+    /// PC and [2 1] on the other, and the Acid Bugs swapped places (tests/resync.sh, f5047, 2026-11-16): the order
+    /// followed the shared generator's state (two guest states, each always giving the same order). The first summon
+    /// happened to agree. --sosonline-nosummonfix leaves these alone (to reproduce that split).
+    /// </summary>
+    private static readonly (Type type, string method)[] SummonTargets =
+    {
+        (typeof(SummonMoveHelper), nameof(SummonMoveHelper.ReserveSummonSlot)),
+        (typeof(SummonMoveHelper), nameof(SummonMoveHelper.DoPermanentSlotReservation)),
+        (typeof(SummonMoveHelper), nameof(SummonMoveHelper.GetEnemyPrefabsToSummon)),
+        (typeof(SummonMoveHelper), nameof(SummonMoveHelper.GetSpawnPosition)),
+    };
+
     /// <summary>Compiler-generated coroutine steps (found by name prefix: the suffix can change between builds).</summary>
     private static readonly (Type outer, string prefix)[] CoroutineTargets =
     {
@@ -115,7 +129,9 @@ internal static class DeterministicRandom
         var enter = new HarmonyMethod(typeof(DeterministicRandom).GetMethod(nameof(Enter), BindingFlags.Static | BindingFlags.NonPublic));
         var exit = new HarmonyMethod(typeof(DeterministicRandom).GetMethod(nameof(Exit), BindingFlags.Static | BindingFlags.NonPublic));
         int patched = 0;
-        var targets = TestHarness.TryArg("nolockfix", out _) ? Targets : Targets.Concat(LockTargets).ToArray();
+        var targets = Targets.AsEnumerable();
+        if (!TestHarness.TryArg("nolockfix", out _)) targets = targets.Concat(LockTargets);
+        if (!TestHarness.TryArg("nosummonfix", out _)) targets = targets.Concat(SummonTargets);
         foreach (var (type, name) in targets)
             foreach (var m in type.GetMethods(BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.DeclaredOnly).Where(m => m.Name == name))
             {
@@ -135,7 +151,11 @@ internal static class DeterministicRandom
         Plugin.Log.LogInfo($"[random] {patched} gameplay random roll(s) made deterministic");
     }
 
-    private static void Enter()
+    /// <summary>The outermost wrapped method running now, or null (the summon probe logs it).</summary>
+    public static string Current => _depth > 0 && _seeded ? _outer : null;
+    private static string _outer;
+
+    private static void Enter(MethodBase __originalMethod)
     {
         // A roll that threw never reached Exit: start each frame from the outermost level again.
         int frame = Active ? Session.Instance.Engine.AppliedFrame : int.MinValue;
@@ -149,6 +169,7 @@ internal static class DeterministicRandom
             _saved = UnityEngine.Random.state;
             UnityEngine.Random.InitState(unchecked(e.Seed ^ (_frame * 486187739) ^ ((++_count) * 1640531527) ^ 0x5EED));
             _seeded = true;
+            _outer = __originalMethod?.DeclaringType?.Name + "." + __originalMethod?.Name;
             Rolls++;
         }
         catch { }

@@ -37,6 +37,81 @@ internal static class SpawnTrace
         n += Patch(harmony, typeof(Encounter), nameof(Encounter.AddEnemy), nameof(Added));
         n += Patch(harmony, typeof(Encounter), nameof(Encounter.RemoveActor), nameof(Removed));
         Plugin.Log.LogInfo($"[spawn] {n} spawn path(s) traced");
+        if (TestHarness.TryArg("summonprobe", out var extra))
+        {
+            int.TryParse(extra, out _perturb);
+            PatchPrefix(harmony, typeof(SummonMoveHelper), nameof(SummonMoveHelper.GetEnemyPrefabsToSummon), nameof(ProbeSummon));
+            PatchPrefix(harmony, typeof(SummonMoveHelper), nameof(SummonMoveHelper.ReserveSummonSlot), nameof(ProbeReserve));
+            PatchPrefix(harmony, typeof(EncounterEnemySlot), nameof(EncounterEnemySlot.AssignActor), nameof(ProbeAssign));
+            PatchPrefix(harmony, typeof(EncounterEnemySlot), nameof(EncounterEnemySlot.SetReserved), nameof(ProbeSetReserved));
+        }
+    }
+
+    // --sosonline-summonprobe[=N] (tests): which summon slot is filled in which order, and why. Logs the summoner's
+    // summonSlots list and UnityEngine.Random's state when a summon starts and on every slot assignment; with N > 0,
+    // draws N random values when a summon starts and before each reservation (if the slot order then changes, the pick reads the shared generator).
+    private static int _perturb;
+
+    private static void ProbeSummon(SummonMoveHelper __instance)
+    {
+        if (!Active || !NativeCode.Is<SummonMoveHelper>(__instance)) return;
+        try
+        {
+            for (int i = 0; i < _perturb; i++) _ = UnityEngine.Random.value;
+            Plugin.Log.LogInfo($"[summon] f{Frame} start: slots [{Slots(__instance)}] random {RandomState()}{(_perturb > 0 ? $" (after {_perturb} extra draws)" : "")}");
+        }
+        catch (Exception e) { Plugin.Log.LogWarning($"[summon] probe: {e.Message}"); }
+    }
+
+    private static void ProbeReserve(SummonMoveHelper __instance)
+    {
+        if (!Active || !NativeCode.Is<SummonMoveHelper>(__instance)) return;
+        try { for (int i = 0; i < _perturb; i++) _ = UnityEngine.Random.value; Plugin.Log.LogInfo($"[summon] f{Frame} reserve: slots [{Slots(__instance)}] random {RandomState()} wrapper {DeterministicRandom.Current ?? "none"}"); }
+        catch (Exception e) { Plugin.Log.LogWarning($"[summon] probe: {e.Message}"); }
+    }
+
+    private static void ProbeAssign(EncounterEnemySlot __instance, CombatActor __0)
+    {
+        if (!Active || !NativeCode.Is<EncounterEnemySlot>(__instance)) return;
+        try { Plugin.Log.LogInfo($"[summon] f{Frame} assign {Name(__0)} to slot {SlotName(__instance)} (was {Name(__instance.Enemy)}, reserved {__instance.Reserved}) random {RandomState()}"); }
+        catch (Exception e) { Plugin.Log.LogWarning($"[summon] probe: {e.Message}"); }
+    }
+
+    private static void ProbeSetReserved(EncounterEnemySlot __instance, bool __0, CombatActor __1)
+    {
+        if (!Active || !NativeCode.Is<EncounterEnemySlot>(__instance)) return;
+        try { Plugin.Log.LogInfo($"[summon] f{Frame} slot {SlotName(__instance)} reserved {__0} by {Name(__1)}"); }
+        catch (Exception e) { Plugin.Log.LogWarning($"[summon] probe: {e.Message}"); }
+    }
+
+    private static string Slots(SummonMoveHelper h)
+    {
+        var list = h.summonSlots;
+        if (list == null) return "null";
+        var parts = new List<string>();
+        for (int i = 0; i < list.Count; i++)
+        {
+            var sl = list[i];
+            parts.Add(sl == null ? "null" : $"{SlotName(sl)}:{Name(sl.Enemy)}{(sl.Enemy != null && sl.Enemy.CombatTarget != null && sl.Enemy.CombatTarget.Dead ? "/dead" : "")}{(sl.Reserved ? "/res" : "")}");
+        }
+        return string.Join(" ", parts);
+    }
+
+    private static string RandomState()
+    {
+        var st = UnityEngine.Random.state;
+        return st.GetHashCode().ToString("x8");
+    }
+
+    private static void PatchPrefix(Harmony harmony, Type type, string method, string prefix)
+    {
+        foreach (var m in type.GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.DeclaredOnly))
+        {
+            if (m.Name != method) continue;
+            if (NativeCode.IsFolded(m)) { Plugin.Log.LogWarning($"[summon] {type.Name}.{method} is folded; not probed"); continue; }
+            try { harmony.Patch(m, prefix: new HarmonyMethod(typeof(SpawnTrace).GetMethod(prefix, BindingFlags.Static | BindingFlags.NonPublic)) { priority = Priority.First }); }
+            catch (Exception e) { Plugin.Log.LogWarning($"[summon] {type.Name}.{method} not probed: {e.Message}"); }
+        }
     }
 
     /// <summary>A load was released on this frame (every PC): the count starts over.</summary>

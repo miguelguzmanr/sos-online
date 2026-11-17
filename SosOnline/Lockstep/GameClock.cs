@@ -18,9 +18,10 @@ namespace SosOnline.Lockstep;
 /// While a session clock is set, Unity's own time getters (the native icalls, so every caller is covered) read
 /// identically on every PC:
 /// <list type="bullet">
-/// <item><c>time</c>, <c>timeAsDouble</c>: local time plus an offset fixed on an agreed lockstep frame. Re-based on
-/// each level load's release, which also absorbs frames one PC ran with another time scale before lockstep took over
-/// (a title screen paused because its window had no focus).</item>
+/// <item><c>time</c>, <c>timeAsDouble</c>: an agreed base on an agreed lockstep frame plus every frame's step since
+/// (<see cref="SessionTime"/>). Re-based on each level load's release, which also absorbs frames one PC ran with
+/// another time scale before lockstep took over (a title screen paused because its window had no focus).</item>
+/// <item><c>fixedTime</c>: the base minus the aligned physics phase, plus whole fixed steps since.</item>
 /// <item><c>unscaledTime</c>, <c>unscaledDeltaTime</c>: wall-clock time otherwise. During lockstep, 1/60 s per frame.</item>
 /// <item><c>smoothDeltaTime</c>: Unity's average of each PC's own recent frame times. During lockstep, <c>deltaTime</c>
 /// (the game times the dash into a battle with it).</item>
@@ -99,10 +100,10 @@ internal static class GameClock
             // thrown in here would crash the game, so the hooks stay trivial.
             var inFixed = IL2CPP.il2cpp_resolve_icall("UnityEngine.Time::get_inFixedTimeStep()");
             if (inFixed != IntPtr.Zero) _inFixed = Marshal.GetDelegateForFunctionPointer<BoolFn>(inFixed);
-            _timeD = Detour<DoubleFn>("get_timeAsDouble", () => _timeD == null ? 0 : _timeD() + (Set ? _offset + (InFixedStep() ? _fixedShift : 0) : 0));
-            Detour<FloatFn>("get_time", () => (float)(_timeD() + (Set ? _offset + (InFixedStep() ? _fixedShift : 0) : 0)));
-            _fixedD = Detour<DoubleFn>("get_fixedTimeAsDouble", () => _fixedD == null ? 0 : _fixedD() + (Set ? _offset + _fixedShift : 0));
-            Detour<FloatFn>("get_fixedTime", () => (float)(_fixedD() + (Set ? _offset + _fixedShift : 0)));
+            _timeD = Detour<DoubleFn>("get_timeAsDouble", Time);
+            Detour<FloatFn>("get_time", () => (float)Time());
+            _fixedD = Detour<DoubleFn>("get_fixedTimeAsDouble", FixedTime);
+            Detour<FloatFn>("get_fixedTime", () => (float)FixedTime());
             _unscaledD = Detour<DoubleFn>("get_unscaledTimeAsDouble", () => _unscaledD == null ? 0 : Unscaled());
             Detour<FloatFn>("get_unscaledTime", () => (float)Unscaled());
             _unscaledDelta = Detour<FloatFn>("get_unscaledDeltaTime", () => _ticking ? Step : _unscaledDelta == null ? 0 : _unscaledDelta());
@@ -133,9 +134,51 @@ internal static class GameClock
         }
     }
 
+    // Session time, while lockstep ticks. Local time plus an offset read the same to about 1e-14 only: each PC's
+    // Unity sums its frame steps onto its own, larger clock, and the rounding depends on the magnitude
+    // (45.42000099129975 vs 45.420000991299744 at f1417, 2026-11-16). Every PC's frame step is the same float
+    // (captureDeltaTime x timeScale), so the session sums those steps itself, from the base.
+    private static double _session, _lastLocal, _fixedSession, _fixedLocal0, _fixedDt;
+    private static int _lastFrameSeen = int.MinValue;
+
+    /// <summary>
+    /// Adds the steps of the frames since the last call. Only outside a physics step (local time reads fixedTime
+    /// inside one). The difference of two local times is the step plus rounding far below a float's precision:
+    /// rounding it to float gives the exact step.
+    /// </summary>
+    private static void Advance()
+    {
+        int f = _frame();
+        if (f == _lastFrameSeen) return;
+        double now = _timeD();
+        _session += (float)(now - _lastLocal);
+        _lastLocal = now;
+        _lastFrameSeen = f;
+    }
+
+    private static double SessionTime()
+    {
+        if (InFixedStep()) return SessionFixed();
+        Advance();
+        return _session;
+    }
+
+    private static double SessionFixed() =>
+        _fixedDt > 0 ? _fixedSession + Math.Round((_fixedD() - _fixedLocal0) / _fixedDt) * _fixedDt : _fixedD() + _offset + _fixedShift;
+
+    private static double Time() => _timeD == null ? 0 : _ticking ? SessionTime() : _timeD() + (Set ? _offset + (InFixedStep() ? _fixedShift : 0) : 0);
+
+    private static double FixedTime() => _fixedD == null ? 0 : _ticking ? SessionFixed() : _fixedD() + (Set ? _offset + _fixedShift : 0);
+
+    /// <summary>Once per Unity frame (Rewired's Update, outside physics): keeps the step sum unbroken.</summary>
+    public static void OnFrame()
+    {
+        if (_ticking && _timeD != null && _frame != null && !InFixedStep()) Advance();
+    }
+
     private static double Unscaled() => _ticking ? _unscaled : _unscaledD() + (Set ? _unscaledOffset : 0);
 
-    private static double Level() => _ticking && _timeD != null ? Math.Max(0, _timeD() + _offset - _levelStart) : _levelD();
+    private static double Level() => _ticking && _timeD != null ? Math.Max(0, Time() - _levelStart) : _levelD();
 
     private static double Real() => _ticking ? _unscaled + RealShift : _realD() + _realOffset;
 
@@ -175,9 +218,16 @@ internal static class GameClock
             _fixedShift = dt > 0 ? Math.Floor(lag / dt + 1e-6) * dt : 0;
         }
         _frameOffset = FrameBase + lockstepFrame - _frame();
+        double phaseNow = _fixedD != null && UnityEngine.Time.fixedDeltaTime > 0 ? Mod(_timeD() - _fixedD(), UnityEngine.Time.fixedDeltaTime) : double.NaN;
+        _session = timeBase;
+        _lastLocal = _timeD();
+        _lastFrameSeen = _frame();
+        // The phase is aligned before each load release (the same on every PC to well within 1e-5 s).
+        _fixedDt = double.IsNaN(phaseNow) ? 0 : UnityEngine.Time.fixedDeltaTime;
+        _fixedLocal0 = _fixedD != null ? _fixedD() : 0;
+        _fixedSession = double.IsNaN(phaseNow) ? 0 : timeBase - Math.Round(phaseNow, 5);
         Set = true;
         _ticking = true;
-        double phaseNow = _fixedD != null && UnityEngine.Time.fixedDeltaTime > 0 ? Mod(_timeD() - _fixedD(), UnityEngine.Time.fixedDeltaTime) : double.NaN;
         Plugin.Log.LogInfo($"[clock] f{lockstepFrame}: game time {before:F3} -> {timeBase:F3}, physics phase {phaseNow:F5}");
     }
 
@@ -225,6 +275,8 @@ internal static class GameClock
     public static void Stop()
     {
         if (!_ticking || _unscaledD == null) return;
+        // Time carries on from the session's value, on the local clock again.
+        if (_timeD != null && !InFixedStep()) { Advance(); _offset = _session - _timeD(); }
         _ticking = false;
         _unscaledOffset = _unscaled - _unscaledD();
         if (_realD != null) _realOffset = _unscaled + RealShift - _realD(); // carry on from the session's value

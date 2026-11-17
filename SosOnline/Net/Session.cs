@@ -62,11 +62,6 @@ internal sealed class Session
         public readonly List<double> ResyncTimes = new();
         /// <summary>Lockstep frame the guest reported its latest divergence on.</summary>
         public int DivergedAt = -1;
-        /// <summary>
-        /// Area entry and divergence frame of this guest's last re-sync by replay (-1: none). Diverging again at the
-        /// same point of the same area would replay into the same cause (something on that PC): reload instead.
-        /// </summary>
-        public int ReplayL = -1, ReplayDivergedAt = -1;
         /// <summary>Host clock: don't drop this guest in again before then (it kept going out of sync).</summary>
         public double HoldUntil;
         /// <summary>Host: this guest's character was checked against the one it played before (since it last began playing).</summary>
@@ -1054,7 +1049,8 @@ internal sealed class Session
                 int at = r.ReadInt32();
                 int slot = r.ReadByte();
                 string character = r.ReadString();
-                if (!Engine.Running || CatchingUp) break;
+                // A joiner still replaying gets it too: the frame is a live one, ahead of its replay.
+                if (!Engine.Running || at < Engine.Frame) break;
                 Engine.Schedule(at, () => GameBridge.AssignCharacter(slot, character));
                 break;
             }
@@ -1651,21 +1647,15 @@ internal sealed class Session
         peer.Ready = false;
         peer.CatchUp = CatchUpStep.None;
         peer.LastInputFrame = -1;
-        // Rejoin by replaying the area log (Stage 3) when there is one: right away, even mid-battle. Otherwise, or if
-        // the last replay re-sync of this area diverged at the same point again, reload in place (Stage 2) at the
-        // next moment the game allows saving.
-        bool again = peer.ReplayL == _area.L && peer.ReplayDivergedAt >= 0 && Math.Abs(peer.DivergedAt - peer.ReplayDivergedAt) <= SamePointFrames;
-        bool replay = CatchUpEnabled && _area.Valid && !again;
+        // Rejoin by replaying the area log (Stage 3) when there is one: right away, even mid-battle. Otherwise reload in
+        // place (Stage 2) at the next moment the game allows saving. A cause that reproduces in the replay makes the
+        // replay diverge (CatchUpFailed: reload); one that keeps coming back live is capped by ResyncLimit. (A "same
+        // point again" rule was dropped: a guest merges well past its divergence, so it could never apply.)
+        bool replay = CatchUpEnabled && _area.Valid;
         peer.ForceStage2 = !replay;
-        if (replay) { peer.ReplayL = _area.L; peer.ReplayDivergedAt = peer.DivergedAt; }
-        string how = replay ? $"by replay from f{_area.L}"
-            : again ? $"with a reload (diverged at f{peer.DivergedAt} again, last time at f{peer.ReplayDivergedAt})"
-            : $"with a reload ({(CatchUpEnabled ? _area.InvalidReason : "replay off")})";
+        string how = replay ? $"by replay from f{_area.L}" : $"with a reload ({(CatchUpEnabled ? _area.InvalidReason : "replay off")})";
         Plugin.Log.LogInfo($"[resync] {peer.Name} left the run at f{Engine.AppliedFrame}; rejoins {how}");
     }
-
-    /// <summary>Two divergences this close (frames) in one area count as the same point (snapshots are 30 frames apart).</summary>
-    private const int SamePointFrames = 120;
 
     // ------------------------------------------------------------------ Stage 1: characters
 
@@ -1676,8 +1666,9 @@ internal sealed class Session
     /// <summary>
     /// Host, every frame of a run: when a guest begins playing (the game hands it the next free character), give it
     /// back the character it played before, if that one is free. Every PC reassigns on the same frame
-    /// (<see cref="Msg.AssignCharacter"/>), and the area log is invalidated: a later joiner can't replay it, so it
-    /// drops in by a reload.
+    /// (<see cref="Msg.AssignCharacter"/>), joiners still replaying included, and the area log records it for later
+    /// joiners. (It used to invalidate the log: a guest that re-synced by replay got its character back on merging,
+    /// so a second re-sync or drop-in in that area always waited for a reload; the sweep of 2026-11-16.)
     /// </summary>
     private void UpdateCharacters()
     {
@@ -1711,7 +1702,8 @@ internal sealed class Session
                     Plugin.Log.LogInfo($"[characters] {peer.Name} played {before} before (has {now}): giving it back at f{at}");
                     foreach (var other in _peers.Values)
                     {
-                        if (other.Pending) continue;
+                        // Joiners whose CatchUp went out already; earlier ones get it from the log.
+                        if (other.Pending && other.CatchUp != CatchUpStep.Running) continue;
                         var (w, ms) = Protocol.Begin(Msg.AssignCharacter);
                         w.Write(at);
                         w.Write((byte)peer.Slot);
@@ -1720,10 +1712,7 @@ internal sealed class Session
                     }
                     int slot = peer.Slot;
                     Engine.Schedule(at, () => GameBridge.AssignCharacter(slot, before));
-                    _area.Invalidate("a character was reassigned");
-                    // A joiner replaying the log would miss it: it drops in by a reload instead.
-                    foreach (var p in _peers.Values.Where(p => p.Pending && p.CatchUp != CatchUpStep.None).ToList())
-                        CancelCatchUp(p, "a character was reassigned");
+                    _area.LogCharacter(at, slot, before);
                     continue; // remembered again once the swap shows
                 }
             }
@@ -2295,7 +2284,7 @@ internal sealed class Session
                 if (ch[s] == null || s == peer.Slot) continue;
                 SendInputTo(peer.Id, frame, s, ch[s], s == LocalSlot ? ch[InputOverride.SystemChannel] : null);
             }
-        Plugin.Log.LogInfo($"[catchup] {peer.Name}: start at f{_area.L}, {_area.FrameCount} logged frames in {blocks} blocks, {_area.Snapshots.Count} snapshots, {_area.Roster.Count} roster changes, live at f{Engine.AppliedFrame}");
+        Plugin.Log.LogInfo($"[catchup] {peer.Name}: start at f{_area.L}, {_area.FrameCount} logged frames in {blocks} blocks, {_area.Snapshots.Count} snapshots, {_area.Roster.Count} roster changes, {_area.Characters.Count} character changes, live at f{Engine.AppliedFrame}");
     }
 
     /// <summary>Frames per input log message.</summary>
@@ -2346,7 +2335,7 @@ internal sealed class Session
         int saveSlot = r.ReadInt32();
         var party = PartySpawn.Read(r);
         int live = r.ReadInt32();
-        var roster = AreaLog.ReadRoster(r);
+        var (roster, characters) = AreaLog.ReadRoster(r);
         if (Phase == Phase.Running) return;
         _awaitingMirrorReload = false;
         bool rejoin = ResyncWaiting || _resyncing;
@@ -2372,6 +2361,13 @@ internal sealed class Session
                 Engine.Schedule(frame, () => GameBridge.MakeLeave(s));
             }
             Plugin.Log.LogInfo($"[catchup] replaying roster change: P{s + 1} {(join ? "joins" : "leaves")} at f{frame}");
+        }
+        foreach (var (frame, slot, character) in characters)
+        {
+            int s = slot;
+            string c = character;
+            Engine.Schedule(frame, () => GameBridge.AssignCharacter(s, c));
+            Plugin.Log.LogInfo($"[catchup] replaying character change: P{s + 1} plays {c} from f{frame}");
         }
         _catchUp = new CatchUpState { L = L, Seq = seq, Party = party, Playing = playing, Since = Now, Total = live - L };
         // The save's load is load <seq> of the session's count; it ends on frame L, as it did for everyone.

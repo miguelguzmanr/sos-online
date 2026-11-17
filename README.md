@@ -305,7 +305,7 @@ The command-line flags are documented in `SosOnline/TestHarness.cs`.
 
 ### Verified (2026-11-16, branch milestone/battle-sync, same save)
 
-The Bosslug fight runs in step: 11 runs in a row of the battle-turns test with 0 differences (the spell lock types its casts roll were the cause). A guest that gets out of sync mid-battle rejoins by replay in about 3.5 s; when the replay can't work, it rejoins with a reload after the battle. In a second full sweep (title-screen menus and the restart popup included) every test passes with 0 differences except the re-sync test: after rejoining by replay, the guest split again in the Bosslug fight (the two summoned Acid Bugs took their slots in the opposite order) and waited for the battle to end to reload (see *Known limitations*). One earlier run of that test stayed identical to the end.
+The Bosslug fight runs in step: 11 runs in a row of the battle-turns test with 0 differences (the spell lock types its casts roll were the cause). A guest that gets out of sync mid-battle rejoins by replay in about 3.5 s; when the replay can't work, it rejoins with a reload after the battle. In a second full sweep (title-screen menus and the restart popup included) every test passes with 0 differences except the re-sync test: after rejoining by replay, the guest split again in the Bosslug fight (the two summoned Acid Bugs took their slots in the opposite order). The summon's slot reservation read the shared random generator; now it uses the deterministic one, and the re-sync test then passed 6 times in a row (241 of 241 snapshots identical after the rejoin).
 
 ### Verified (2026-11-16, build 3fd5a2c, the user's newest save in the Forbidden Cavern)
 
@@ -326,7 +326,7 @@ Every loopback test in one sweep: saves (P1 and P2 saving), the live battle, dro
 - Options are not available from the pause screen in battles and cutscenes for guests (the shared pause there would put the PCs' menus out of step).
 - If the host leaves, the session ends; the host's save is the shared one.
 - On Assign Players, every online player shows the keyboard icon (the stand-in device used online), with their name and colour.
-- A guest that rejoined by replay can split again in the Bosslug fight: the summoned Acid Bugs can take their slots in the opposite order on its PC (1 of 2 loopback runs; cause not found yet). It then waits on the waiting screen until the battle ends and reloads.
+- A second desync in the same area after a battle rejoin can fail its replay (the party AI's turn right after the guest's first leave sometimes differs); that guest then rejoins with a reload after the battle.
 - After a desync, the guest that diverged rejoins by replay (or a reload in place) on its PC; a desync of the host's own game can't be detected (the host is the reference).
 - If one PC can't keep 60 fps, everyone slows down with it (lockstep).
 - Mod and game versions must match on every PC (checked when joining).

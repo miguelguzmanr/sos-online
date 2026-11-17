@@ -35,6 +35,10 @@ namespace SosOnline;
 ///   --sosonline-hpdivergeagain    with --sosonline-hpdiverge: fire every time the frame is reached (a cause that
 ///                                 reproduces on this PC, e.g. in a replay)
 ///   --sosonline-nolockfix         leave spell lock rolls to each PC (reproduces the Bosslug split of 2026-11-16)
+///   --sosonline-nosummonfix       leave summon slot picks to each PC (reproduces the Acid Bugs' swapped slots)
+///   --sosonline-npcprobe          log every frame the active NPCs and each NPC's first inactive ancestor change
+///   --sosonline-summonprobe[=N]   log each summon's slot list, reservations and assignments; N > 0 draws N extra
+///                                 random values before each (to show whether the pick reads the shared generator)
 ///   --sosonline-noresync          guest: report differences but never ask to re-sync (to see later ones, e.g. spawns)
 ///   --sosonline-hpnudge=F         at lockstep frame F, lower the first party member's HP by 1 on this PC only, without
 ///                                 the mark: the guest's state check corrects it in place
@@ -401,6 +405,32 @@ internal static class TestHarness
         _stateLog?.WriteLine($"{s.Hash():X8} {s}");
     }
 
+    // --sosonline-npcprobe: every frame, the active NPCs and every NPC's activation chain (its first inactive
+    // ancestor), logged when they change, with Unity's own frame count. Why a replaying joiner sees an NPC early.
+    private static string _npcs, _npcChain;
+    private static void NpcProbe(int frame)
+    {
+        try
+        {
+            string now = Lockstep.StateSnapshot.CaptureNpcs();
+            var chain = new System.Collections.Generic.List<string>();
+            foreach (var n in Resources.FindObjectsOfTypeAll<NPCController>())
+            {
+                if (n == null || !n.gameObject.scene.IsValid()) continue;
+                string off = "";
+                for (var t = n.transform; t != null; t = t.parent) if (!t.gameObject.activeSelf) { off = t.name; break; }
+                chain.Add($"{n.gameObject.name}:{(n.enabled ? "on" : "off")}{(off.Length > 0 ? "/inactive@" + off : "")}");
+            }
+            chain.Sort(StringComparer.Ordinal);
+            string c = string.Join(" ", chain);
+            if (now != _npcs || c != _npcChain)
+                Plugin.Log.LogInfo($"[npcprobe] f{frame} (unity frame {UnityEngine.Time.frameCount - Lockstep.GameClock.FrameBase}) active [{now}] all [{c}]");
+            _npcs = now;
+            _npcChain = c;
+        }
+        catch (Exception e) { Plugin.Log.LogWarning($"[npcprobe] {e.Message}"); }
+    }
+
     /// <summary>Logs the sprites and fonts of every visible game screen (to style the mod's own UI like the game's).</summary>
     private static void ProbeUi(int frame)
     {
@@ -603,6 +633,7 @@ internal static class TestHarness
         if (At("pauseleave", frame)) { Plugin.Log.LogInfo($"[test] synced pause-menu leave of P2 at {frame}"); session.LeaveSlotDeterministic(1); }
         if (AtList("hpdiverge", frame) && (Args.ContainsKey("hpdivergeagain") || _diverged.Add(frame))) { DivergeHp(frame, "hpdiverge"); Diverged = true; }
         if (At("hpnudge", frame)) DivergeHp(frame, "hpnudge");
+        if (Args.ContainsKey("npcprobe")) NpcProbe(frame);
         if (At("campat", frame)) Camp(frame);
         // Camping itself, past the story unlock the campfire checks (an early save only gets "The campfire feels cozy").
         if (At("campstart", frame)) CampForce(frame, true);

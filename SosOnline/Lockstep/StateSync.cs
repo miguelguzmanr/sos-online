@@ -238,7 +238,7 @@ internal sealed class StateSnapshot
     }
 
     /// <summary>Every active NPC or enemy in the level: name and position, sorted.</summary>
-    private static string CaptureNpcs()
+    internal static string CaptureNpcs()
     {
         var all = UnityEngine.Object.FindObjectsOfType<NPCController>();
         var parts = new List<string>();
