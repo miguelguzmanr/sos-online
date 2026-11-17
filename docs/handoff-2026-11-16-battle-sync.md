@@ -69,10 +69,18 @@ Run on the same build before committing. Every test passes with 0 differences (b
 
 ## Open items, by priority
 
+**Since then (evening):** v0.1.52 published (`5a2c79c`). Then the game crashed at start and when opening Options with a gamepad: the diagnostic patch on `InputManager.OnActiveControllerChanged` (32 bytes; breakpoint at GameAssembly.dll+0xc7fcbe, found with `--sosonline-whichrva`). Removed with the other controller probes in `8c9a08c`, deployed to the user's game (labelled `0.1.52+5a2c79c-modified`), committed, **not pushed or published** (publishing was blocked by a permission check; v0.1.53 waits for the user's go-ahead). v0.1.52 still has the patch: the friend may crash with a gamepad. Also left by the tests: the game's display settings at 960x540 windowed (`tests/display-prefs.sh` wasn't run around the single tests; its saved copy is a test size too). Make the test scripts save and restore them every time.
+
 New, not committed yet: **Return to area start** (host's pause page where saving isn't allowed while a friend waits; findings §13). Tested once mid-battle (0 differences after), plus the reload drop-in and Stage 1 tests. Not over Steam: the area save goes to playing guests in one message (about 25 KB). Untested: the page in a cutscene (with Pause for everyone): camping in the test save still allows saving, so the friend joined the usual way.
 
 
 Fixed since the merge into `main` (not committed yet; findings §13): summon slots (`resync.sh` 6/6, `battle-turns.sh` 2/2, `battle-live.sh` clean), the session clock (battle clock lines identical on both PCs), characters given back kept in the area log, the dead "same point" rule removed, P3's colour. Tested: Esc on the waiting screen (real key press).
+
+0. **Todo (user, 2026-11-16): "Check for updates" in the Online menu, with a confirmation before updating.** Today `Update/AutoUpdate.cs` checks GitHub only at game start and installs a newer signed release without asking (next start runs it); the Online menu only shows "Restart to update" afterwards (`NativeMenus.cs`, `RestartLabel`). Plan:
+   - An entry in the title screen's Online page (a per-PC menu, not synced, so fine there; not in the in-session pause popup, which runs on every PC and may only offer the same choices everywhere).
+   - It runs the check on demand (`CheckAsync`) and reports in a popup: up to date / update X available → confirm → download, verify the signature, install → the existing "Restart to update".
+   - Open questions for the user: should the automatic check at start also ask before installing (the "confirmation" part), or keep installing silently? For a locally modified build (updates off today), show "Local build: no updates" or allow it?
+   - Wording per `docs/messages.csv` style (short; "Check for updates", "Up to date.", "Update 0.1.54 is available.", "Install", "Back").
 
 1. **Verify over Steam with the friend** (as before, plus): a re-sync during a battle (the catch-up's log blocks over the relay are untested), a lost battle (game over) while a friend waits to join, and windows of different sizes (logic clipping, below).
 2. **Party AI after a leave mid-battle replays differently now and then.** A second re-sync in the same area replays the guest's first leave; once, the AI's Valere moved 3.3 m differently right after it (f1680). Falls back to the reload. Next: call-probe the party AI between the leave and the next turn.
