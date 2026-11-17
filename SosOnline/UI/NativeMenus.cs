@@ -39,6 +39,35 @@ internal static class NativeMenus
 
     // ================================================================== popups (two choices max)
 
+    private static (GenericPopupScreen screen, int index, string label, float at)? _testAnswer;
+
+    /// <summary>Test harness (--sosonline-popupanswer=Label,...): answer a popup offering one of these, a moment after it opens.</summary>
+    private static void TestAnswer(GenericPopupScreen screen, string[] labels)
+    {
+        if (!TestHarness.TryArg("popupanswer", out var list)) return;
+        foreach (var want in list.Split(',', StringSplitOptions.RemoveEmptyEntries))
+        {
+            int i = Array.IndexOf(labels, want.Replace('_', ' '));
+            if (i >= 0) { _testAnswer = (screen, i, labels[i], UnityEngine.Time.realtimeSinceStartup + 1.5f); return; }
+        }
+    }
+
+    /// <summary>Test harness, every frame.</summary>
+    internal static void TestAnswerTick()
+    {
+        if (_testAnswer is not { } a || UnityEngine.Time.realtimeSinceStartup < a.at) return;
+        _testAnswer = null;
+        try
+        {
+            Plugin.Log.LogInfo($"[test] popup: choosing '{a.label}'");
+            // The answer is the cursor's index, not just the selected button's.
+            a.screen.cursorIndex = a.index;
+            a.screen.SelectButton(a.screen.buttons[a.index]);
+            a.screen.OnChoiceDone();
+        }
+        catch (Exception e) { Plugin.Log.LogWarning($"[test] popup answer failed: {e.Message}"); }
+    }
+
     private static bool _popupOpen;
     private static int _popupToken;
 
@@ -57,6 +86,8 @@ internal static class NativeMenus
             p.choices.Clear();
             p.AddChoice(OnlineText.Dynamic(yes));
             if (no != null) p.AddChoice(OnlineText.Dynamic(no));
+            var choiceLabels = no != null ? new[] { yes, no } : new[] { yes };
+            Plugin.Log.LogInfo($"[menu] popup '{message.Replace("\n", " / ")}': {string.Join(" | ", choiceLabels)}");
             _popupOpen = true;
             int token = ++_popupToken;
             Action<View> done = view =>
@@ -73,11 +104,13 @@ internal static class NativeMenus
                     handled = true;
                     _popupOpen = false;
                     try { screen.onPopupAnswered = null; } catch { }
+                    Plugin.Log.LogInfo($"[menu] popup answered: {(success ? index.ToString() : "cancelled")}");
                     try { onAnswer?.Invoke(success ? index : -1); }
                     catch (Exception e) { Plugin.Log.LogError($"[menu] {e}"); }
                 };
                 screen.onPopupAnswered = answered;
                 FitButtons(screen);
+                TestAnswer(screen, choiceLabels);
             };
             ui.InstantiateViewAsync(Il2CppType.Of<GenericPopupScreen>(), EScreenLayers.MODAL, p.Cast<IViewParams>(), true,
                 AnimatorUpdateMode.UnscaledTime, done);
@@ -513,6 +546,9 @@ internal static class NativeMenus
         else if (s.IsHost && s.Peers.Any()) yield return ("Ask for logs", () => s.AskForLogs());
         if (!s.InSession || s.IsHost)
             yield return ($"Open to friends: {(Settings.OpenToFriends ? "on" : "off")}", () => { Settings.OpenToFriends = !Settings.OpenToFriends; ShowPage(MainPage); });
+        // Per PC: only outside a run (the in-session pause popup runs on every PC and may only offer the same choices).
+        if (s.Phase != Phase.Running && SosOnline.Update.AutoUpdate.Downloaded == null)
+            yield return (SosOnline.Update.AutoUpdate.CheckLabel, () => { SosOnline.Update.AutoUpdate.CheckNow(); ShowPage(MainPage); });
         yield return ("Open logs folder", SessionLogs.OpenFolder);
         yield return ("Back", () => CloseSubmenu(true));
     }

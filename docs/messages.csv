@@ -244,3 +244,15 @@
 243,toast,Notice at the top of the screen (host),Couldn't return to the area start.,Couldn't return to the area start.,34,,34,80,,SosOnline/Net/Session.cs,2061,New (2026-11-16). Also when the area entry save is missing.
 244,toast,Notice at the top of the screen (host),Nobody is waiting to join.,Nobody is waiting to join.,26,,26,80,,SosOnline/Net/Session.cs,2017,New (2026-11-16).
 245,pause entry,"Local pause screen: host, where saving is not allowed, while a friend waits to join",Pause for everyone,Pause for everyone,18,,18,,,SosOnline/UI/LocalPause.cs,224,New (2026-11-16): same as row 122; not shown in battles (the game has no pause there).
+246,menu entry,Title screen > Online page,Check for updates,Check for updates,17,,17,,,SosOnline/Update/AutoUpdate.cs,52,New (2026-11-16).
+247,menu entry,Title screen > Online page (while checking),Checking for updates…,Checking for updates…,21,,21,,,SosOnline/Update/AutoUpdate.cs,55,New (2026-11-16).
+248,menu entry,Title screen > Online page (while downloading),Downloading the update…,Downloading the update…,23,,23,,,SosOnline/Update/AutoUpdate.cs,56,New (2026-11-16).
+249,popup,Popup after Check for updates,Up to date ({version}).,Up to date ({version}).,23,yes,23,,,SosOnline/Update/AutoUpdate.cs,168,New (2026-11-16).
+250,popup,Popup after Check for updates,Update {version} is available.,Update {version} is available.,30,yes,30,,,SosOnline/Update/AutoUpdate.cs,171,New (2026-11-16).
+251,popup,Popup after Check for updates (locally modified build),This is a local build. / Install the published {version}?,This is a local build. / Install the published {version}?,57,yes,57,,,SosOnline/Update/AutoUpdate.cs,171,New (2026-11-16).
+252,popup choice,Popup after Check for updates,Install,Install,7,,7,,,SosOnline/Update/AutoUpdate.cs,172,New (2026-11-16).
+253,toast,Notice at the top of the screen,Downloading {version}…,Downloading {version}…,22,yes,22,80,,SosOnline/Update/AutoUpdate.cs,180,New (2026-11-16).
+254,popup,Popup after installing,Update {version} installed. Restart now?,Update {version} installed. Restart now?,40,yes,40,,,SosOnline/Update/AutoUpdate.cs,191,New (2026-11-16).
+255,popup choice,Popup after installing,Later,Later,5,,5,,,SosOnline/Update/AutoUpdate.cs,191,New (2026-11-16).
+256,toast,Notice at the top of the screen,Couldn't check for updates.,Couldn't check for updates.,27,,27,80,,SosOnline/Update/AutoUpdate.cs,159,New (2026-11-16).
+257,toast,Notice at the top of the screen,Couldn't install the update.,Couldn't install the update.,28,,28,80,,SosOnline/Update/AutoUpdate.cs,190,New (2026-11-16).

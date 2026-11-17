@@ -38,6 +38,8 @@ namespace SosOnline;
 ///   --sosonline-nosummonfix       leave summon slot picks to each PC (reproduces the Acid Bugs' swapped slots)
 ///   --sosonline-pausestate=F[,F2]  log the game's pause state (paused, pause disablers) at those frames
 ///   --sosonline-titleoptions      open the game's Options from the title screen and log for 10 s (crash check)
+///   --sosonline-updatecheck       title screen: Online page, Check for updates; quits after 90 s
+///   --sosonline-popupanswer=L,... answer the mod's popups that offer one of these labels ("_" for a space)
 ///   --sosonline-npcprobe          log every frame the active NPCs and each NPC's first inactive ancestor change
 ///   --sosonline-summonprobe[=N]   log each summon's slot list, reservations and assignments; N > 0 draws N extra
 ///                                 random values before each (to show whether the pick reads the shared generator)
@@ -178,6 +180,20 @@ internal static class TestHarness
         else { Plugin.Log.LogInfo("[test] options test done"); Application.Quit(); }
         _toStep++;
     }
+    /// <summary>--sosonline-updatecheck: Online page → Check for updates (answers via --sosonline-popupanswer), quit after 90 s.</summary>
+    private static void UpdateCheckTest()
+    {
+        double now = Time.realtimeSinceStartupAsDouble;
+        if (_ucStep == 0) { if (!GameBridge.AtTitleScreen) return; _ucStep = 1; _ucAt = now + 5; return; }
+        if (now < _ucAt) return;
+        if (_ucStep == 1) { GameBridge.FindTitleScreen()?.ShowChoices(); _ucAt = now + 2; }
+        else if (_ucStep == 2) { UI.NativeMenus.OpenTitleMenu(); _ucAt = now + 2; }
+        else if (_ucStep == 3) { Plugin.Log.LogInfo("[test] choosing Check for updates"); UI.NativeMenus.ClickEntry("Check for updates"); _ucAt = now + 90; }
+        else { Plugin.Log.LogInfo("[test] update check test done"); Application.Quit(); }
+        _ucStep++;
+    }
+    private static int _ucStep;
+    private static double _ucAt;
     private static int _toStep;
     private static double _toAt;
 
@@ -237,6 +253,8 @@ internal static class TestHarness
         if (!_xrefDone && Args.ContainsKey("xref") && Time.frameCount > 60) { _xrefDone = true; XrefProbe.Run(); Application.Quit(); }
         if (Args.ContainsKey("uitest")) UiTest();
         if (Args.ContainsKey("titleoptions")) TitleOptionsTest();
+        UI.NativeMenus.TestAnswerTick();
+        if (Args.ContainsKey("updatecheck")) UpdateCheckTest();
         if (Args.Count == 0 || _autoDone) return;
         var session = Session.Instance;
 

@@ -24,6 +24,10 @@ namespace SosOnline.Update;
 ///
 /// Off with <c>AutoUpdate = false</c> in <c>BepInEx\config\sosonline.coop.cfg</c>; never for a locally modified
 /// build or a test run.
+///
+/// <see cref="CheckNow"/> (the title screen's Online page, "Check for updates") does the same on demand and asks
+/// first: "Up to date", or the newer release with Install / Back, then Restart / Later. On a locally modified build
+/// it offers the published release even when that isn't newer, so the PC goes back to a build everyone has.
 /// </summary>
 internal static class AutoUpdate
 {
@@ -39,6 +43,27 @@ internal static class AutoUpdate
 
     /// <summary>Messages for the main thread (toasts aren't thread-safe).</summary>
     private static readonly ConcurrentQueue<string> Notices = new();
+    /// <summary>Work for the main thread (the game's popups), from the background checks.</summary>
+    private static readonly ConcurrentQueue<Action> MainThread = new();
+
+    private enum Manual { Idle, Checking, Downloading }
+    private static volatile Manual _manual;
+
+    /// <summary>The Online page's entry: "Check for updates", or what it's doing.</summary>
+    public static string CheckLabel => _manual switch
+    {
+        Manual.Checking => "Checking for updates…",
+        Manual.Downloading => "Downloading the update…",
+        _ => "Check for updates",
+    };
+
+    private static bool LocalBuild => SessionLogs.Build.Contains("-modified");
+
+    private sealed class Release
+    {
+        public string Tag, Url;
+        public Version Version;
+    }
 
     public static Version Current => typeof(AutoUpdate).Assembly.GetName().Version;
 
@@ -102,42 +127,139 @@ internal static class AutoUpdate
     public static void Update()
     {
         while (Notices.TryDequeue(out var message)) Toast.Show(message);
+        while (MainThread.TryDequeue(out var action))
+            try { action(); } catch (Exception e) { Plugin.Log.LogError($"[update] {e}"); }
+    }
+
+    /// <summary>
+    /// Main thread, from the Online page: look for the latest release now and ask before installing it. Works with
+    /// automatic updates off and on a locally modified build (then the published release replaces it).
+    /// </summary>
+    public static void CheckNow()
+    {
+        if (_manual != Manual.Idle || _downloaded != null || PluginDir() == null) return;
+        _manual = Manual.Checking;
+        Plugin.Log.LogInfo("[update] checking for updates (asked)");
+        Task.Run(async () =>
+        {
+            Release release = null;
+            string error = null;
+            try { release = await FindLatestAsync(); }
+            catch (Exception e) { error = $"{e.GetType().Name}: {e.Message}"; }
+            MainThread.Enqueue(() => OnChecked(release, error));
+        });
+    }
+
+    private static void OnChecked(Release release, string error)
+    {
+        _manual = Manual.Idle;
+        if (release == null)
+        {
+            Plugin.Log.LogWarning($"[update] check failed: {error ?? "no release found"}");
+            Toast.Show("Couldn't check for updates.");
+            return;
+        }
+        var current = Current;
+        bool newer = Normalize(release.Version) > Normalize(current);
+        string v = release.Version.ToString(3);
+        Plugin.Log.LogInfo($"[update] latest release {release.Tag}; this build {SessionLogs.Build}{(newer ? ": newer" : LocalBuild ? ": local build" : ": up to date")}");
+        if (!newer && !LocalBuild)
+        {
+            Ask($"Up to date ({current.ToString(3)}).", "OK", null, null);
+            return;
+        }
+        string question = newer ? $"Update {v} is available." : $"This is a local build.\nInstall the published {v}?";
+        Ask(question, "Install", "Back", () => InstallNow(release));
+    }
+
+    private static void InstallNow(Release release)
+    {
+        if (_manual != Manual.Idle) return;
+        _manual = Manual.Downloading;
+        string v = release.Version.ToString(3);
+        Toast.Show($"Downloading {v}…");
+        bool anyVersion = LocalBuild;
+        Task.Run(async () =>
+        {
+            bool done = false;
+            try { done = await DownloadAndInstallAsync(release, anyVersion); }
+            catch (Exception e) { Plugin.Log.LogWarning($"[update] install failed: {e.GetType().Name}: {e.Message}"); }
+            MainThread.Enqueue(() =>
+            {
+                _manual = Manual.Idle;
+                if (!done) { Toast.Show("Couldn't install the update."); return; }
+                Ask($"Update {v} installed. Restart now?", "Restart", "Later", Restart);
+            });
+        });
+    }
+
+    /// <summary>The game's popup when one can open (else a notice); <paramref name="onYes"/> on the first choice.</summary>
+    private static void Ask(string message, string yes, string no, Action onYes)
+    {
+        if (!UI.NativeMenus.Popup(message, yes, no, i => { if (i == 0) onYes?.Invoke(); }))
+            Toast.Show(message.Replace("\n", " "));
+    }
+
+    private static HttpClient Http()
+    {
+        var http = new HttpClient { Timeout = TimeSpan.FromSeconds(60) };
+        http.DefaultRequestHeaders.UserAgent.ParseAdd("SosOnline-updater");
+        http.DefaultRequestHeaders.Accept.ParseAdd("application/vnd.github+json");
+        return http;
+    }
+
+    /// <summary>The latest release and its zip, or null (none published, or no usable zip).</summary>
+    private static async Task<Release> FindLatestAsync()
+    {
+        using var http = Http();
+        using var response = await http.GetAsync(LatestRelease);
+        if (response.StatusCode == System.Net.HttpStatusCode.NotFound) { Plugin.Log.LogInfo("[update] no release published yet"); return null; }
+        response.EnsureSuccessStatusCode();
+        using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        var root = doc.RootElement;
+        string tag = root.GetProperty("tag_name").GetString() ?? "";
+        if (!Version.TryParse(tag.TrimStart('v', 'V'), out var latest)) { Plugin.Log.LogWarning($"[update] unexpected release tag '{tag}'"); return null; }
+        foreach (var asset in root.GetProperty("assets").EnumerateArray())
+        {
+            string name = asset.GetProperty("name").GetString() ?? "";
+            if (!name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase)) continue;
+            if (asset.GetProperty("size").GetInt64() > MaxDownloadBytes) break;
+            return new Release { Tag = tag, Version = latest, Url = asset.GetProperty("browser_download_url").GetString() };
+        }
+        Plugin.Log.LogWarning($"[update] release {tag} has no usable zip");
+        return null;
     }
 
     private static async Task CheckAsync()
     {
         try
         {
-            using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(60) };
-            http.DefaultRequestHeaders.UserAgent.ParseAdd("SosOnline-updater");
-            http.DefaultRequestHeaders.Accept.ParseAdd("application/vnd.github+json");
-
-            using var response = await http.GetAsync(LatestRelease);
-            if (response.StatusCode == System.Net.HttpStatusCode.NotFound) { Plugin.Log.LogInfo("[update] no release published yet"); return; }
-            response.EnsureSuccessStatusCode();
-            using var release = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
-            var root = release.RootElement;
-
-            string tag = root.GetProperty("tag_name").GetString() ?? "";
-            if (!Version.TryParse(tag.TrimStart('v', 'V'), out var latest)) { Plugin.Log.LogWarning($"[update] unexpected release tag '{tag}'"); return; }
+            var release = await FindLatestAsync();
+            if (release == null) return;
             var current = Current;
-            if (Normalize(latest) <= Normalize(current)) { Plugin.Log.LogInfo($"[update] up to date ({current.ToString(3)}; latest release {tag})"); return; }
+            if (Normalize(release.Version) <= Normalize(current)) { Plugin.Log.LogInfo($"[update] up to date ({current.ToString(3)}; latest release {release.Tag})"); return; }
+            if (await DownloadAndInstallAsync(release, false)) Notices.Enqueue(Installed);
+        }
+        catch (Exception e)
+        {
+            // Offline, GitHub unreachable or rate-limited: try again at the next start.
+            Plugin.Log.LogWarning($"[update] check failed: {e.GetType().Name}: {e.Message}");
+        }
+    }
 
-            string url = null;
-            long size = 0;
-            foreach (var asset in root.GetProperty("assets").EnumerateArray())
-            {
-                string name = asset.GetProperty("name").GetString() ?? "";
-                if (!name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase)) continue;
-                url = asset.GetProperty("browser_download_url").GetString();
-                size = asset.GetProperty("size").GetInt64();
-                break;
-            }
-            if (url == null || size > MaxDownloadBytes) { Plugin.Log.LogWarning($"[update] release {tag} has no usable zip"); return; }
-
+    /// <summary>
+    /// Downloads the release's zip and installs its DLL if the signature matches. <paramref name="anyVersion"/>: also
+    /// when it isn't newer (asked for on a local build); otherwise never goes back.
+    /// </summary>
+    private static async Task<bool> DownloadAndInstallAsync(Release release, bool anyVersion)
+    {
+        string tag = release.Tag;
+        var current = Current;
+        using var http = Http();
+        {
             Plugin.Log.LogInfo($"[update] {current.ToString(3)} → {tag}: downloading");
-            byte[] zipBytes = await http.GetByteArrayAsync(url);
-            if (zipBytes.Length > MaxDownloadBytes) return;
+            byte[] zipBytes = await http.GetByteArrayAsync(release.Url);
+            if (zipBytes.Length > MaxDownloadBytes) return false;
 
             byte[] dll = null, sig = null;
             using (var zip = new ZipArchive(new MemoryStream(zipBytes), ZipArchiveMode.Read))
@@ -148,7 +270,7 @@ internal static class AutoUpdate
                     if (path.EndsWith("/" + DllName, StringComparison.OrdinalIgnoreCase)) dll = Read(entry);
                     else if (path.EndsWith("/" + DllName + ".sig", StringComparison.OrdinalIgnoreCase)) sig = Read(entry);
                 }
-            if (dll == null || sig == null) { Plugin.Log.LogWarning($"[update] release {tag}: DLL or signature missing; not installed"); return; }
+            if (dll == null || sig == null) { Plugin.Log.LogWarning($"[update] release {tag}: DLL or signature missing; not installed"); return false; }
 
             using (var key = ECDsa.Create())
             {
@@ -156,33 +278,28 @@ internal static class AutoUpdate
                 if (!key.VerifyData(dll, sig, HashAlgorithmName.SHA256))
                 {
                     Plugin.Log.LogWarning($"[update] release {tag}: signature check failed; not installed");
-                    return;
+                    return false;
                 }
             }
 
-            Install(dll, current, tag);
-        }
-        catch (Exception e)
-        {
-            // Offline, GitHub unreachable or rate-limited: try again at the next start.
-            Plugin.Log.LogWarning($"[update] check failed: {e.GetType().Name}: {e.Message}");
+            return Install(dll, sig, current, tag, anyVersion);
         }
     }
 
-    private static void Install(byte[] dll, Version current, string tag)
+    private static bool Install(byte[] dll, byte[] sig, Version current, string tag, bool anyVersion)
     {
         string dir = PluginDir();
-        if (dir == null) return;
+        if (dir == null) return false;
         string target = Path.Combine(dir, DllName), staged = target + ".new", old = target + ".old";
 
         File.WriteAllBytes(staged, dll);
         var name = AssemblyName.GetAssemblyName(staged);
-        if (name.Name != "SosOnline" || name.Version == null || Normalize(name.Version) <= Normalize(current))
+        if (name.Name != "SosOnline" || name.Version == null || (!anyVersion && Normalize(name.Version) <= Normalize(current)))
         {
-            // Signed, but not newer (an old release served again): never go back.
+            // Signed, but not newer (an old release served again): never go back, unless asked for on a local build.
             TryDelete(staged);
             Plugin.Log.LogWarning($"[update] release {tag} contains {name.Name} {name.Version}; not newer, not installed");
-            return;
+            return false;
         }
 
         File.Move(target, old, true);
@@ -192,10 +309,12 @@ internal static class AutoUpdate
             File.Move(old, target, true); // put the running build back
             throw;
         }
+        // Its signature next to it, as in the release (a local build has none, or a stale one).
+        try { File.WriteAllBytes(target + ".sig", sig); } catch (Exception e) { Plugin.Log.LogWarning($"[update] signature file not written: {e.Message}"); }
         Installed = $"Update {name.Version.ToString(3)} downloaded. Restart from the Online menu.";
         _downloaded = name.Version;
-        Plugin.Log.LogInfo($"[update] installed {name.Version.ToString(3)}; it runs from the next start");
-        Notices.Enqueue(Installed);
+        Plugin.Log.LogInfo($"[update] installed {name.Version.ToString(3)} ({tag}); it runs from the next start");
+        return true;
     }
 
     private static Version Normalize(Version v) => new(v.Major, v.Minor, Math.Max(v.Build, 0));
