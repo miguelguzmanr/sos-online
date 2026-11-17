@@ -37,6 +37,7 @@ namespace SosOnline;
 ///   --sosonline-nolockfix         leave spell lock rolls to each PC (reproduces the Bosslug split of 2026-11-16)
 ///   --sosonline-nosummonfix       leave summon slot picks to each PC (reproduces the Acid Bugs' swapped slots)
 ///   --sosonline-pausestate=F[,F2]  log the game's pause state (paused, pause disablers) at those frames
+///   --sosonline-titleoptions      open the game's Options from the title screen and log for 10 s (crash check)
 ///   --sosonline-npcprobe          log every frame the active NPCs and each NPC's first inactive ancestor change
 ///   --sosonline-summonprobe[=N]   log each summon's slot list, reservations and assignments; N > 0 draws N extra
 ///                                 random values before each (to show whether the pick reads the shared generator)
@@ -164,6 +165,22 @@ internal static class TestHarness
         _uiStep++;
     }
 
+    /// <summary>--sosonline-titleoptions: open the game's Options from the title screen, log each second, quit.</summary>
+    private static void TitleOptionsTest()
+    {
+        double now = Time.realtimeSinceStartupAsDouble;
+        if (_toStep == 0) { if (!GameBridge.AtTitleScreen) return; _toStep = 1; _toAt = now + 5; Plugin.Log.LogInfo("[test] title screen: options test starts in 5 s"); return; }
+        if (now < _toAt) return;
+        var title = GameBridge.FindTitleScreen();
+        if (_toStep == 1) { title?.ShowChoices(); Plugin.Log.LogInfo("[test] title choices shown"); _toAt = now + 2; }
+        else if (_toStep == 2) { Plugin.Log.LogInfo("[test] opening Options"); title?.OnOptions(); Plugin.Log.LogInfo("[test] OnOptions returned"); _toAt = now + 1; }
+        else if (_toStep < 13) { Plugin.Log.LogInfo($"[test] options open, {_toStep - 2} s"); if (_toStep == 5) Shot("ui-options"); _toAt = now + 1; }
+        else { Plugin.Log.LogInfo("[test] options test done"); Application.Quit(); }
+        _toStep++;
+    }
+    private static int _toStep;
+    private static double _toAt;
+
     private static void Shot(string name) => ScreenCapture.CaptureScreenshot(Path.Combine(OutDir, $"{name}-{InstanceId}.png"));
 
     /// <summary>Called from the plugin's Update.</summary>
@@ -219,6 +236,7 @@ internal static class TestHarness
         QuitAfterLockstep();
         if (!_xrefDone && Args.ContainsKey("xref") && Time.frameCount > 60) { _xrefDone = true; XrefProbe.Run(); Application.Quit(); }
         if (Args.ContainsKey("uitest")) UiTest();
+        if (Args.ContainsKey("titleoptions")) TitleOptionsTest();
         if (Args.Count == 0 || _autoDone) return;
         var session = Session.Instance;
 

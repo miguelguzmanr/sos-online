@@ -26,11 +26,9 @@ internal static class CombatTrace
         Patch(harmony, typeof(EncounterController), nameof(EncounterController.ActivatePlayerTurn), nameof(PlayerTurn));
         Patch(harmony, typeof(EncounterController), nameof(EncounterController.AdvancePlayers), nameof(Advance));
         Patch(harmony, typeof(PlayerCombatActor), nameof(PlayerCombatActor.SetPlayer), nameof(ActorPlayer));
-        // Probes: does the battle ask which controller was used last (local hardware, different on every PC)?
-        Patch(harmony, typeof(InputManager), nameof(InputManager.GetLastUsedController), nameof(LastUsed));
-        Patch(harmony, typeof(InputManager), nameof(InputManager.OnActiveControllerChanged), nameof(ActiveChanged));
-        Patch(harmony, typeof(Rewired.Player.ControllerHelper), nameof(Rewired.Player.ControllerHelper.GetLastActiveController), nameof(LastActive));
-        Patch(harmony, typeof(Rewired.ReInput.ControllerHelper), nameof(Rewired.ReInput.ControllerHelper.GetLastActiveController), nameof(LastActive));
+        // (The controller probes on InputManager/Rewired are gone: the patch on the 32-byte
+        // InputManager.OnActiveControllerChanged crashed the game whenever the active controller changed, at start
+        // and in Options with a gamepad, 2026-11-16; breakpoint at GameAssembly.dll+0xc7fcbe, the end of that method.)
         // Damage inputs: a one-point difference between PCs shows which one differs.
         Patch(harmony, typeof(PlayerAttackDamage), nameof(PlayerAttackDamage.GetRandomDamageModifier), nameof(RandomModifier));
         Patch(harmony, typeof(PlayerAttackDamage), nameof(PlayerAttackDamage.GetTimedHitMultiplier), nameof(TimedMultiplier));

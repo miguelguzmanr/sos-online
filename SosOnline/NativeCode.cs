@@ -81,6 +81,26 @@ internal static unsafe class NativeCode
 
     public static bool IsFolded(MethodBase m) => SharedCount(m, out _) > 1;
 
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode)] private static extern IntPtr GetModuleHandle(string name);
+
+    /// <summary>
+    /// Diagnostics (--sosonline-whichrva=hex,...): the game methods whose native code starts nearest at or before
+    /// GameAssembly.dll + <paramref name="rva"/>, e.g. the fault offset Windows reports for a crash.
+    /// </summary>
+    public static string Containing(long rva)
+    {
+        Build();
+        var module = GetModuleHandle("GameAssembly.dll");
+        if (module == IntPtr.Zero) return "GameAssembly.dll not loaded";
+        long target = module.ToInt64() + rva;
+        long best = 0;
+        foreach (var p in _byPointer.Keys) { long v = p.ToInt64(); if (v <= target && v > best) best = v; }
+        if (best == 0) return "none below it";
+        long next = long.MaxValue;
+        foreach (var p in _byPointer.Keys) { long v = p.ToInt64(); if (v > target && v < next) next = v; }
+        return $"{string.Join(" / ", _byPointer[(IntPtr)best])} + 0x{target - best:x} (starts at rva 0x{best - module.ToInt64():x}; next method at rva 0x{(next == long.MaxValue ? 0 : next - module.ToInt64()):x})";
+    }
+
     /// <summary>Method names whose native code starts at this address (empty if unknown).</summary>
     public static List<string> NamesAt(IntPtr code)
     {

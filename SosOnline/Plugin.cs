@@ -42,6 +42,9 @@ public sealed class Plugin : BasePlugin
             DeterministicRandom.Install(harmony);
             CombatTrace.Install(harmony);
             SpawnTrace.Install(harmony);
+            if (TestHarness.TryArg("whichrva", out var rvas))
+                foreach (var hex in rvas.Split(',', StringSplitOptions.RemoveEmptyEntries))
+                    Log.LogInfo($"[fold] rva 0x{hex}: {NativeCode.Containing(Convert.ToInt64(hex, 16))}");
             if (TestHarness.TryArg("castprobe", out _) || TestHarness.TryArg("callprobe", out _)) CombatTrace.InstallCallProbe(harmony);
             NativeCode.AuditPatches(harmony, Guid);
             SteamInvites.ParseCommandLine();
