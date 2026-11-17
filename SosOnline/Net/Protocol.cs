@@ -41,11 +41,12 @@ internal enum Msg : byte
     LogChunk = 34,    // guest → host: transfer id, piece index, piece count, bytes (a zip of the guest's logs)
     LogReceived = 35, // host → guest: the logs arrived
     LogRequest = 36,  // host → guests: the host asks for logs (a toast; the guest decides)
+    AreaFiles = 37,   // host → guests playing: transfer id, the area entry save files (the host returns to the area start)
 }
 
 internal static class Protocol
 {
-    public const int Version = 11; // 9: snapshots carry each character's facing; 10: and the game's pause flag; 11: log sharing
+    public const int Version = 12; // 9: snapshots carry each character's facing; 10: and the game's pause flag; 11: log sharing; 12: character changes in the catch-up, area files
 
     public static (BinaryWriter w, MemoryStream ms) Begin(Msg type)
     {

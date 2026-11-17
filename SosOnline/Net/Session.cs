@@ -604,6 +604,7 @@ internal sealed class Session
 
         UpdateSoloCoop();
         UpdateCharacters();
+        UpdateReturn();
         UpdateDropIn();
         UpdateCatchUpHost();
         UpdateCatchUpJoiner();
@@ -623,6 +624,15 @@ internal sealed class Session
         // Ready only once the host's saves are loaded AND we're on the title screen: everyone must enter the game
         // from the same place on the same frame.
         // A drop-in loads in place from wherever the guest is.
+        if (_awaitingReturnReload && SaveMirror.ReloadDone)
+        {
+            _awaitingReturnReload = false;
+            var (w, ms) = Protocol.Begin(Msg.Ready);
+            w.Write(_transferId);
+            w.Write(GameClock.Now);
+            Send(HostId, ms, true);
+            Plugin.Log.LogInfo($"[return] area entry save loaded (transfer {_transferId})");
+        }
         if (_awaitingMirrorReload && SaveMirror.ReloadDone && !GameBridge.AtTitleScreen && !_readyAnywhere)
             Status = "Ready! Go to the Title screen to start.";
         if (_awaitingMirrorReload && SaveMirror.ReloadDone && GameBridge.Booted && (_readyAnywhere || GameBridge.AtTitleScreen))
@@ -1003,9 +1013,10 @@ internal sealed class Session
                 for (int n = r.ReadInt32(); n > 0; n--) slots.Add(r.ReadInt32());
                 var spawn = r.ReadBoolean() ? PartySpawn.Read(r) : null;
                 double timeBase = r.ReadDouble();
+                bool areaReturn = r.ReadBoolean();
                 if (!Engine.Running) break;
                 foreach (int s in slots) Engine.AddSlot(s, at);
-                ScheduleReloadInPlace(at, saveSlot, spawn, slots, timeBase);
+                ScheduleReloadInPlace(at, saveSlot, spawn, slots, timeBase, areaReturn);
                 break;
             }
             case Msg.Input:
@@ -1042,6 +1053,20 @@ internal sealed class Session
                 int slot = r.ReadByte();
                 bool paused = r.ReadBoolean();
                 if (slot != LocalSlot) OnPauseStatus(slot, paused);
+                break;
+            }
+            case Msg.AreaFiles:
+            {
+                int id = r.ReadInt32();
+                var files = new List<(string, byte[])>();
+                for (int n = r.ReadInt32(); n > 0; n--) files.Add((r.ReadString(), r.ReadBytes()));
+                if (!Engine.Running) break;
+                foreach (var (name, data) in files) SaveMirror.WriteFile(name, data);
+                _transferId = id;
+                SaveMirror.ReloadSaves();
+                _awaitingReturnReload = true;
+                Toast.Show("The host is returning to the area start.");
+                Plugin.Log.LogInfo($"[return] got {files.Count} area entry save file(s) (transfer {id})");
                 break;
             }
             case Msg.AssignCharacter:
@@ -1876,6 +1901,7 @@ internal sealed class Session
         if (Phase != Phase.Running) { _dropIn = DropInStep.None; _joiners.Clear(); _saveableFrames = 0; _lastBattleFrame = int.MinValue / 2; return; }
         _joiners.RemoveAll(id => !_peers.ContainsKey(id));
         if (GameBridge.InBattle || GameBridge.InLevelUp || GameBridge.PartyWiped) _lastBattleFrame = Engine.AppliedFrame;
+        if (_return != null) return;
         switch (_dropIn)
         {
             case DropInStep.None:
@@ -1957,6 +1983,102 @@ internal sealed class Session
         }
     }
 
+    // ------------------------------------------------------------------ return to the area start
+
+    /// <summary>Host: a return to the area start in progress (files sent, waiting for everyone to load them).</summary>
+    private sealed class ReturnState
+    {
+        public int L, Slot;
+        public PartySpawn Party;
+        public double Since;
+    }
+    private ReturnState _return;
+    // Guest: the area entry save was written; report ready once the game has read it.
+    private bool _awaitingReturnReload;
+
+    /// <summary>
+    /// Host: "Return to area start" can be offered. A friend waits to join by a reload (the game doesn't allow saving
+    /// yet, e.g. in a battle) and this area's entry save is kept.
+    /// </summary>
+    public bool CanReturnToAreaStart =>
+        IsHost && Phase == Phase.Running && _return == null && _dropIn == DropInStep.None && _area.L >= 0 && _area.SaveSlot >= 0
+        && _area.SaveFiles.Count > 0 && !GameBridge.LoadingLevel && _peers.Values.Any(p => p.Pending && !WantsCatchUp(p));
+
+    /// <summary>
+    /// Host: everyone, the waiting friends included, reloads this area's entry save on one frame, in place, with the
+    /// party where it stood then. A friend that would wait for the game to allow saving (the end of a battle) joins
+    /// now; everything since the area entry is undone. Same steps as a drop-in (<see cref="UpdateDropIn"/>), with the
+    /// area entry save instead of a fresh autosave: written on every PC, read back by the game, then the reload.
+    /// </summary>
+    public void ReturnToAreaStart()
+    {
+        if (!CanReturnToAreaStart)
+        {
+            Toast.Show(IsHost && Phase == Phase.Running && !_peers.Values.Any(p => p.Pending) ? "Nobody is waiting to join." : "Couldn't return to the area start.");
+            Plugin.Log.LogInfo("[return] not possible now");
+            return;
+        }
+        var files = _area.SaveFiles.ToList();
+        _return = new ReturnState { L = _area.L, Slot = _area.SaveSlot, Party = _area.Party, Since = Now };
+        foreach (var p in _peers.Values.Where(p => p.Pending && p.CatchUp != CatchUpStep.None).ToList()) CancelCatchUp(p, "returning to the area start");
+        _joiners.Clear();
+        _joiners.AddRange(_peers.Values.Where(p => p.Pending).Select(p => p.Id));
+        foreach (var id in _joiners) _peers[id].HoldUntil = 0;
+
+        // This PC: the files go where the game reads its saves, then the game reads them again.
+        foreach (var (name, data) in files)
+        {
+            var safe = System.IO.Path.GetFileName(name);
+            System.IO.File.WriteAllBytes(System.IO.Path.Combine(SaveMirror.OwnDir, safe), data);
+        }
+        SaveMirror.ReloadSaves();
+
+        // Waiting friends: the whole folder with the area entry save in it, as for a drop-in.
+        if (_joiners.Count > 0) SendSaveFiles(_joiners.Select(id => _peers[id]), true, files);
+        else _transferId++;
+        // Friends playing: just those files; they stay in the run.
+        foreach (var peer in _peers.Values.Where(p => !p.Pending))
+        {
+            peer.Ready = false;
+            peer.TransferId = _transferId;
+            var (w, ms) = Protocol.Begin(Msg.AreaFiles);
+            w.Write(_transferId);
+            w.Write(files.Count);
+            foreach (var (name, data) in files) { w.Write(name); w.WriteBytes(data); }
+            Send(peer.Id, ms, true);
+        }
+        Toast.Show("Returning to the area start…");
+        Plugin.Log.LogInfo($"[return] f{Engine.AppliedFrame}: back to the area entry at f{_return.L} (autosave {_return.Slot}, party {_return.Party}); joining: {string.Join(", ", _joiners.Select(id => _peers[id].Name))}");
+    }
+
+    /// <summary>Host, every frame: once every PC has read the area entry save, reload it everywhere.</summary>
+    private void UpdateReturn()
+    {
+        if (_return == null) return;
+        if (!IsHost || Phase != Phase.Running) { _return = null; return; }
+        _joiners.RemoveAll(id => !_peers.ContainsKey(id));
+        string fail = _area.L != _return.L ? "The party left the area. Return cancelled."
+            : Now - _return.Since > ReturnTimeoutS ? "Couldn't return to the area start." : null;
+        if (fail != null)
+        {
+            Toast.Show(fail);
+            Plugin.Log.LogWarning($"[return] cancelled: {fail}");
+            _return = null;
+            _joiners.Clear(); // they wait for a drop-in as before
+            return;
+        }
+        if (!SaveMirror.ReloadDone || GameBridge.LoadingLevel || GameBridge.Saving) return;
+        if (_peers.Values.Any(p => !p.Ready)) return;
+        var state = _return;
+        _return = null;
+        _dropInSlot = state.Slot;
+        Plugin.Log.LogInfo("[return] everyone has the area entry save; reloading it");
+        JoinNow(state.Party, true);
+    }
+
+    /// <summary>Seconds to wait for every PC to have the area entry save before giving up.</summary>
+    private const double ReturnTimeoutS = 60;
+
     /// <summary>A drop-in autosave older than this (frames) when the joiners are ready is replaced by a fresh one.</summary>
     private const int StaleDropInSaveFrames = 300;
 
@@ -1969,10 +2091,12 @@ internal sealed class Session
     }
 
     /// <summary>Host: the joiners have the save. Pick the join frame and tell everyone.</summary>
-    private void JoinNow()
+    /// <param name="spawnAt">Where the party stands after the reload (default: where it stands now).</param>
+    /// <param name="areaReturn">A return to the area start: reload even in a battle (only a level load postpones it).</param>
+    private void JoinNow(PartySpawn spawnAt = null, bool areaReturn = false)
     {
         int at = Engine.AppliedFrame + Engine.Delay + 3;
-        var spawn = GameBridge.CaptureParty();
+        var spawn = spawnAt ?? GameBridge.CaptureParty();
         var slots = _joiners.Select(id => _peers[id].Slot).OrderBy(s => s).ToList();
         _area.Invalidate("a player joined");
         // Everyone's clock moves to one base on the join frame; the joiners' clocks came from their own game.
@@ -1989,6 +2113,7 @@ internal sealed class Session
             w.Write(spawn != null);
             spawn?.Write(w);
             w.Write(timeBase);
+            w.Write(areaReturn);
             Send(peer.Id, ms, true);
         }
 
@@ -2022,7 +2147,7 @@ internal sealed class Session
             peer.LastInputFrame = at + Engine.Delay - 1;
         }
 
-        ScheduleReloadInPlace(at, _dropInSlot, spawn, slots, timeBase);
+        ScheduleReloadInPlace(at, _dropInSlot, spawn, slots, timeBase, areaReturn);
         BroadcastRoster();
         string names = string.Join(", ", _joiners.Select(id => _peers[id].Name));
         Status = $"{names} joined.";
@@ -2050,7 +2175,7 @@ internal sealed class Session
     }
 
     /// <summary>Every PC already in the session: on the join frame, register the new slots and reload in place.</summary>
-    private void ScheduleReloadInPlace(int at, int saveSlot, PartySpawn spawn, List<int> newSlots, double timeBase)
+    private void ScheduleReloadInPlace(int at, int saveSlot, PartySpawn spawn, List<int> newSlots, double timeBase, bool areaReturn = false)
     {
         // Test: a level load in progress on the join frame (the party walked through a door, say). Once per run.
         if (TestHarness.TryArg("loadatjoin", out _) && !_loadAtJoinDone)
@@ -2065,8 +2190,8 @@ internal sealed class Session
         Engine.Schedule(at, () =>
         {
             // The same state on every PC already in, so they all decide the same way. The joiner reloads anyway; it
-            // is told to stop and wait.
-            if (GameBridge.DropInBlocker != null)
+            // is told to stop and wait. A return to the area start reloads in a battle too (that's what it's for).
+            if (areaReturn ? GameBridge.LoadingLevel : GameBridge.DropInBlocker != null)
             {
                 PostponeDropIn(at, newSlots);
                 return;
@@ -2493,6 +2618,8 @@ internal sealed class Session
         _nextHello = _nextPing = _nextLobbyPoll = 0;
         _awaitingMirrorReload = false;
         _dropIn = DropInStep.None;
+        _return = null;
+        _awaitingReturnReload = false;
         _joiners.Clear();
         _saveableFrames = 0;
         _lastBattleFrame = int.MinValue / 2;

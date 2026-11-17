@@ -27,9 +27,11 @@ internal static class LocalPause
     /// <summary>"Pause for everyone" chosen: the next captured input of this PC's slot carries a pause press.</summary>
     private static bool _forwardStart;
 
-    private enum Page { Main, Options, ConfirmLeave }
+    private enum Page { Main, Options, ConfirmLeave, ConfirmReturn, NoSave }
 
     private static Page _page;
+    private static int _returnEntry;
+    private static Page _returnFrom;
     private static int _cursor;
     private static int _start = -2, _confirm, _back, _vertical, _horizontal;
 
@@ -59,6 +61,7 @@ internal static class LocalPause
         Init();
 
         if (IsOpen && (s.Phase != Phase.Running || s.CatchingUp)) Close("session not running");
+        if (IsOpen && (_page == Page.NoSave || _page == Page.ConfirmReturn) && !HostNoSave(s)) Close("return to area start no longer needed");
 
         if (!IsOpen && own && _forwardStart)
         {
@@ -80,7 +83,11 @@ internal static class LocalPause
         return new InputSnapshot();
     }
 
-    /// <summary>Free gameplay: no battle, cutscene, loading, or shared pause or menu.</summary>
+    /// <summary>
+    /// Free gameplay: no battle, cutscene, loading, or shared pause or menu. Or, for the host, where the game doesn't
+    /// allow saving while a friend waits to join (they'd wait until it does): a page with Return to area start
+    /// (<see cref="Page.NoSave"/>). Otherwise Start there goes to the game as usual.
+    /// </summary>
     private static bool CanOpen()
     {
         var s = Session.Instance;
@@ -89,17 +96,20 @@ internal static class LocalPause
         try
         {
             if (Manager<PauseManager>.instance?.isPaused ?? false) return false;
+            if (HostNoSave(s)) return true;
             if ((Manager<PauseManager>.instance?.pauseDisablers ?? 0) > 0) return false;
         }
         catch { return false; }
         return GameBridge.CanSaveNow;
     }
 
+    private static bool HostNoSave(Session s) => s.IsHost && !GameBridge.CanSaveNow && s.CanReturnToAreaStart;
+
     private static void Open(int frame)
     {
         IsOpen = true;
-        _page = Page.Main;
-        _cursor = 0;
+        _page = HostNoSave(Session.Instance) ? Page.NoSave : Page.Main;
+        _cursor = _page == Page.NoSave ? Entries().Count - 1 : 0; // on Back: a stray press mustn't undo the area
         _held.Clear();
         Plugin.Log.LogInfo($"[localpause] f{Session.Instance.Engine.AppliedFrame} opened (input frame {frame})");
         Session.Instance.SetLocalPaused(true);
@@ -185,6 +195,19 @@ internal static class LocalPause
                 });
                 list.Add(new Entry { Label = "Back", Action = () => GoTo(Page.Main, 2) });
                 break;
+            case Page.ConfirmReturn:
+                list.Add(new Entry { Label = "Return", Action = () => { s.ReturnToAreaStart(); Close("return to area start"); } });
+                list.Add(new Entry { Label = "Back", Action = () => GoTo(_returnFrom, _returnEntry) });
+                break;
+            case Page.NoSave:
+                // The host, where the game doesn't allow saving, while a friend waits to join.
+                list.Add(new Entry { Label = "Return to area start", Action = () => { _returnFrom = Page.NoSave; _returnEntry = 0; GoTo(Page.ConfirmReturn, 1); } });
+                // The game's own pause, shared as on the main page. Not in battles: the game has no pause there and
+                // ignores Start (host and guests alike; findings §8), so the entry would do nothing.
+                if (!GameBridge.InBattle)
+                    list.Add(new Entry { Label = "Pause for everyone", Action = () => { Close("pause for everyone"); _forwardStart = true; } });
+                list.Add(new Entry { Label = "Back", Action = () => Close("back") });
+                break;
             case Page.Options:
                 foreach (var (field, label) in LocalOptions.Rows)
                 {
@@ -226,7 +249,8 @@ internal static class LocalPause
             if (Down(raw, _start)) { Close("resume (pause)"); return; }
             if (Down(raw, _back))
             {
-                if (_page == Page.Main) Close("resume (back)");
+                if (_page == Page.Main || _page == Page.NoSave) Close("resume (back)");
+                else if (_page == Page.ConfirmReturn) GoTo(_returnFrom, _returnEntry);
                 else GoTo(Page.Main, _page == Page.Options && LocalOptions.Available ? 1 : 0);
                 return;
             }
@@ -301,6 +325,7 @@ internal static class LocalPause
     {
         Page.Options => "Options",
         Page.ConfirmLeave => s.IsHost ? "End co-op for everyone?" : "Leave co-op?",
+        Page.ConfirmReturn => "Return to the area start?",
         _ => "Paused",
     };
 
@@ -308,6 +333,8 @@ internal static class LocalPause
     {
         Page.Options => "These settings only change on this PC.",
         Page.ConfirmLeave => s.IsHost ? "Everyone may continue playing solo." : "The AI takes over your character.",
+        Page.ConfirmReturn => "Progress since entering this area will be lost.",
+        Page.NoSave => "Only you are paused. The game keeps running.",
         _ => "Only you are paused. The game keeps running.",
     };
 

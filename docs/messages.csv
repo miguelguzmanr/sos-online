@@ -233,3 +233,14 @@
 232,toast,Notice at the top of the screen,You're back in sync.,You're back in sync.,20,,20,80,,SosOnline/Net/Session.cs,981,New (2026-11-16): a guest that got out of sync rejoined by replaying while the others played on.
 233,status,Online menu status line (some are also shown as a notice),Rejoining the party…,Rejoining the party…,20,,20,,,SosOnline/Net/Session.cs,2369,New (2026-11-16): instead of 'Catching up with the party…' when rejoining after getting out of sync.
 234,screen,Catch-up / re-sync screen (full screen),The others keep playing while you rejoin.,The others keep playing while you rejoin.,41,,41,,,SosOnline/UI/CatchUpScreen.cs,50,New (2026-11-16): footer while rejoining by replay. Title reuses row 128 (Rejoining {host}'s game).
+235,pause entry,"Local pause screen: host, where saving is not allowed, while a friend waits to join",Return to area start,Return to area start,20,,20,,,SosOnline/UI/LocalPause.cs,204,New (2026-11-16): the host's only choice besides Back there.
+236,pause entry,"Local pause screen: host, where saving is not allowed, while a friend waits to join",Back,Back,4,,4,,,SosOnline/UI/LocalPause.cs,205,New (2026-11-16). Cursor starts here.
+237,pause title,Local pause screen: confirm,Return to the area start?,Return to the area start?,25,,25,,,SosOnline/UI/LocalPause.cs,324,New (2026-11-16).
+238,pause hint,Local pause screen: confirm,Progress since entering this area will be lost.,Progress since entering this area will be lost.,47,,47,,,SosOnline/UI/LocalPause.cs,332,New (2026-11-16).
+239,pause entry,Local pause screen: confirm,Return,Return,6,,6,,,SosOnline/UI/LocalPause.cs,199,New (2026-11-16). Answers row above; Back returns to the page.
+240,toast,Notice at the top of the screen (host),Returning to the area start…,Returning to the area start…,28,,28,80,,SosOnline/Net/Session.cs,2050,New (2026-11-16).
+241,toast,Notice at the top of the screen (guests),The host is returning to the area start.,The host is returning to the area start.,40,,40,80,,SosOnline/Net/Session.cs,1068,New (2026-11-16).
+242,toast,Notice at the top of the screen (host),The party left the area. Return cancelled.,The party left the area. Return cancelled.,42,,42,80,,SosOnline/Net/Session.cs,2060,New (2026-11-16).
+243,toast,Notice at the top of the screen (host),Couldn't return to the area start.,Couldn't return to the area start.,34,,34,80,,SosOnline/Net/Session.cs,2061,New (2026-11-16). Also when the area entry save is missing.
+244,toast,Notice at the top of the screen (host),Nobody is waiting to join.,Nobody is waiting to join.,26,,26,80,,SosOnline/Net/Session.cs,2017,New (2026-11-16).
+245,pause entry,"Local pause screen: host, where saving is not allowed, while a friend waits to join",Pause for everyone,Pause for everyone,18,,18,,,SosOnline/UI/LocalPause.cs,224,New (2026-11-16): same as row 122; not shown in battles (the game has no pause there).

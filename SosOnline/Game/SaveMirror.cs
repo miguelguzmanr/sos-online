@@ -105,6 +105,13 @@ internal static class SaveMirror
         _reload = saves.LoadSaveData();
     }
 
+    /// <summary>Asks SaveManager to read every slot from disk again (where it reads now), changing nothing else.</summary>
+    public static void ReloadSaves()
+    {
+        var saves = GameBridge.Saves;
+        if (saves != null) _reload = saves.LoadSaveData();
+    }
+
     private static bool _savedRegistryBackup = true;
 
     public static void RememberRegistryBackup()

@@ -36,6 +36,7 @@ namespace SosOnline;
 ///                                 reproduces on this PC, e.g. in a replay)
 ///   --sosonline-nolockfix         leave spell lock rolls to each PC (reproduces the Bosslug split of 2026-11-16)
 ///   --sosonline-nosummonfix       leave summon slot picks to each PC (reproduces the Acid Bugs' swapped slots)
+///   --sosonline-pausestate=F[,F2]  log the game's pause state (paused, pause disablers) at those frames
 ///   --sosonline-npcprobe          log every frame the active NPCs and each NPC's first inactive ancestor change
 ///   --sosonline-summonprobe[=N]   log each summon's slot list, reservations and assignments; N > 0 draws N extra
 ///                                 random values before each (to show whether the pick reads the shared generator)
@@ -633,6 +634,9 @@ internal static class TestHarness
         if (At("pauseleave", frame)) { Plugin.Log.LogInfo($"[test] synced pause-menu leave of P2 at {frame}"); session.LeaveSlotDeterministic(1); }
         if (AtList("hpdiverge", frame) && (Args.ContainsKey("hpdivergeagain") || _diverged.Add(frame))) { DivergeHp(frame, "hpdiverge"); Diverged = true; }
         if (At("hpnudge", frame)) DivergeHp(frame, "hpnudge");
+        if (AtList("pausestate", frame))
+            try { var pm = Manager<PauseManager>.instance; Plugin.Log.LogInfo($"[test] f{frame} pause state: paused {pm?.isPaused}, disablers {pm?.pauseDisablers}, battle {Game.GameBridge.InBattle}, can save {Game.GameBridge.CanSaveNow}"); }
+            catch (Exception e) { Plugin.Log.LogWarning($"[test] pause state: {e.Message}"); }
         if (Args.ContainsKey("npcprobe")) NpcProbe(frame);
         if (At("campat", frame)) Camp(frame);
         // Camping itself, past the story unlock the campfire checks (an early save only gets "The campfire feels cozy").

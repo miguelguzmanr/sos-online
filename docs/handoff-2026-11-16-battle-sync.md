@@ -69,12 +69,15 @@ Run on the same build before committing. Every test passes with 0 differences (b
 
 ## Open items, by priority
 
+New, not committed yet: **Return to area start** (host's pause page where saving isn't allowed while a friend waits; findings §13). Tested once mid-battle (0 differences after), plus the reload drop-in and Stage 1 tests. Not over Steam: the area save goes to playing guests in one message (about 25 KB). Untested: the page in a cutscene (with Pause for everyone): camping in the test save still allows saving, so the friend joined the usual way.
+
+
 Fixed since the merge into `main` (not committed yet; findings §13): summon slots (`resync.sh` 6/6, `battle-turns.sh` 2/2, `battle-live.sh` clean), the session clock (battle clock lines identical on both PCs), characters given back kept in the area log, the dead "same point" rule removed, P3's colour. Tested: Esc on the waiting screen (real key press).
 
 1. **Verify over Steam with the friend** (as before, plus): a re-sync during a battle (the catch-up's log blocks over the relay are untested), a lost battle (game over) while a friend waits to join, and windows of different sizes (logic clipping, below).
 2. **Party AI after a leave mid-battle replays differently now and then.** A second re-sync in the same area replays the guest's first leave; once, the AI's Valere moved 3.3 m differently right after it (f1680). Falls back to the reload. Next: call-probe the party AI between the leave and the next turn.
 3. **Logic clipping** (`LogicClippingManager`): off-screen NPC logic is paused, by camera frustum. A replay sees the Bosslug a snapshot early (f390, never two in a row). Turning clipping off broke replays (off-screen Luslugs wander differently). Might also differ live between PCs with different window sizes.
-4. Earlier items not touched: guest crash after a re-sync in a battle (no repro), `MinAutoDelay` 4 (after Steam), the "joined" toast over the Assign Players title.
+4. Earlier items not touched: guest crash after a re-sync in a battle (no repro), `MinAutoDelay` 4 (after Steam). (Toasts now move off any text they would cover: fixed in c124677.)
 
 ## Testing
 
