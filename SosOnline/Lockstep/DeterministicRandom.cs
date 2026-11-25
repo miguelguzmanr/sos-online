@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using HarmonyLib;
@@ -97,6 +98,94 @@ internal static class DeterministicRandom
         (typeof(EncounterController), nameof(EncounterController.OnPlayerCharacterTurnDone)),
         (typeof(EncounterController), nameof(EncounterController.OnEnemyCharacterTurnDone)),
         (typeof(EncounterController), nameof(EncounterController.OnEnemiesTurn)),
+        // Co-op encounter setup + leaf move/cast rolls.
+        (typeof(EncounterPlayersManager), nameof(EncounterPlayersManager.Activate)),
+        (typeof(EnemyCombatMove), nameof(EnemyCombatMove.GetCastingTime)),
+        (typeof(EnemyCombatMoveSequence), nameof(EnemyCombatMoveSequence.PickNextMove)),
+        // Fishing minigame.
+        (typeof(Fish), nameof(Fish.GetJumpHeight)),
+        (typeof(Fish), nameof(Fish.Jump)),
+        (typeof(FishIdleState), nameof(FishIdleState.StateEnter)),
+        (typeof(FishIdleState), nameof(FishIdleState.StateExecute)),
+        (typeof(FishHookedState), nameof(FishHookedState.UpdateSidePullDirection)),
+        (typeof(FishHookedFightingState), nameof(FishHookedFightingState.StateEnter)),
+        (typeof(FishHookedFightingState), nameof(FishHookedFightingState.UpdateSidePullDirection)),
+        (typeof(FishHookedFightingState), nameof(FishHookedFightingState.UpdateStateChange)),
+        (typeof(FishHookedFinalFightState), nameof(FishHookedFinalFightState.UpdateSidePullDirection)),
+        (typeof(FishReelingZoneGoToState), nameof(FishReelingZoneGoToState.SelectTargetX)),
+        (typeof(FishingLine), nameof(FishingLine.Snap)),
+        // Wheels & minigames.
+        (typeof(Sabotage.Wheels.WheelsRevealEnemySlotsState), nameof(Sabotage.Wheels.WheelsRevealEnemySlotsState.ComputeFromResultSheet)),
+        (typeof(MemoryMinigame), nameof(MemoryMinigame.GenerateTiles)),
+        (typeof(SoSMinigameSecondPhaseController), nameof(SoSMinigameSecondPhaseController.Move)),
+        (typeof(SoSMinigameSecondPhaseController), nameof(SoSMinigameSecondPhaseController.SpawnOrb)),
+        (typeof(SpaceShooterConfigRandomFloat), nameof(SpaceShooterConfigRandomFloat.GetValue)),
+        (typeof(BilletBullGatlingFun), nameof(BilletBullGatlingFun.GetNextLookDirChangeTime)),
+        (typeof(BilletBullGatlingFun), nameof(BilletBullGatlingFun.GetNextPlayerHitTime)),
+        (typeof(BilletBullGatlingFun), nameof(BilletBullGatlingFun.GetNextShotTime)),
+        (typeof(BilletBullGatlingFun), nameof(BilletBullGatlingFun.ShootEmptySpot)),
+        (typeof(ArtificerBigBimState), nameof(ArtificerBigBimState.SpawnCrystal)),
+        (typeof(ArtificerClock), nameof(ArtificerClock.SetStage)),
+        (typeof(ArtificerClock), nameof(ArtificerClock.UpdateSettings)),
+        (typeof(LimboBarSpawner), nameof(LimboBarSpawner.SetStage)),
+        (typeof(TrampolineTeam), nameof(TrampolineTeam.Update)),
+        (typeof(SunbalancingCollectibleRing), nameof(SunbalancingCollectibleRing.OnExitPool)),
+        // Player skills, combos & co-op.
+        (typeof(CombatMoveCannonballTrampoline), nameof(CombatMoveCannonballTrampoline.GetGroundBouncePosition)),
+        (typeof(ConflagrateFlamePillar), nameof(ConflagrateFlamePillar.Init)),
+        (typeof(ConflagrateFlamePillar), nameof(ConflagrateFlamePillar.UpdateSelfDirection)),
+        (typeof(HurlSmash), nameof(HurlSmash.GetSecondTarget)),
+        (typeof(ToadcanoTremor), nameof(ToadcanoTremor.GatherEnemyTargets)),
+        (typeof(ShowerSpell), nameof(ShowerSpell.GatherNextDropSettings)),
+        (typeof(ShowerSpellRainDrop), nameof(ShowerSpellRainDrop.GetDropSpeed)),
+        (typeof(SeraiCombatDodgeState), nameof(SeraiCombatDodgeState.GetAvoidAngle)),
+        (typeof(SeraiCombatDodgeState), nameof(SeraiCombatDodgeState.TeleportToCounterPosition)),
+        (typeof(SeraiFanOfKnives), nameof(SeraiFanOfKnives.ExitNextPortal)),
+        (typeof(SeraiFanOfKnives), nameof(SeraiFanOfKnives.JumpOutOfPortal)),
+        (typeof(SeraiFanOfKnives), nameof(SeraiFanOfKnives.GetNextTarget)),
+        (typeof(HexShieldTargetSelection), nameof(HexShieldTargetSelection.DoTargetSelection)),
+        (typeof(SinglePlayerPlusBubbleState), nameof(SinglePlayerPlusBubbleState.SetNextRandomOffset)),
+        // Bosses & specific enemies.
+        (typeof(DwellerOfDreadChompCastingCombatMoveParams), nameof(DwellerOfDreadChompCastingCombatMoveParams.GetSpellLockSettings)),
+        (typeof(TrainBossCurtainCallCastingCombatMoveParams), nameof(TrainBossCurtainCallCastingCombatMoveParams.GetSpellLockSettings)),
+        (typeof(ChromaticApparitionCombatActor), nameof(ChromaticApparitionCombatActor.MustShapeShift)),
+        (typeof(ChromaticApparitionCombatActor), nameof(ChromaticApparitionCombatActor.OnCombatMoveResumeFight)),
+        (typeof(WyrdCombatActor), nameof(WyrdCombatActor.OnCombatMoveResumeFight)),
+        (typeof(NarcisKingEncounterMirrorMechanic), nameof(NarcisKingEncounterMirrorMechanic.GetNewMirrorSetup)),
+        (typeof(PrototypeZeroCombatActor), nameof(PrototypeZeroCombatActor.GetNextHitDamage)),
+        (typeof(GiantPuppeteer), nameof(GiantPuppeteer.GetTiltResult)),
+        (typeof(GiantPuppeteer), nameof(GiantPuppeteer.GetWheelsToLockCheating)),
+        (typeof(GiantPuppeteer), nameof(GiantPuppeteer.GoIdle)),
+        (typeof(GiantPuppeteer), nameof(GiantPuppeteer.OnPlayerChangedWheelConfig)),
+        (typeof(GiantPuppeteerEncounter), nameof(GiantPuppeteerEncounter.ComputeFromResultSheet)),
+        (typeof(GiantPuppeteerEncounter), nameof(GiantPuppeteerEncounter.GetReplacementFigurines)),
+        (typeof(PuppeteerEncounterWheelCombatActor), nameof(PuppeteerEncounterWheelCombatActor.HitSymbol)),
+        (typeof(PuppeteerEncounterWheelCombatActor), nameof(PuppeteerEncounterWheelCombatActor.OnAfterTargetApplyHitImpact)),
+        (typeof(PuppeteerEncounterWheelEnemyCombatTarget), nameof(PuppeteerEncounterWheelEnemyCombatTarget.ApplyHitEffects)),
+        (typeof(AngryTrainCoalslay), nameof(AngryTrainCoalslay.DoMove)),
+        (typeof(GaletteDesRois), nameof(GaletteDesRois.DoMove)),
+        (typeof(ElysandArelleTelekinesisCrashDeux), nameof(ElysandArelleTelekinesisCrashDeux.ApplyFloat)),
+        (typeof(PifPoufTourpille), nameof(PifPoufTourpille.OnLiftPif)),
+        (typeof(PifPoufTourpille), nameof(PifPoufTourpille.OnLiftPouf)),
+        // Overworld AI, Crypts, Live Mana & Sabotage utils.
+        (typeof(PatrolNode), nameof(PatrolNode.BeforeExecute)),
+        (typeof(PatrolNode), nameof(PatrolNode.Pause)),
+        (typeof(PatrolNode), nameof(PatrolNode.UpdatePath)),
+        (typeof(GroundChaseLostTargetArchetypeState), nameof(GroundChaseLostTargetArchetypeState.OnStartBehavior)),
+        (typeof(GroundChaseLostTargetArchetypeState), nameof(GroundChaseLostTargetArchetypeState.OnUpdateBehavior)),
+        (typeof(RandomPathFinderZone), nameof(RandomPathFinderZone.SelectRandomDestination)),
+        (typeof(Sabotage.Crypt.CryptManager), nameof(Sabotage.Crypt.CryptManager.LoadRoomAtPosition)),
+        (typeof(Sabotage.Crypt.CryptManager), nameof(Sabotage.Crypt.CryptManager.SpawnMonuments)),
+        (typeof(FillCryptFavoriteRoomNode), nameof(FillCryptFavoriteRoomNode.BeforeExecute)),
+        (typeof(LiveManaEmitter), nameof(LiveManaEmitter.GetSpawnVelocity)),
+        (typeof(LiveManaEmitter), nameof(LiveManaEmitter.Emit)),
+        (typeof(BigLiveManaMergeState), nameof(BigLiveManaMergeState.StateEnter)),
+        (typeof(EncounterLootBag), nameof(EncounterLootBag.OnExitPool)),
+        (typeof(EncounterLootBag), nameof(EncounterLootBag.FindDestination)),
+        (typeof(Sabotage.Core.RandomUtils.RandomFloat), nameof(Sabotage.Core.RandomUtils.RandomFloat.GetRandomValue)),
+        (typeof(Sabotage.Core.RandomUtils.RandomInt), nameof(Sabotage.Core.RandomUtils.RandomInt.GetRandomValue)),
+        (typeof(Sabotage.Graph.BehaviorTree.Nodes.Leaf.Utils.GetRandomFloatNode), nameof(Sabotage.Graph.BehaviorTree.Nodes.Leaf.Utils.GetRandomFloatNode.Execute)),
+        (typeof(Sabotage.Graph.BehaviorTree.Nodes.Leaf.Utils.GetRandomIntNode), nameof(Sabotage.Graph.BehaviorTree.Nodes.Leaf.Utils.GetRandomIntNode.Execute)),
     };
 
     /// <summary>
@@ -133,9 +222,38 @@ internal static class DeterministicRandom
     private static readonly (Type outer, string prefix)[] CoroutineTargets =
     {
         (typeof(EncounterController), "_DoNextTurnWhenNextActorIsReadyCoroutine_"),
+        (typeof(Sabotage.Wheels.WheelsBoard), "__DoAssassinAction_"),
+        (typeof(LiveManaEmitter), "_SpawnManaCoroutine_"),
+        (typeof(EncounterLootBag), "_LootMovementCoroutine_"),
+        (typeof(DefaultEncounterLoot), "_AwardLootsInternal_"),
+        (typeof(FeralQueenBuissRouletteMove), "__DoMove_"),
+        (typeof(PantoufPoufInTheBox), "_CastCoroutine_"),
+        (typeof(PhaseReaperPhaseStrike), "_AttackCoroutine_"),
+        (typeof(MirrorAttack), "_DoMoveCoroutine_"),
+        (typeof(MirrorAttack), "_SpawnMirrorImageCoroutine_"),
+        (typeof(PrototypeZeroCombatMove), "_DisplayNextMoveHintCoroutine_"),
+        (typeof(PuppeteerDaggerSpell), "_SpawnDaggersCoroutine_"),
+        (typeof(PuppeteerDaggerSpell), "_SpawnOutDagger_"),
+        (typeof(GiantPuppeteerLockWheels), "_WaitAndBeginSpin_"),
+        (typeof(GiantPuppeteerLockWheels), "_LockCoroutine_"),
+        (typeof(GiantPuppeteerTilt), "_WaitAndBeginTilt_"),
+        (typeof(NarcisKingZaleGannonball), "_ProjectileReachedPlayerCoroutine_"),
+        (typeof(NarcisKingZaleGannonball), "_BlockCoroutine_"),
+        (typeof(NarcisKingZaleGannonball), "_ProjectileReachedMainActorCoroutine_"),
+        (typeof(NarcisKingZaleGannonball), "_StunnedCoroutine_"),
+        (typeof(WerwofmizquardAwoo), "_DoMoveCoroutine_"),
+        (typeof(WerwofmizquardAwoo), "_TransformPtecassesCoroutine_"),
+        (typeof(DynamouseBignition), "_AttackCoroutine_"),
+        (typeof(DynamouseBignition), "_ExplodeProjectilesCoroutine_"),
+        (typeof(MonsieurTenduMirageTossClone), "__DoSpawn_"),
+        (typeof(MonsieurTenduMirageTossClone), "__FlashCoroutine_"),
+        (typeof(WakeUpAfterDeathGameAction), "_WakeUpCoroutine_"),
+        (typeof(RomayaSummon), "_CastCoroutine_"),
+        (typeof(RomayaSummon), "_MoveBallsCoroutine_"),
     };
 
-    private static int _depth, _frame = int.MinValue, _count;
+    private static int _depth, _frame = int.MinValue;
+    private static readonly Dictionary<uint, int> _perMethodCounts = new();
     private static bool _seeded;
     private static int _lastEnterFrame = int.MinValue;
     private static UnityEngine.Random.State _saved;
@@ -203,6 +321,17 @@ internal static class DeterministicRandom
     public static string Current => _depth > 0 && _seeded ? _outer : null;
     private static string _outer;
 
+    private static uint Fnv1a(string declaringType, string name)
+    {
+        uint h = 2166136261u;
+        if (declaringType != null)
+            for (int i = 0; i < declaringType.Length; i++) { h ^= declaringType[i]; h *= 16777619u; }
+        h ^= '.'; h *= 16777619u;
+        if (name != null)
+            for (int i = 0; i < name.Length; i++) { h ^= name[i]; h *= 16777619u; }
+        return h;
+    }
+
     private static void Enter(MethodBase __originalMethod)
     {
         // A roll that threw never reached Exit: start each frame from the outermost level again.
@@ -213,10 +342,15 @@ internal static class DeterministicRandom
         {
             _seeded = false;
             var e = Session.Instance.Engine;
-            if (e.AppliedFrame != _frame) { _frame = e.AppliedFrame; _count = 0; }
+            if (e.AppliedFrame != _frame) { _frame = e.AppliedFrame; _perMethodCounts.Clear(); }
+            string typeName = __originalMethod?.DeclaringType?.FullName ?? __originalMethod?.DeclaringType?.Name ?? "";
+            string methodName = __originalMethod?.Name ?? "";
+            uint methodId = Fnv1a(typeName, methodName);
+            _perMethodCounts.TryGetValue(methodId, out int n);
+            _perMethodCounts[methodId] = ++n;
             _saved = UnityEngine.Random.state;
             InternalSeeding = true;
-            try { UnityEngine.Random.InitState(unchecked(e.Seed ^ (_frame * 486187739) ^ ((++_count) * 1640531527) ^ 0x5EED)); }
+            try { UnityEngine.Random.InitState(unchecked(e.Seed ^ (_frame * 486187739) ^ (int)(methodId * 2654435761u) ^ (n * 1640531527) ^ 0x5EED)); }
             finally { InternalSeeding = false; }
             _seeded = true;
             _outer = __originalMethod?.DeclaringType?.Name + "." + __originalMethod?.Name;
