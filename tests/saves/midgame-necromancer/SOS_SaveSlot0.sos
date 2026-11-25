@@ -1,0 +1,2002 @@
+{
+    "saveId": "SOS_SaveSlot0",
+    "slotIndex": 0,
+    "saveVersion": 1,
+    "saveIterations": 0,
+    "deathCount": 0,
+    "timestamp": 638600544396418478,
+    "empty": false,
+    "lastUsedEntranceId": "",
+    "partyProgressData": {
+        "totalXP": 2351,
+        "currentLevel": 8,
+        "unspentXP": 221
+    },
+    "characterData": {
+        "keys": [
+            {
+                "characterId": "ZALE"
+            },
+            {
+                "characterId": "SERAI"
+            },
+            {
+                "characterId": "RESHAN"
+            },
+            {
+                "characterId": "MASTER_MORAINE"
+            },
+            {
+                "characterId": "VALERE"
+            },
+            {
+                "characterId": "GARL"
+            },
+            {
+                "characterId": "BST"
+            }
+        ],
+        "values": [
+            {
+                "currentHP": 5,
+                "currentSP": 14,
+                "gaveCharacterStartInventory": true,
+                "equippedWeapon": {
+                    "itemGuid": "71cfc6d93b292d3499c472b73e9daae1"
+                },
+                "equippedArmor": {
+                    "itemGuid": "581aaf64cd0270b4bbf12d9ce9ea4ec0"
+                },
+                "equippedTrinkets": [
+                    {
+                        "itemGuid": "d8a7bdab9aa9a6e4e95036b0eff55239"
+                    },
+                    {
+                        "itemGuid": "933db0df85333b341a7d58da22f3b39c"
+                    }
+                ],
+                "equippedGroupTrinket": {
+                    "itemGuid": "6a39fd9b315b53a4faa9e3736d820eff"
+                },
+                "leavePartyInventory": {
+                    "equippedWeapon": {
+                        "itemGuid": ""
+                    },
+                    "equippedArmor": {
+                        "itemGuid": ""
+                    },
+                    "equippedGroupTrinket": {
+                        "itemGuid": ""
+                    },
+                    "equippedTrinkets": []
+                },
+                "permanentModifiersUnlocked": [],
+                "currentVariant": 0,
+                "levelUpStatUpgrades": [
+                    1,
+                    0,
+                    1,
+                    0,
+                    1,
+                    5,
+                    0
+                ],
+                "previousLevelUpAvailableUpgrades": [
+                    4,
+                    3,
+                    0,
+                    6
+                ]
+            },
+            {
+                "currentHP": 5,
+                "currentSP": 11,
+                "gaveCharacterStartInventory": true,
+                "equippedWeapon": {
+                    "itemGuid": "6dfc4e7a1624a9c4eaaf2ae75c336b5c"
+                },
+                "equippedArmor": {
+                    "itemGuid": "d2fd56a9405f9c04fb303795c7840f2f"
+                },
+                "equippedTrinkets": [
+                    {
+                        "itemGuid": "f93c6f846bc2f0b4484e896221759b94"
+                    },
+                    {
+                        "itemGuid": "0ee892db1da195541bcbe578898265b5"
+                    }
+                ],
+                "equippedGroupTrinket": {
+                    "itemGuid": ""
+                },
+                "leavePartyInventory": {
+                    "equippedWeapon": {
+                        "itemGuid": ""
+                    },
+                    "equippedArmor": {
+                        "itemGuid": ""
+                    },
+                    "equippedGroupTrinket": {
+                        "itemGuid": ""
+                    },
+                    "equippedTrinkets": []
+                },
+                "permanentModifiersUnlocked": [],
+                "currentVariant": 0,
+                "levelUpStatUpgrades": [
+                    3,
+                    1,
+                    0,
+                    3,
+                    6,
+                    0,
+                    1
+                ],
+                "previousLevelUpAvailableUpgrades": [
+                    1,
+                    4,
+                    5,
+                    6
+                ]
+            },
+            {
+                "currentHP": 5,
+                "currentSP": 14,
+                "gaveCharacterStartInventory": false,
+                "equippedWeapon": {
+                    "itemGuid": ""
+                },
+                "equippedArmor": {
+                    "itemGuid": ""
+                },
+                "equippedTrinkets": [
+                    {
+                        "itemGuid": ""
+                    },
+                    {
+                        "itemGuid": ""
+                    }
+                ],
+                "equippedGroupTrinket": {
+                    "itemGuid": ""
+                },
+                "leavePartyInventory": {
+                    "equippedWeapon": {
+                        "itemGuid": ""
+                    },
+                    "equippedArmor": {
+                        "itemGuid": ""
+                    },
+                    "equippedGroupTrinket": {
+                        "itemGuid": ""
+                    },
+                    "equippedTrinkets": []
+                },
+                "permanentModifiersUnlocked": [],
+                "currentVariant": 0,
+                "levelUpStatUpgrades": [],
+                "previousLevelUpAvailableUpgrades": []
+            },
+            {
+                "currentHP": 14,
+                "currentSP": 8,
+                "gaveCharacterStartInventory": false,
+                "equippedWeapon": {
+                    "itemGuid": ""
+                },
+                "equippedArmor": {
+                    "itemGuid": ""
+                },
+                "equippedTrinkets": [
+                    {
+                        "itemGuid": ""
+                    },
+                    {
+                        "itemGuid": ""
+                    }
+                ],
+                "equippedGroupTrinket": {
+                    "itemGuid": ""
+                },
+                "leavePartyInventory": {
+                    "equippedWeapon": {
+                        "itemGuid": ""
+                    },
+                    "equippedArmor": {
+                        "itemGuid": ""
+                    },
+                    "equippedGroupTrinket": {
+                        "itemGuid": ""
+                    },
+                    "equippedTrinkets": []
+                },
+                "permanentModifiersUnlocked": [],
+                "currentVariant": 0,
+                "levelUpStatUpgrades": [],
+                "previousLevelUpAvailableUpgrades": []
+            },
+            {
+                "currentHP": 5,
+                "currentSP": 14,
+                "gaveCharacterStartInventory": true,
+                "equippedWeapon": {
+                    "itemGuid": "3e2210133b9ad0940bddde38c647e3e7"
+                },
+                "equippedArmor": {
+                    "itemGuid": "a0890c10ae319b0409d43f08af673ffd"
+                },
+                "equippedTrinkets": [
+                    {
+                        "itemGuid": "154461019876b7741bbd74980276c852"
+                    },
+                    {
+                        "itemGuid": ""
+                    }
+                ],
+                "equippedGroupTrinket": {
+                    "itemGuid": "c7eb103c76a21974c844159ab0f5a0d2"
+                },
+                "leavePartyInventory": {
+                    "equippedWeapon": {
+                        "itemGuid": ""
+                    },
+                    "equippedArmor": {
+                        "itemGuid": ""
+                    },
+                    "equippedGroupTrinket": {
+                        "itemGuid": ""
+                    },
+                    "equippedTrinkets": []
+                },
+                "permanentModifiersUnlocked": [],
+                "currentVariant": 0,
+                "levelUpStatUpgrades": [
+                    1,
+                    0,
+                    3,
+                    0,
+                    1,
+                    5,
+                    3
+                ],
+                "previousLevelUpAvailableUpgrades": [
+                    1,
+                    3,
+                    6,
+                    4
+                ]
+            },
+            {
+                "currentHP": 6,
+                "currentSP": 14,
+                "gaveCharacterStartInventory": true,
+                "equippedWeapon": {
+                    "itemGuid": "108a40870288c934d94c1661286ff1f0"
+                },
+                "equippedArmor": {
+                    "itemGuid": "f23fec51c068c00418db6127c54fcc8e"
+                },
+                "equippedTrinkets": [
+                    {
+                        "itemGuid": "154461019876b7741bbd74980276c852"
+                    },
+                    {
+                        "itemGuid": "71ff97ab95cbcd84985e62255cbca323"
+                    }
+                ],
+                "equippedGroupTrinket": {
+                    "itemGuid": ""
+                },
+                "leavePartyInventory": {
+                    "equippedWeapon": {
+                        "itemGuid": ""
+                    },
+                    "equippedArmor": {
+                        "itemGuid": ""
+                    },
+                    "equippedGroupTrinket": {
+                        "itemGuid": ""
+                    },
+                    "equippedTrinkets": []
+                },
+                "permanentModifiersUnlocked": [],
+                "currentVariant": 0,
+                "levelUpStatUpgrades": [
+                    3,
+                    0,
+                    1,
+                    0,
+                    1,
+                    3,
+                    1
+                ],
+                "previousLevelUpAvailableUpgrades": [
+                    5,
+                    1,
+                    4,
+                    6
+                ]
+            },
+            {
+                "currentHP": 6,
+                "currentSP": 7,
+                "gaveCharacterStartInventory": false,
+                "equippedWeapon": {
+                    "itemGuid": ""
+                },
+                "equippedArmor": {
+                    "itemGuid": ""
+                },
+                "equippedTrinkets": [
+                    {
+                        "itemGuid": ""
+                    },
+                    {
+                        "itemGuid": ""
+                    }
+                ],
+                "equippedGroupTrinket": {
+                    "itemGuid": ""
+                },
+                "leavePartyInventory": {
+                    "equippedWeapon": {
+                        "itemGuid": ""
+                    },
+                    "equippedArmor": {
+                        "itemGuid": ""
+                    },
+                    "equippedGroupTrinket": {
+                        "itemGuid": ""
+                    },
+                    "equippedTrinkets": []
+                },
+                "permanentModifiersUnlocked": [],
+                "currentVariant": 0,
+                "levelUpStatUpgrades": [],
+                "previousLevelUpAvailableUpgrades": []
+            }
+        ]
+    },
+    "checkpointData": {
+        "savepointId": 1,
+        "position": {
+            "x": -9.115120887756348,
+            "y": 0.9999704360961914,
+            "z": 221.1999969482422
+        },
+        "level": {
+            "levelDefinitionGuid": "b89ab83751fbf624fa75610d9d5391ad"
+        },
+        "playerOrientation": 1,
+        "isBoat": false
+    },
+    "disableGameMenuSaveData": false,
+    "progressionSaveData": {
+        "playTime": 46118.695331573486,
+        "saveCount": 2,
+        "deathCount": 11,
+        "currentGameType": 0,
+        "defeatedPermaDeathEnemies": [
+            "3c76ba55-2f6c-4dd9-8479-8ee544bcfe83",
+            "68aa53ef-cee3-46a4-a482-bc2247a90221",
+            "6cb67f08-d556-48c5-8f6b-700bc2b5c1b5",
+            "c05c96b0-c7a3-427b-9d1d-d024dae95f22",
+            "eb4d0620-122b-40b2-890d-b2d38c027502",
+            "d47432f4-2cea-4a53-875d-ab7c345663d3",
+            "02f1499f-b868-4fed-9b40-ada592484c3e",
+            "686c8f59-0ed9-47b3-a5db-b4c4942243d5",
+            "1fe4d416-6ecc-4175-9d19-707e46feac7e",
+            "2690e910-af89-461f-8592-1e125087614d",
+            "b9303777-8dcf-43d1-90d1-cafb3a1ae305",
+            "283cb8c3-4d7c-4a0a-8f00-39269a41d650",
+            "999da434-d3fc-4f2d-8ad6-3c897cfbff33",
+            "e990a8ea-2e82-48c8-91f4-704c68b359fb",
+            "14f48e3b-442f-4741-8db9-a3bf299ff571",
+            "a9f7e469-4425-4578-a480-ace34293aa4d",
+            "960266d5-8bb8-453e-b527-422f8002a717",
+            "02d93478-fcdf-434c-9311-f3a7104dd631",
+            "f3dc998e-91e0-45a9-9065-0b15d40596fe",
+            "9e878cd5-001a-4f45-8ef1-20c477334734",
+            "73d6a19c-7019-4602-ba23-8fc4bac0e578",
+            "81ea4a21-2b5c-45de-a177-a9a0e41cd5fc",
+            "72fe5d4e-5424-4083-adf5-f1b02667a3fe",
+            "5e5eaec4-007b-4b9b-91c0-305a02d9af88",
+            "661f900a-8b4a-4885-9119-0e9ac921714a",
+            "676bfe2f-1aab-41cf-bd23-966b486e0dfd",
+            "e445a6d4-d412-4948-843f-9f1627ddbb56",
+            "3e676ab9-7e36-44e4-b2bb-4d2cd134bd0f",
+            "648c803c-0bdd-4ce0-a0ed-44b45c26c54e",
+            "c2106135-7349-4ae3-9473-31703f6d220e",
+            "5b171f86-07b8-43f5-b088-2d2f48a553c7",
+            "932dbc53-df11-40c9-9cac-d66130edc101",
+            "5715c67c-bd66-49ed-91bc-10216630f1a4",
+            "e9881035-c6d3-4951-a841-5a2f81607aca",
+            "1a0b947f-f21e-4971-af3b-9e93ffeb2daa",
+            "62deec18-f4d9-4a95-98a7-d6d05264f01d",
+            "0e651132-dcc0-477e-8489-fd783404bf97",
+            "64503512-5594-4cea-9c0a-319526bad610",
+            "864417d3-b1f9-4d41-b453-102fcee8c574",
+            "0bea9f7e-eb81-457c-9992-a831d584f4b0",
+            "ee27d8d0-d1cf-455a-80b5-339df4bc0d37",
+            "450a062f-d967-44bb-be69-d01ba34cd7eb",
+            "407ac0a2-dff8-49fd-b4b9-392c3bf7a20c",
+            "882b5178-3c97-424c-8c64-09b0ad78df56",
+            "94d0eb93-90d1-4789-a019-75f35c8d470b",
+            "01616a76-cfa2-479e-9b6e-4e0a4374a251",
+            "27a9867e-67df-47ff-930b-765444b70d3e",
+            "e24db4e3-1369-483b-9824-0b9974492d0b",
+            "595bf3dc-4120-4fba-af08-ee64c62958f0",
+            "5d7d6e6c-74c2-4bc1-97bf-57fa599c0f8a",
+            "4c862f7b-ba5b-466e-a5a9-58fcd23dbed6",
+            "7d562804-70e2-4d5e-aa22-49a839730944",
+            "0a6b9649-8558-4c76-9cf7-1b8d272b1108",
+            "131f15b5-cd77-410b-a922-057322273e2d",
+            "286a26c8-cb48-4635-945a-755d8567a9d3",
+            "31c2bb6b-91e2-4a19-b91d-0e51f8a1e276",
+            "12d283ff-433f-45da-8a64-5d20e952912c",
+            "12e3de71-5cf7-4428-9000-75db18ac412c",
+            "6fad293c-972b-422f-96f4-1cb60506e2af",
+            "f514cf64-cf54-4b34-ab3c-d01770be62ec",
+            "8c3d2f02-12e8-440b-a022-68aaec310160",
+            "a6fd94ed-7c34-4aed-ab53-017946107bba",
+            "e342c19a-42c1-46c7-b30f-1c8860e6010b",
+            "3feb9bc7-1a87-4653-8cb6-0ad2e3b281f0",
+            "adf3b416-6477-49b6-b7f0-f9be52a25af4",
+            "e67f43c2-329f-43e9-8775-f06f699ff093",
+            "bd79374b-0940-49ab-b9b6-a1c8bad397e0",
+            "481459a0-a650-49d2-b7ee-8ac303330351",
+            "df9b3c3d-bb69-4000-b9f5-3e7456ab48e1",
+            "7c00d123-d36f-4aef-acde-4a106544f91b",
+            "0049c3be-8ed8-415c-8999-47d4ec90ebce",
+            "5fd62a91-b038-4199-9cfb-81b6cf01645a",
+            "f88bf001-6c03-463c-ba5f-88d1e4923bb5",
+            "f56c2732-5d61-406a-a0d4-a98df8337fcc",
+            "128e4a2a-ea05-42b4-a245-067b1d89d05b",
+            "8a0d1983-39cd-44f7-8b0b-976db04d985b",
+            "8adfa02a-0c9f-4b40-84f0-5ca952f56e3a",
+            "d3af0bdd-ef70-4804-b1ac-c442a6616f78",
+            "b0134365-67f8-4be8-8739-8df812cffaec",
+            "4eed5b8f-d4d7-4fe5-8b30-e0695dee2b3b",
+            "17eae415-9c22-4ba2-b242-af58a26cbb53",
+            "041034fb-d5a8-44db-82b3-de41f72cc514",
+            "6c6087b4-b309-47f2-8341-8cc366371f40",
+            "6a15358b-e014-4c57-8174-e0de6c027c6e"
+        ],
+        "openedChests": [],
+        "unlockedCombatMoves": [
+            {
+                "combatMoveId": "MendingLight"
+            },
+            {
+                "combatMoveId": "SolarRain"
+            },
+            {
+                "combatMoveId": "MoonBash"
+            },
+            {
+                "combatMoveId": "LunarShield"
+            },
+            {
+                "combatMoveId": "DashStrike"
+            }
+        ]
+    },
+    "blackboardDictionary": {
+        "keys": [
+            "84534192eff14c645b7af6248d3cde17",
+            "c19e91f4f68f0064e992433ae3b804fc",
+            "99655e3d661d5a745b2adf88c2f6aaf3",
+            "3bd2e3c45a0484b498f48de0ecbbcb0d",
+            "066063647a806d849850751cb32810fe",
+            "54c150f4b5ad60540a82ffeff0b2e202",
+            "f46a1e28208110e48bbef2f5fc45fd1f",
+            "4cdb3f4e790033f4f93c97ba0b0ac2f1",
+            "b8c81760117db0943a181633b4916152",
+            "5304cd26dacc0a246914672d7e002d47",
+            "e7f74919505683e42b2cbeef63929c31",
+            "f97f879ff22c77340b3480753368d0e1",
+            "980f0ab283c33474d8ff1192d7b5bb3b",
+            "9a2a19e6b68ba3744b1c2693213f18e4",
+            "d5e47da78cf42e84c95bffcd01b66dae",
+            "94aeba6688db8934fa971de45cf16314",
+            "878d616211febff49b25d78db8a02f75",
+            "9c0f3d33b592d2044baf92d95d4c0c00",
+            "213250fa0e0f107468afbfe17d4d02f3",
+            "3e435bdd6992ba044903a36741ebacc2",
+            "14c3e4f34da06e646a90fb8605e6fe99",
+            "59d5788af50f16249b374de929b4e50a",
+            "a4193016f21d618428b5ac8622128c06",
+            "2720546160f12594799f63a99280c6b8",
+            "62d320af97921f440ba9e153cb7a14f3",
+            "5aec6eacb00bc3a4ab1667a1eb122ce6",
+            "53194df7425d83b4b89ec08732327131",
+            "1a8b3d7a7901ade48a12a20a63b60f90",
+            "0928d29457ded6944bcb50c95af3590c",
+            "42dd882ecad4c304f98556b30c1ad1f5",
+            "b55c3e9ad0121c84ea7e3799ee307b00",
+            "3b6393704360a92439db739f5353de7c",
+            "e7daa6f679c061444b39d328e2dd2658",
+            "1c9bfc26c1c7a6344a060bd6de745210",
+            "cbaa2bc0eaf601b4db341238379d10f4",
+            "eb94c63347fec4f4ba94f8446fb45adc",
+            "5cbf24a710e8156409bffb38edec491d",
+            "24e3710c470ffd346a659ca44b4f0296",
+            "5255f7c05d70c4646a4cbb0fa1048f8a",
+            "14072d2c9b7e8684a901f721349b383b",
+            "58eaa8afa08ba5b4ca5d27fbdafb993a",
+            "12eb5e91adc00de4680daee60848139b",
+            "eb0c8397d94a21a4da8fbac958e18351",
+            "be9b19ce0588fd74cace765840e571f9",
+            "ebb3bbf4405b7b4459ee45d1bf1eb812",
+            "eed8215f5de6b324bad36b1d9b3ecf7a",
+            "0143bd6816480ba4982009e7b52f9099",
+            "b1c1361b0f335bc4fac1caaadde2bfd8",
+            "4c931bcdb77767b42a0f1016e9bdafc0",
+            "03cc26d5b9ba29a4688f814767a8be58",
+            "a162c5e3299382b41a2affd9dd7bf2e4",
+            "9aee0be400eb37943991e9e95407b84b",
+            "f4efa545e666383479d4cd9fb183a841",
+            "c610ac33cc8f57040b141f35a664df1f",
+            "85955f179330f094cba486184f439c8a",
+            "732e9ce30a0d308459cf99855b869ce9",
+            "884d4e31e0c65874f9c1b8dddaf47f56",
+            "e531806b7c2ae3840b743077f1167609",
+            "c1cdbad15cd57f047aadeae7a4f238f7",
+            "3ec5ca3b716b39344b56a3c7ee8b2234",
+            "8bf2351d237202145a8f7698d9ee3658",
+            "f783138ff530fe14688292c61f4d15a9",
+            "80a0eb7a932f46d4b8f2ab17ca957731",
+            "2f831b26713f4434e9c29474767cd29c",
+            "063a65a30567e394c9c34c8e2b5f62d9",
+            "05a85a807da95c14787409d74c000014",
+            "7be8be09c253b4443ac1503631733957",
+            "0d840a51b5805a4459fb4dd044914089",
+            "ae21436453a98f74f9b2839e9c8b9aab",
+            "7d2f0bce0c57c4b4cbb6c525e5b6bc2b",
+            "14cde61a46042dc429fc277f3f8322d4",
+            "41f79b3820fed03439a5f28f7a7f2a2b",
+            "58823dcaf47a4ea46bef93cbedecf987",
+            "21609a20eefbf394c9c7fc145b87c385",
+            "8764a9474e7718f4c9df7a6414d64e67",
+            "e6557b2ad4a7d23409a2bc7e76928777",
+            "5f45bd7dec1976b41a33ad3ff97af985",
+            "def4ac542c3fc3a4496877c00921947f",
+            "141042356ef669a43920d71b8af3839a",
+            "b7e61ecf9f0580a48a9c41e1d1159132",
+            "c76ebdc0a9a65fc4ebfa71b98e3597fc",
+            "f692607b1dfb5d745be23a63fa47009c",
+            "f243ba246f56bb7419932f918853184e",
+            "6228ccf4dfb95eb489c90f5db414f4e5",
+            "dd9e2a3bb5f9bb64b9474557c1bf132c",
+            "6f05c583689ad284684c0ddd7fa480f9",
+            "d69c8e3fa6966ab45812523c26235776",
+            "ab4343a0b983ee8449fbf028622c9ea4",
+            "d9918e9e08aa2af42a94b1dfc973f1dd",
+            "ba38ddb5dd4d3bb40b6476a4c3ae1b6d",
+            "d0fa044c434e5fc468abaf62f3547b88",
+            "524e63014e785eb43913aa87e1112a95",
+            "8f9f8b9cd887f7044bb4afb55286c851",
+            "490a8ff1e71dda44886f2a69b277d4ad",
+            "d1abf1fd795f36e4e85de2f7eb803310",
+            "ce07f0f028a82bf44990bee0f90ad1c4",
+            "d1f66ca7b32a4c4459c8f4e8dde77075",
+            "daa715cbd0e1e5b4bae8c163230b6bf3",
+            "cb81a368937866547aff46de3a79db7d",
+            "89148954f1e61c049a2339f9f9852c76",
+            "b324073b4ff98fe42a6d1e6de0886763",
+            "cd1a12cd8d055904cbbdf721ea62fa9f",
+            "750e3d8474ceeb349820113303132980",
+            "4df0111c814ded7488ce59a5d3e41b84",
+            "8dc814be1b11bee4fa2bbe5cd94479fd",
+            "67c2e14989179794caa05fcba09c99f3",
+            "775d6e50cf2ef0f4d9d8a98a89bf4a02",
+            "e803c39703e0d224eb7b54ce5d4ee90d",
+            "d0e5eaff05e0bd0459136e95782ab55e",
+            "eb14e5a20f8315047b07a5ec71765f5d",
+            "9b157ffd29003b04da394fa31f184118",
+            "38997c814622ae2498ede322c55a6963",
+            "eb4c87fa6a8b03a43a49f32996507c9a",
+            "683612c2b7af6944abdb6153c836adc8",
+            "d44f0265bc66e4145919ba811cc784aa",
+            "ef12e03e409f33d4a899f571aadf86cf",
+            "272f9bfc519509841aedb50fe3c33f8d",
+            "da91e6f7c373b3341a67d5d658b6fd1e",
+            "d0cbea38ca4fbd341b1f7bb774d80f39",
+            "847befdcfc4975746bca4e18ef94fe16",
+            "0abd142260ef44f48a20b2fbca290ae2",
+            "7cba5492d2c0d1b49b6a04d48a110290",
+            "7c17e76893229d140b4e8d257623a4e0",
+            "53f086ccd77774c4e9c60923d5eb2b46",
+            "c2c16aceabc7edd4f8f7298fcd3025db",
+            "8fa151ddf312a0c4b8fb778a254ab60e",
+            "2df3a8274248de04bbfbde8587cb0c65",
+            "0d631227361e6fd4287d295d06d8d8c0",
+            "d45db53dd7c1f3a4ea6143b0ebe5408d",
+            "8cd96b6d264b02546851c2d6d17c3ebc",
+            "c7888a67bcd257742bafe1a020718448",
+            "cd680b2ad619ca14c869c23e8cfcc55b",
+            "f911c403f7589884b84287dee465fe72",
+            "e294e4cf9d259174a8a8b7afe6f20193",
+            "9188fe2c05786b34bac46d295442628e",
+            "37e8b65ea82a0e9448a60045b2dbac64",
+            "bd44600bb18c1044eb4e18f1e118a38c",
+            "d6ac5f927885bed4b9475310d668bcd3",
+            "0f5685775cec2764ebbf875bbe814a33",
+            "feb76c2adee74f94fa07f88b7fd96592",
+            "e1f70e4b4022b2542a2cab5c4135b1a9",
+            "7dcf965498cf6ae40b7c56f3da5b4d64",
+            "5c4bf93ce5daf7d489aebe9393e580ed",
+            "2ebd4fba90f10824683b4441408c3a2d",
+            "4a0f1095fa0ff184c88e9a2132ed9274",
+            "049be3c59d1f8f542977cbb104470c7a",
+            "e90bbf7a288c0bb419c410abc301bf75",
+            "ed04d6a4f1ff83d4185c704aae5af9cb",
+            "a513a65ee463f8e4bb488b9c2ce5fdb5",
+            "572e18880791cae45a81c6e700831f93",
+            "aef63eb9f26f0594d93541736a342492",
+            "0635f989910aef34a85927a3fdce239a",
+            "209bb5df961f7e643960c8ad3c165fe2",
+            "9be4eefe7abeb9b4db29153e02be8ea7",
+            "1f796a333e94bd64ba56e74671809047",
+            "581a121043b87dd48bf884ff274391d3",
+            "5ff095431eb05914cb1a1a510f194ced",
+            "09d773d9436354a409467df6de942c14",
+            "fa27bc514987f234da9309d9e01af9dd",
+            "e7323c539eb273748b9dc956bf5742ed",
+            "604e95e4eef6a9141b832632aefc49c5",
+            "9a68249f1e58dc943b905c15a222df3d",
+            "aa738f11a1c847f4a8ba998e64425684",
+            "eedf286a5c842ce459c7e51b1573b235",
+            "f23f033bd2d28c340bc62dffd6e51657",
+            "a47b0b6b6b7b56b42bd8b762bcf9406d",
+            "a1a757f1ee952a34e950afc994beb8a3",
+            "f1af892f118d2eb499d1e85b3d9207ff",
+            "f4e57ac2c288a6847afd4fdb2a09f1fc",
+            "b2a5a2d78aafeae42b5e9167784d65be",
+            "df2957eee3cbf87479a08f9d90beeff2",
+            "ad043704b91e9864ea30c1ca5e976173",
+            "f9b67cadb35f68744a257e2dd4f7ef2e",
+            "05210b8eca17f4b47be9f40b8e91681a",
+            "e897408bae135a0439745183a11f0aba",
+            "4ada017b8d91adf40849b166ce833c30",
+            "94ee74f1cee5e4749abd0c3e075c9119",
+            "9d65cb4bae0dd1e4886eee2d8a48dcc4",
+            "ceef92e27c2eb6d4b9d33ba6db8824ba",
+            "374a563ac13293745950df6375753751",
+            "06384f2aa78591245b09f0694f328ede",
+            "c63506709b23b0c469955fc26e9331d7",
+            "30295cc668768d14293130e615c2dd0f",
+            "72c972132d13ff943818a3295efe8c77",
+            "19dd72ed62af8ec4bbcd75827c5e0e1d",
+            "8e494255931348b438f543863ee58dd6",
+            "69a710674cd96c34b9e0d5f93e39d093",
+            "882eb8103cb92ff448baac61030b8151",
+            "85a032bc0f24ba14cabf5102933777d2",
+            "7df02e08a933e084a908b5eaee8433fc",
+            "395aca49363ad054d92e5d29cb723bc2",
+            "3173d82ac3e376a439a2c299bdd4357a",
+            "f521f20489e6e3b4d816c3252a190f84",
+            "9e8f6061caa4ac84db2a7398e1039104",
+            "4502ab126ffe79747a3a8851fc05ff84",
+            "36aad0b09d3369944a9a0ffec22baa63",
+            "c83b595e0178d7747b05e0157ba3d9b4",
+            "8907149d432385549b1fc402abf33e21",
+            "602fe0109a8a4c540ac314f8266faf46",
+            "5518c7d0b30826140b5f129dfcf02b97",
+            "6c1f298e7572b4c42b72688573edcf5b",
+            "26c650b3d635bfa4e86a917b61db0401",
+            "c2445fa46e8e6da448e6f9875893956a",
+            "72a66f7da767d824ab8e51a05b2b92cd",
+            "5131ba08cc7b79e4da958e48f90e0529",
+            "1beb3b50ccbd48547896047da31cc414",
+            "a97a26874456aaa45a12fefc6607631f",
+            "4525af50dd003e640bfa44ceb092b89e",
+            "65451f05b96a2514f8b22b603292d406",
+            "13ba1ed494b3460479b17a0b2d36f4ad",
+            "d7b9ef1b3a631324a81852c9d0adca56",
+            "8921232ab8bbbd648bcf0bf43c3eee8d",
+            "a4bd4ad3131fb09408b0b822b3cc2ffe",
+            "9ce37b14bae41ae4d84a76614f376739",
+            "5d30674170deb0b42ba8e8823f44dc4b",
+            "3e0e119901a58f143bccb1fd8a471c45",
+            "94a30890ca1d5d548b8d83257f496613",
+            "01e319d6f41c9ea468816ca4f0d6e09a",
+            "5ba77b74598ea434092e45c63810a68f",
+            "b5f83b6dd1bb9f042b1eae3e5718aa92",
+            "607233a3c0d45114497fb42dfc689b54",
+            "de9e0eea9a7bc3f4bbe5fa7f2bfc3789",
+            "a8c6606773eec734cb7096046c7b86c4",
+            "1b9a8febc97662c4abefc3990a8f3b13",
+            "64ec52712ccd73d4e8e933f3cb0f7a74",
+            "a4501e5df9ac89d4a827d0cef0fdb78d",
+            "049d8a5774b57a447b57850070d1102f",
+            "3e10c827e3897ad46a3584e037f6c0eb",
+            "fcef204d18eb34841be493ae05cd48d4",
+            "b7ce77eeebf0eeb4cb1d8066174c2984",
+            "807292fb7f07e0c4baba58791118e0ae",
+            "4d914c95656ddd84c8401c69260499e4",
+            "11aa7662f357737469c5bb2abdb68738",
+            "d220e6a849306354086448de72acfeab",
+            "909c28acc99dac34591bef2bc3a31687",
+            "a5eb90c95c610914aa5a2f2da2d397f8",
+            "e7fdda0b42f2fff43973cf646e195e78",
+            "645d0d57288613c4cba104c7bf38fefb",
+            "e853d3586d9416045887d7a916f4b188",
+            "655efb3359e3bc14f80710bbb1716f2d",
+            "c7198d0c1c7e97345982e3b6848598f3"
+        ],
+        "values": [
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            0,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            0,
+            0,
+            0,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            0,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            0,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            3,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            0,
+            1,
+            1,
+            1,
+            1,
+            1,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1,
+            0,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            0,
+            1,
+            0,
+            0,
+            1,
+            3,
+            0,
+            1,
+            0,
+            1,
+            1,
+            1,
+            1,
+            0,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            0,
+            0,
+            1,
+            1,
+            1,
+            2,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            40,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            3,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+        ]
+    },
+    "gpiStateSaveDatas": "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AHQAYQB0AGUAMAMAAADcAAAACQEIAAAAYwBvAG0AcABhAHIAZQByANkAAAAGAgAAAAAAAAAELicBAgAAACQAawABDQAAAHQAcgBpAGcAZwBlAHIAZQBkAE8AbgBjAGUAAQECAAAAJAB2ADAEAAAA3QAAACwBBQUELicBAgAAACQAawABCAAAAGQAaQBzAGEAYgBsAGUAZAABAQIAAAAkAHYAMAQAAADeAAAALAAFBQcFBQUELicBAgAAACQAawABJAAAADEAZQAzAGUANwAxADcAMwAtADEAMgAyADAALQA0ADEAZABmAC0AYQA5ADgAMAAtADQAZABlADUAZgBlADgAZgAxADUAMABmAAEBAgAAACQAdgAwAgAAAN8AAAABAQgAAABnAHAAaQBTAHQAYQB0AGUAMAMAAADgAAAACQEIAAAAYwBvAG0AcABhAHIAZQByANkAAAAGAgAAAAAAAAAELicBAgAAACQAawABDQAAAHQAcgBpAGcAZwBlAHIAZQBkAE8AbgBjAGUAAQECAAAAJAB2ADAEAAAA4QAAACwBBQUELicBAgAAACQAawABCAAAAGQAaQBzAGEAYgBsAGUAZAABAQIAAAAkAHYAMAQAAADiAAAALAAFBQcFBQUELicBAgAAACQAawABJAAAAGQANgA3AGQAZgBlADkANwAtADUAMgBiADQALQA0AGYAMgBhAC0AOAA1ADAAMQAtAGMANQAwAGMAZgAyAGQANgA1ADgAZABmAAEBAgAAACQAdgAwAgAAAOMAAAABAQgAAABnAHAAaQBTAHQAYQB0AGUAMAMAAADkAAAACQEIAAAAYwBvAG0AcABhAHIAZQByANkAAAAGAQAAAAAAAAAELicBAgAAACQAawABBwAAAGIATABvAG8AdABlAGQAAQECAAAAJAB2ADAEAAAA5QAAACwBBQUHBQUFBC4nAQIAAAAkAGsAASQAAAA4AGMANwAxADYAMgBhADMALQAwADcAYQAxAC0ANAA5ADYANQAtAGIAZgBmADQALQAzADkANwA3AGYAZQA3ADEAOABjADIAYwABAQIAAAAkAHYAMAIAAADmAAAAAQEIAAAAZwBwAGkAUwB0AGEAdABlADADAAAA5wAAAAEBCAAAAGMAbwBtAHAAYQByAGUAcgAwAQAAAOgAAAAFBgIAAAAAAAAABC4nAQIAAAAk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",
+    "gatheringManagerSaveData": {
+        "gatheringNodeStatuses": [
+            {
+                "uniqueId": "a800d4eb-5256-4438-b049-f9b5b1d2d8f6",
+                "level": {
+                    "levelDefinitionGuid": "f66543e45ee80264085b007f8f59d56a"
+                },
+                "uniqueLevelCountToRefreshNode": 2,
+                "uniqueLevelsVisitedSinceUse": [
+                    {
+                        "levelDefinitionGuid": "b89ab83751fbf624fa75610d9d5391ad"
+                    }
+                ]
+            },
+            {
+                "uniqueId": "8a9eb3b0-5ae3-4910-99da-44a40cbc386b",
+                "level": {
+                    "levelDefinitionGuid": "f66543e45ee80264085b007f8f59d56a"
+                },
+                "uniqueLevelCountToRefreshNode": 2,
+                "uniqueLevelsVisitedSinceUse": [
+                    {
+                        "levelDefinitionGuid": "b89ab83751fbf624fa75610d9d5391ad"
+                    }
+                ]
+            },
+            {
+                "uniqueId": "b2e27e59-5c36-4541-87a1-6f6ea0673fc2",
+                "level": {
+                    "levelDefinitionGuid": "f66543e45ee80264085b007f8f59d56a"
+                },
+                "uniqueLevelCountToRefreshNode": 2,
+                "uniqueLevelsVisitedSinceUse": [
+                    {
+                        "levelDefinitionGuid": "b89ab83751fbf624fa75610d9d5391ad"
+                    }
+                ]
+            },
+            {
+                "uniqueId": "cffd5e66-c914-492f-8c69-5c3eed279d8b",
+                "level": {
+                    "levelDefinitionGuid": "f66543e45ee80264085b007f8f59d56a"
+                },
+                "uniqueLevelCountToRefreshNode": 2,
+                "uniqueLevelsVisitedSinceUse": [
+                    {
+                        "levelDefinitionGuid": "b89ab83751fbf624fa75610d9d5391ad"
+                    }
+                ]
+            },
+            {
+                "uniqueId": "80a0be14-9a50-4305-abd0-14ff2c3e9af7",
+                "level": {
+                    "levelDefinitionGuid": "f66543e45ee80264085b007f8f59d56a"
+                },
+                "uniqueLevelCountToRefreshNode": 2,
+                "uniqueLevelsVisitedSinceUse": [
+                    {
+                        "levelDefinitionGuid": "b89ab83751fbf624fa75610d9d5391ad"
+                    }
+                ]
+            },
+            {
+                "uniqueId": "9699496d-a22b-43c5-9aa0-a770b18ea0cf",
+                "level": {
+                    "levelDefinitionGuid": "f66543e45ee80264085b007f8f59d56a"
+                },
+                "uniqueLevelCountToRefreshNode": 2,
+                "uniqueLevelsVisitedSinceUse": [
+                    {
+                        "levelDefinitionGuid": "b89ab83751fbf624fa75610d9d5391ad"
+                    }
+                ]
+            },
+            {
+                "uniqueId": "bd36e47b-5080-44d0-8f9b-93bcd3db985a",
+                "level": {
+                    "levelDefinitionGuid": "f66543e45ee80264085b007f8f59d56a"
+                },
+                "uniqueLevelCountToRefreshNode": 2,
+                "uniqueLevelsVisitedSinceUse": [
+                    {
+                        "levelDefinitionGuid": "b89ab83751fbf624fa75610d9d5391ad"
+                    }
+                ]
+            },
+            {
+                "uniqueId": "3379cbbf-333a-48ae-b632-5a6d840efbb7",
+                "level": {
+                    "levelDefinitionGuid": "b89ab83751fbf624fa75610d9d5391ad"
+                },
+                "uniqueLevelCountToRefreshNode": 2,
+                "uniqueLevelsVisitedSinceUse": []
+            },
+            {
+                "uniqueId": "4fc8f32b-8b5f-4943-a5a7-46c5999b19cc",
+                "level": {
+                    "levelDefinitionGuid": "b89ab83751fbf624fa75610d9d5391ad"
+                },
+                "uniqueLevelCountToRefreshNode": 2,
+                "uniqueLevelsVisitedSinceUse": []
+            },
+            {
+                "uniqueId": "0b42d09d-b70e-4b7d-9b74-cc9bc5c0b91f",
+                "level": {
+                    "levelDefinitionGuid": "b89ab83751fbf624fa75610d9d5391ad"
+                },
+                "uniqueLevelCountToRefreshNode": 2,
+                "uniqueLevelsVisitedSinceUse": []
+            },
+            {
+                "uniqueId": "d418f890-3ae2-4564-8203-48c37db2ef8e",
+                "level": {
+                    "levelDefinitionGuid": "b89ab83751fbf624fa75610d9d5391ad"
+                },
+                "uniqueLevelCountToRefreshNode": 2,
+                "uniqueLevelsVisitedSinceUse": []
+            },
+            {
+                "uniqueId": "db9c99b9-5045-497c-bc2b-2c181cd02695",
+                "level": {
+                    "levelDefinitionGuid": "b89ab83751fbf624fa75610d9d5391ad"
+                },
+                "uniqueLevelCountToRefreshNode": 2,
+                "uniqueLevelsVisitedSinceUse": []
+            },
+            {
+                "uniqueId": "45c030ae-b195-4716-90af-51c7e9428cbe",
+                "level": {
+                    "levelDefinitionGuid": "b89ab83751fbf624fa75610d9d5391ad"
+                },
+                "uniqueLevelCountToRefreshNode": 2,
+                "uniqueLevelsVisitedSinceUse": []
+            },
+            {
+                "uniqueId": "9070672a-b3e1-4cec-8560-99732fb73fa1",
+                "level": {
+                    "levelDefinitionGuid": "b89ab83751fbf624fa75610d9d5391ad"
+                },
+                "uniqueLevelCountToRefreshNode": 2,
+                "uniqueLevelsVisitedSinceUse": []
+            },
+            {
+                "uniqueId": "079e83db-f4d9-4b1f-bf2b-2d658304b1c4",
+                "level": {
+                    "levelDefinitionGuid": "b89ab83751fbf624fa75610d9d5391ad"
+                },
+                "uniqueLevelCountToRefreshNode": 2,
+                "uniqueLevelsVisitedSinceUse": []
+            },
+            {
+                "uniqueId": "155abf4b-251f-4b15-85da-d481162a2784",
+                "level": {
+                    "levelDefinitionGuid": "b89ab83751fbf624fa75610d9d5391ad"
+                },
+                "uniqueLevelCountToRefreshNode": 2,
+                "uniqueLevelsVisitedSinceUse": []
+            },
+            {
+                "uniqueId": "b4f4b316-354c-46cc-b7c8-b66da8940478",
+                "level": {
+                    "levelDefinitionGuid": "b89ab83751fbf624fa75610d9d5391ad"
+                },
+                "uniqueLevelCountToRefreshNode": 2,
+                "uniqueLevelsVisitedSinceUse": []
+            },
+            {
+                "uniqueId": "472e7925-eb16-468e-b696-b1df8e02bbc0",
+                "level": {
+                    "levelDefinitionGuid": "b89ab83751fbf624fa75610d9d5391ad"
+                },
+                "uniqueLevelCountToRefreshNode": 2,
+                "uniqueLevelsVisitedSinceUse": []
+            }
+        ]
+    },
+    "lootManagerSaveData": {
+        "sequenceLootTableLootGivenCountById": {
+            "keys": [
+                "578a7ff543c35454aae93c93a3537de0"
+            ],
+            "values": [
+                5
+            ]
+        },
+        "conchRedeemedCount": 0,
+        "unlockedConchs": [
+            "39acb7edaa21bf3499e8e6809d90ecc5",
+            "f5ae2813305f0f240acd361d04d59f82",
+            "77fdfbfbb38a34d42a7ce99407cb47f2",
+            "205096bb3a9b11a4aad9e2d0add85fb3",
+            "73663fef4cae0264c954bdbd14eda34c",
+            "dad0f9d1cd7023e45b7b94b288839622",
+            "cbbe4f5f1a822904da6afd52695f3cad",
+            "ce991cc8c461c8e45b84aaac2c811d77",
+            "75ca925bbf6d7a94d9ec074096a39a35",
+            "cb755b4973e52a14ba92437c84f84e8b",
+            "acbf7d8e96065004483610a3b8939555",
+            "d0677b0430c0561418dac8a3df0be22b",
+            "0433e4300245109439327f722ca4e44a",
+            "aa83c1c230750354e95cc7a4f2d0f738",
+            "b37a45b075d050f4cb04dd64b0bba56b",
+            "aa4f942f4bf114246b31567d3adcb379",
+            "1454d1631fd972f439c00e13956be9e8",
+            "bdd808850f85c994f8c5692fc79e017b",
+            "d600027e89127fb4da3e2e89bc404622"
+        ],
+        "unlockedTreasures": [
+            "e5da03bc-c282-4599-bb25-2f12f698aaa2",
+            "98940bbb-ced8-4cd8-93d5-0d38921f798d",
+            "6e0bb659-3807-4623-9ae0-0b972d81dd45",
+            "8a31c510-72bb-4b74-830a-7e1ba9ae3af9",
+            "186246c93c81c684e818635dcba339bd",
+            "cb75a4a3-0859-44fa-b1b8-da6fe69a8c99",
+            "c16a2c55-4495-435f-a75e-fd1719436137",
+            "3efd94f0-48eb-4ae2-bc85-989099bb359b",
+            "032b790c-0448-49c9-905c-00d64cf8695d",
+            "a55873d9-098b-4334-b2fd-237bc26cfc70",
+            "1de6ea35-e9ae-4d86-929c-b1c6f3f7d1fd",
+            "ea58e382-5949-41c7-9db2-81ce5d0b91a9",
+            "4b6226ea-5554-4fd9-af3c-e833742fde8b",
+            "1a45df7a-483a-414b-899c-678e3adf4dcb",
+            "0b8331d0-c4e2-463c-82e7-c9cdb766ace2",
+            "099ba223-5a35-48d9-8b49-a7dc6fb388ad",
+            "746e4cb6-a096-4441-9d66-4d46b9a600c3",
+            "4df02999-4316-4513-9add-34e81b5656db",
+            "322df797-14dc-43eb-92ea-b88fef111d85",
+            "8c3e8a11-0d50-4fc2-97ba-d7a7939e6134",
+            "a4db3663-faea-4098-ba8a-42370cc9363f",
+            "d820ed90-6bd7-4d3d-acc2-35693ec485f1",
+            "1324e7cb-8c8d-44d6-8329-aadb742cfd23",
+            "9a53aa98ef254a846accf65a11adacd0",
+            "9d7be9d1-fd49-41a6-afd8-e5c09ea9092c",
+            "c06ceeb0-1d7a-407f-b2d9-e26696bf42d2",
+            "b509a076-aa1c-4efc-8c99-141b29390db6",
+            "566acfca-e76a-4bd6-b2e4-6b94fe4fa12b",
+            "3e4d2d2d-d75a-4d15-9b96-4985c10eb309",
+            "2cb10438-6209-45eb-a2b3-6abc123566ac",
+            "48662040-677b-48e2-a4db-1957e6eb64a1",
+            "120026e1-67a6-447b-be93-558ca32ae397",
+            "313caacc-fe24-4220-b466-5b0ea5ca42a2",
+            "d67dfe97-52b4-4f2a-8501-c50cf2d658df",
+            "40bdac93-350d-4c17-82d6-7c1df6ae1fe4",
+            "0352e9bd-247b-4808-8799-36aad20c60c1",
+            "fac1d955-2b7e-4e1e-9d18-02cfe0ebbed4",
+            "65a5df06-2a91-4cdd-9fa1-3030b1a47035",
+            "44254700-3a70-486f-b3fd-c2f1d37c4778",
+            "498735ab-c238-407c-b1b9-a6ee6fd8fd8b",
+            "35f436e5-5c87-4827-a193-c610cd98c896",
+            "ff77713f-36ed-481e-a1ed-21676ad92ae3",
+            "bcb10679-266a-4630-85c1-296de2f889e7",
+            "812a667a-7479-4ecf-ab6b-f8bcfadf1559",
+            "94e0abe3-13fe-4861-9bf7-b1e1f8492057",
+            "7d95eba6-6587-4339-90d2-c08fcf2804a0",
+            "b8d9915b-4e0a-457a-b0b5-86881f6f87de",
+            "a8dd4a81-2e97-4da5-9a59-04fe40e8705a",
+            "0945e9d6-5262-4f8f-8961-7d509c91702f",
+            "6527b4c4-ca4c-4ac2-82bf-6609b8c3a719",
+            "e98859753e7dbbe4492562108b55bd70",
+            "7986d949-6b53-461c-b0fa-84dca14e0653",
+            "dedbca3c-bae1-43a9-9591-0f9935a22699",
+            "0a971ac1-4420-41a2-b34e-4e0b767fc8bd",
+            "95a8cd79-f5a3-448f-a424-7f7403b383db",
+            "0bed20b3-7261-46af-90eb-20fe02d28b76",
+            "879b255c-4c30-42e5-a3d4-8c7d11295fd0",
+            "4ae16634-995b-48c0-b13b-189795112b40",
+            "9a7b9a52-f37f-4528-8cc9-69c5edfbbe04",
+            "29ccb0da-5685-40ec-98e1-1783cead2d8d",
+            "8b1fee3c-4619-4751-9ba5-58b4d8bf97f9",
+            "1d2ee0db-a037-42c0-aecd-a111fe2883b6",
+            "97ff8640-0eee-4881-ba5d-ba367b6e76a9"
+        ],
+        "fishRedeemedCount": 0
+    },
+    "boatManagerSaveData": {
+        "lastUsedBoatDockId": ""
+    },
+    "achievementSaveData": {
+        "achievementProgression": {
+            "keys": [
+                {
+                    "achievementGuid": "f7de9a47752e9d9428c1805d34e71612"
+                },
+                {
+                    "achievementGuid": "22b25a445c2075144b2696bdae6f389b"
+                },
+                {
+                    "achievementGuid": "14098b34d500bbc489c03ffea8467256"
+                },
+                {
+                    "achievementGuid": "9e6b21ccf65c03e4e800d9f985f9a7c0"
+                },
+                {
+                    "achievementGuid": "20259c66b9bb31b4ba530b66327980a2"
+                },
+                {
+                    "achievementGuid": "cac8c760184df924c850936fb50c831e"
+                },
+                {
+                    "achievementGuid": "eb5fdc24b4ae95149bd4d5b6de9eff4c"
+                },
+                {
+                    "achievementGuid": "f83c96318dcc0534694e9d1a3e894558"
+                },
+                {
+                    "achievementGuid": "918344f40c6ddbb4b85d1366ebb4582b"
+                }
+            ],
+            "values": [
+                {
+                    "unlocked": false,
+                    "progress": 63
+                },
+                {
+                    "unlocked": true,
+                    "progress": 25
+                },
+                {
+                    "unlocked": true,
+                    "progress": 50
+                },
+                {
+                    "unlocked": true,
+                    "progress": 0
+                },
+                {
+                    "unlocked": false,
+                    "progress": 5
+                },
+                {
+                    "unlocked": false,
+                    "progress": 7
+                },
+                {
+                    "unlocked": true,
+                    "progress": 0
+                },
+                {
+                    "unlocked": true,
+                    "progress": 0
+                },
+                {
+                    "unlocked": true,
+                    "progress": 0
+                }
+            ]
+        }
+    },
+    "activitySaveData": {
+        "mainActivityReference": {
+            "activityGuid": "4f94835e4800c4248b07227b3869826b"
+        },
+        "subActivityIndex": 0
+    },
+    "codexStatsManagerSaveData": {
+        "codexStatsProgression": {
+            "keys": [
+                {
+                    "guid": "f9a2affd564405a4a8582ce57a7c7466"
+                },
+                {
+                    "guid": "eb7456cbc1918b74290be141a6ef8bfa"
+                },
+                {
+                    "guid": "1efdb13a03afdc3459c7a072960b0988"
+                },
+                {
+                    "guid": "e8979f56c3896624d9f83d1af9ec6573"
+                },
+                {
+                    "guid": "8d17e73295bf92c428ebe89596707e3d"
+                }
+            ],
+            "values": [
+                {
+                    "codexStatReference": {
+                        "guid": "f9a2affd564405a4a8582ce57a7c7466"
+                    },
+                    "defaultValue": 0,
+                    "childValues": {
+                        "keys": [
+                            "c3a2f1d99be4e0c42aca0ae1ff590028",
+                            "fc2736fdbb731394c98da56e8f476d5e",
+                            "f526fdd8553bd7344a34243f16f8fc96",
+                            "a9b692dccd6e2a748abe6f848cff857e",
+                            "8beb20a7311444a47b1764ae7ace6658",
+                            "3c02795df7f5ec647b8ba102263e7574",
+                            "5750f181921e1f349b595e8e47760d33",
+                            "72351ffc3ecd46d46bf11cec4eee353a",
+                            "962aa552d33fc124782b230fce9185ce",
+                            "ddc4a3bbf0edb9945ba4b06f96f9c20e",
+                            "e6ac627711e4ee44da103c47d1cd5736",
+                            "2a9a0b40f493b11429febb5d927ef84b",
+                            "fd131c994e11300458464a864480d743",
+                            "d6d70e14dba609e49888445e42647a8d",
+                            "d0f2cf59f69f42842ac0703193f39c85",
+                            "fc51f181f5f913f4e99195da947b1425",
+                            "50229dee567088647809e9b737b397b7",
+                            "91cece6ac544e8d49809c007d30f73fc",
+                            "013ecd2381fd8574c910cb58203eb2df",
+                            "42c3cf27ee18164428ad318882f5137e",
+                            "14c5d91be67e5214ba8ce66c21a282e7",
+                            "90c4097a7ecb8d6439bdc8d7a48b8992",
+                            "a3b51cc4bda782c41a9ada029c202824",
+                            "f93fa5cbb04648047902c7c612f418ee",
+                            "01101b1b5a47ca14b8979f4597514a59",
+                            "30372e1cddf4d8245861bd27363d5f9a",
+                            "6dd1189ece4445c48a7fb978f16eb797",
+                            "4cc1949eb31a81a4782b1075c32d268e",
+                            "028beee8dff72234a9ad3d8578f6e588",
+                            "f8de7842d6be99b40a6d8160044b5f62",
+                            "a5d5e39e2ca42bb43b343c4cde2ec1e7",
+                            "30bd6b9747d75724496a60116d875f96",
+                            "ebf760c7aea1c1d46b18e9db92c5af76",
+                            "5cdedb65d17f3b24c8b7ad5bcbe1bea6"
+                        ],
+                        "values": [
+                            8,
+                            11,
+                            17,
+                            5,
+                            1,
+                            2,
+                            1,
+                            10,
+                            1,
+                            1,
+                            24,
+                            21,
+                            15,
+                            3,
+                            2,
+                            1,
+                            9,
+                            12,
+                            13,
+                            5,
+                            7,
+                            3,
+                            1,
+                            23,
+                            23,
+                            11,
+                            4,
+                            25,
+                            1,
+                            16,
+                            4,
+                            1,
+                            1,
+                            1
+                        ]
+                    }
+                },
+                {
+                    "codexStatReference": {
+                        "guid": "eb7456cbc1918b74290be141a6ef8bfa"
+                    },
+                    "defaultValue": 0,
+                    "childValues": {
+                        "keys": [
+                            "aa25a5a12fc640d48b5e36da20aa0798"
+                        ],
+                        "values": [
+                            374
+                        ]
+                    }
+                },
+                {
+                    "codexStatReference": {
+                        "guid": "1efdb13a03afdc3459c7a072960b0988"
+                    },
+                    "defaultValue": 0,
+                    "childValues": {
+                        "keys": [
+                            "a9ef555c302113c40a9216a0f2255d35",
+                            "d8f38c4bfecad2946b0e493ae23174ae",
+                            "f5a1a50cd7f75a445965843983532067",
+                            "35e9f0dc715c6ac4fb842f1b3803ae50",
+                            "22428b2e36be9ea45906c07cd873ebcd",
+                            "a1eb8ca827c164a49a0629553e46bcdb",
+                            "4799e25505814f84984a4bcfa310fe18"
+                        ],
+                        "values": [
+                            2,
+                            15,
+                            2,
+                            7,
+                            2,
+                            1,
+                            1
+                        ]
+                    }
+                },
+                {
+                    "codexStatReference": {
+                        "guid": "e8979f56c3896624d9f83d1af9ec6573"
+                    },
+                    "defaultValue": 0,
+                    "childValues": {
+                        "keys": [
+                            "1f83e925faef7584b9f34b0723137d76",
+                            "841382ac016092346b0cf860a932c3c7",
+                            "f8bf6d10c6c6da840883935fa4aa8c9c",
+                            "094de5a55e6f5444aaf870aad7e78297",
+                            "21471472fcbc68149b8cf7a9dac2b785",
+                            "13dea75b6b52c814b939519cb2b0675c",
+                            "8a5e759b4475ca04d882e7d2b0c9b47a",
+                            "4ffc27dc684ae1e48b5a48909f79c3ca",
+                            "1050b67b61f94084d970b6ae4c33dc01",
+                            "47336b026e675b34f99d949b4c2f67d0",
+                            "9a6abc7114f0eb9409f27b6816830fff"
+                        ],
+                        "values": [
+                            36,
+                            37,
+                            26,
+                            26,
+                            25,
+                            46,
+                            50,
+                            5,
+                            4,
+                            4,
+                            7
+                        ]
+                    }
+                },
+                {
+                    "codexStatReference": {
+                        "guid": "8d17e73295bf92c428ebe89596707e3d"
+                    },
+                    "defaultValue": 0,
+                    "childValues": {
+                        "keys": [
+                            "74a5e5d26b56b7e429c36d1acb84a120",
+                            "1aafd2f9435698349a63a99837e9104e"
+                        ],
+                        "values": [
+                            2,
+                            3
+                        ]
+                    }
+                }
+            ]
+        }
+    },
+    "codexManagerSaveData": {
+        "unlockedCodexSheets": [
+            {
+                "guid": "5a8ccabd98450f945b1a57171dda1c2d"
+            },
+            {
+                "guid": "e97c79bd6efe04344b26d00de305c527"
+            }
+        ]
+    },
+    "inventorySaveData": {
+        "ownedInventoryItems": {
+            "keys": [
+                {
+                    "itemGuid": "def407b542a5c3d458a8c1fa59815693"
+                },
+                {
+                    "itemGuid": "c1962220eb589a642aa1a5856ef650d4"
+                },
+                {
+                    "itemGuid": "f2e2a73117e6d044d8b0ced0304293d1"
+                },
+                {
+                    "itemGuid": "4133b72ae404b374987e2b434c7f5c10"
+                },
+                {
+                    "itemGuid": "884bf88d04075264c98ab588ae5221cf"
+                },
+                {
+                    "itemGuid": "e3098c0169021924a97713b57a009928"
+                },
+                {
+                    "itemGuid": "40b7062ac812c5d47bb1ff0df4987e8e"
+                },
+                {
+                    "itemGuid": "08ae384f758e8be4ba4e7d58975838e6"
+                },
+                {
+                    "itemGuid": "1aafd2f9435698349a63a99837e9104e"
+                },
+                {
+                    "itemGuid": "a91e6b011845d77418d3bae4766a8a9d"
+                },
+                {
+                    "itemGuid": "1b0313fe821ba7c419b7b443416aa784"
+                },
+                {
+                    "itemGuid": "df724719b2fbf6e40a85e8f9bc4ccae2"
+                },
+                {
+                    "itemGuid": "7337dc21759feae4a92aba8200c42898"
+                },
+                {
+                    "itemGuid": "3ac3907f841cc2a40bd0fdce51cd52e2"
+                },
+                {
+                    "itemGuid": "933db0df85333b341a7d58da22f3b39c"
+                },
+                {
+                    "itemGuid": "4a1710ba97ae350428f18704e36fe234"
+                },
+                {
+                    "itemGuid": "10d0cb7c4836f794bb6f4d965f2b76c8"
+                },
+                {
+                    "itemGuid": "76b491199a5df8745a77f2a20ae8bc38"
+                },
+                {
+                    "itemGuid": "7f49bbd04a7b4b84092aec1d8f54d1cb"
+                },
+                {
+                    "itemGuid": "3ad1eaff8549fe94c897ac387f8ae4c9"
+                },
+                {
+                    "itemGuid": "bb98188ba554ed240a3161762390017f"
+                },
+                {
+                    "itemGuid": "19e478ef186577e489f95767465a1a84"
+                },
+                {
+                    "itemGuid": "212f14bab84c08745bbc35b36daa7c77"
+                },
+                {
+                    "itemGuid": "64f77efd09e519d4999ffb01b9ff328f"
+                },
+                {
+                    "itemGuid": "1f83e925faef7584b9f34b0723137d76"
+                },
+                {
+                    "itemGuid": "33e568f23e2581d448041ac97fb8358d"
+                },
+                {
+                    "itemGuid": "b9995b298ada14e4887faf134942b564"
+                },
+                {
+                    "itemGuid": "841382ac016092346b0cf860a932c3c7"
+                },
+                {
+                    "itemGuid": "c7eb103c76a21974c844159ab0f5a0d2"
+                },
+                {
+                    "itemGuid": "6a39fd9b315b53a4faa9e3736d820eff"
+                },
+                {
+                    "itemGuid": "8b102534541d1f24e9f958a5041b139c"
+                },
+                {
+                    "itemGuid": "094de5a55e6f5444aaf870aad7e78297"
+                },
+                {
+                    "itemGuid": "a31ee5ffc1b693148be7c48150ebff81"
+                },
+                {
+                    "itemGuid": "3dafda053c9fcb0439e0d5719cc11c8f"
+                },
+                {
+                    "itemGuid": "0b7efbffd76a27f489ea26df56bbc5ad"
+                },
+                {
+                    "itemGuid": "9a6abc7114f0eb9409f27b6816830fff"
+                },
+                {
+                    "itemGuid": "13dea75b6b52c814b939519cb2b0675c"
+                },
+                {
+                    "itemGuid": "21471472fcbc68149b8cf7a9dac2b785"
+                },
+                {
+                    "itemGuid": "f8bf6d10c6c6da840883935fa4aa8c9c"
+                },
+                {
+                    "itemGuid": "5eb73f88e6c96f94797fa11b7d11b061"
+                },
+                {
+                    "itemGuid": "b8f81159f93c18740ba72fffdd12a13e"
+                },
+                {
+                    "itemGuid": "154461019876b7741bbd74980276c852"
+                },
+                {
+                    "itemGuid": "7694b5b801204a74c888d67a49f06d42"
+                },
+                {
+                    "itemGuid": "fe44b430ac413ec4f970e9e908841c55"
+                },
+                {
+                    "itemGuid": "8a5e759b4475ca04d882e7d2b0c9b47a"
+                },
+                {
+                    "itemGuid": "a17b0505c55affc45a066431eb30c655"
+                },
+                {
+                    "itemGuid": "71cfc6d93b292d3499c472b73e9daae1"
+                },
+                {
+                    "itemGuid": "c7e3009a90c46164e86fd8fb5d08cbce"
+                },
+                {
+                    "itemGuid": "e27094f36cb7bb140b614b89fde60550"
+                },
+                {
+                    "itemGuid": "0ee892db1da195541bcbe578898265b5"
+                },
+                {
+                    "itemGuid": "5b77e66a1d52fce4cbab840d6dd157c4"
+                },
+                {
+                    "itemGuid": "c43421b626574174e9b5156141213250"
+                },
+                {
+                    "itemGuid": "f23fec51c068c00418db6127c54fcc8e"
+                },
+                {
+                    "itemGuid": "0626cb583af926649b435bcf63c101a7"
+                },
+                {
+                    "itemGuid": "6e613ca39c27bff49ae0da1773c6ab03"
+                },
+                {
+                    "itemGuid": "7a9b2938fabc5434da21134b18b4e0ee"
+                },
+                {
+                    "itemGuid": "d8a7bdab9aa9a6e4e95036b0eff55239"
+                },
+                {
+                    "itemGuid": "c1866d6de70d4834b951c06d4ae23306"
+                },
+                {
+                    "itemGuid": "24ff003b0e4c78047b638dccac197484"
+                },
+                {
+                    "itemGuid": "76241bd9c19934344a8274665fb67f2b"
+                },
+                {
+                    "itemGuid": "e972fad3d8d63a745bdfc1dc7dc6d2f7"
+                },
+                {
+                    "itemGuid": "d7f92ecb9e4da7b418070285c25d86e1"
+                },
+                {
+                    "itemGuid": "1b92e304b4f82144eb3e123ccb755b2c"
+                },
+                {
+                    "itemGuid": "4ffc27dc684ae1e48b5a48909f79c3ca"
+                },
+                {
+                    "itemGuid": "108a40870288c934d94c1661286ff1f0"
+                },
+                {
+                    "itemGuid": "71ff97ab95cbcd84985e62255cbca323"
+                },
+                {
+                    "itemGuid": "581aaf64cd0270b4bbf12d9ce9ea4ec0"
+                },
+                {
+                    "itemGuid": "6dfc4e7a1624a9c4eaaf2ae75c336b5c"
+                },
+                {
+                    "itemGuid": "f93c6f846bc2f0b4484e896221759b94"
+                },
+                {
+                    "itemGuid": "11e59219302f6b1479a5492650982272"
+                },
+                {
+                    "itemGuid": "f65753c0374254346afc37b1f75cd0ee"
+                },
+                {
+                    "itemGuid": "1050b67b61f94084d970b6ae4c33dc01"
+                },
+                {
+                    "itemGuid": "47336b026e675b34f99d949b4c2f67d0"
+                },
+                {
+                    "itemGuid": "d2fd56a9405f9c04fb303795c7840f2f"
+                },
+                {
+                    "itemGuid": "c9447122a421a2640b315d36b2562ad2"
+                },
+                {
+                    "itemGuid": "3e2210133b9ad0940bddde38c647e3e7"
+                },
+                {
+                    "itemGuid": "a0890c10ae319b0409d43f08af673ffd"
+                },
+                {
+                    "itemGuid": "3df62cf7dbeaa4a4ebc243672b8dacb8"
+                },
+                {
+                    "itemGuid": "70b52ef97031bd74fa467314fbcb11e6"
+                },
+                {
+                    "itemGuid": "c52a22809bcbb4443916cadd12aa01cd"
+                }
+            ],
+            "values": [
+                1,
+                1,
+                1,
+                1,
+                1,
+                1,
+                1,
+                1,
+                6,
+                1,
+                1,
+                1,
+                6,
+                2,
+                1,
+                1,
+                1,
+                22,
+                17,
+                1,
+                1,
+                1,
+                1,
+                1,
+                49,
+                7,
+                1,
+                44,
+                1,
+                1,
+                1,
+                26,
+                2,
+                1,
+                22,
+                29,
+                46,
+                23,
+                23,
+                19,
+                9,
+                2,
+                1,
+                1,
+                50,
+                7,
+                1,
+                1,
+                1,
+                1,
+                1,
+                1,
+                1,
+                3,
+                2,
+                5,
+                1,
+                1,
+                1,
+                1,
+                1,
+                1,
+                1,
+                7,
+                1,
+                1,
+                1,
+                1,
+                1,
+                1,
+                1,
+                4,
+                4,
+                1,
+                1,
+                1,
+                1,
+                1,
+                1,
+                1
+            ]
+        }
+    },
+    "currencySaveData": {
+        "currencyQuantities": {
+            "keys": [
+                {
+                    "guid": "aa25a5a12fc640d48b5e36da20aa0798"
+                }
+            ],
+            "values": [
+                116
+            ]
+        }
+    },
+    "relicSaveData": {
+        "enabledRelics": []
+    },
+    "quizSaveData": {
+        "unlockedPackIds": [],
+        "questionsPacksData": {
+            "keys": [],
+            "values": []
+        }
+    },
+    "pirateMusicSaveData": {
+        "unlockedSongs": [
+            {
+                "guid": "0a87fda86471d004ea7664d747ebbf2e"
+            },
+            {
+                "guid": "6f9c49155b12f1442bc0bbec2e888e70"
+            },
+            {
+                "guid": "adccd3c5726cdd54c9623a8c4a8900a8"
+            },
+            {
+                "guid": "3db56f85d4a1d43498a6c95332fb457a"
+            },
+            {
+                "guid": "b34da424af540214ca68a8180724aff5"
+            },
+            {
+                "guid": "df1a43f65bcdf0c488c5a9196cc01570"
+            },
+            {
+                "guid": "d231be2a0b9f2bc4197f8a6f286160a7"
+            },
+            {
+                "guid": "075931239f328ab4b99e4233c3e553d8"
+            },
+            {
+                "guid": "859c3d5e3a4c2894b87723aaf36f5863"
+            }
+        ]
+    },
+    "characterStatsSaveData": {
+        "garlMaxHPOnDeath": 0
+    },
+    "todSaveData": {
+        "paused": true,
+        "time": 12.0,
+        "basePreset": "",
+        "overridePreset": "",
+        "overrideWeight": 0.0,
+        "timeLerper": {
+            "active": false,
+            "speedBased": false,
+            "target": 20.0,
+            "duration": 1.0,
+            "origin": 12.0,
+            "current": 20.0,
+            "direction": 1,
+            "onComplete": 1
+        },
+        "presetLerper": {
+            "active": false,
+            "speedBased": false,
+            "target": 0.0,
+            "duration": 0.0,
+            "origin": 0.0,
+            "current": 0.0,
+            "direction": 0,
+            "onComplete": 0
+        }
+    },
+    "mainCharacter": {
+        "characterId": "VALERE"
+    },
+    "leader": {
+        "characterId": "VALERE"
+    },
+    "currentParty": [
+        {
+            "characterId": "VALERE"
+        },
+        {
+            "characterId": "ZALE"
+        },
+        {
+            "characterId": "SERAI"
+        }
+    ],
+    "shelvedParty": [
+        {
+            "characterId": "GARL"
+        }
+    ],
+    "storedParty": {
+        "leader": 0,
+        "followers": [],
+        "others": []
+    },
+    "combatParty": [
+        {
+            "characterId": "VALERE"
+        },
+        {
+            "characterId": "ZALE"
+        },
+        {
+            "characterId": "SERAI"
+        }
+    ],
+    "cargoParty": [],
+    "guestPartyMembers": [],
+    "cryptSaveManagerSaveData": {
+        "favoriteMemorials": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+        ],
+        "highlightedTeleporter": 0
+    },
+    "videoPlayerManagerSaveData": {
+        "viewedVideos": [
+            "9ca6afab02fbff64ca91ca87f1591670",
+            "07ae545061dedc14e8c77a1df64266d3",
+            "13f0d0785b316644c860b184130db18d"
+        ]
+    }
+}
