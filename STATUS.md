@@ -6,18 +6,18 @@ Current state of the project, for whoever picks it up next. Update it at the end
 
 ## State right now
 
-- **Branch:** `main`, pushed; everything is released in `v0.1.64`.
-- **Latest release:** `v0.1.64`, published 2026-11-25: renamed the repository to `miguelguzmanr/sos-online` and updated the in-game updater, release script, and docs (compiled and deployed; sweep skipped per user request). Before it: `v0.1.63` (README screenshots plus the title-screen version line that hides with the game's own, tested with `--sosonline-titleflow`), `v0.1.61` (save backups; save-sync, resync, end-playing, dropin-catchup and dropin-reload all 0 differences) and `v0.1.60` (manual updates, the co-op version line, the reorganised Online page). Sweep before v0.1.60 (2026-11-18): 20 of 21 passed (dropin-reload's host gave up with no session after 300 s, passed on a rerun); battle-turns-1 had the intermittent battle split, runs 2 and 3 had 0 mismatches. Earlier ones still around: `v0.1.56`, `v0.1.53`, `v0.1.52` (has the controller crash below), `v0.1.45`.
-- **Installed on the user's PC:** Release build of `v0.1.64` (plus any local WIP UI edits restored after release).
-- **Updates are manual from v0.1.60 on.** v0.1.56 and older download v0.1.60 at their next start (the friend, P2, gets it that way, one last time); after that, *(Update available)* on the title screen and *Check for updates*.
-- **Test save:** tests run from the user's newest save (`--sosonline-start=0a`). Last known: the Forbidden Cavern, Bosslug fight at `ENCOUNTER=650`, a campfire 8 m from the start. It changes whenever the user plays.
+- **Branch:** `tests/three-player-save` (unreleased work ahead of `main` / `v0.1.64`): `DeterministicRandom` hardening + `193` deterministic RNG targets (with `--sosonline-rngprobe` + per-method/load-epoch seed isolation), rejoin pause-loop fix (`ClearMenusAndPause`), `UdpTransport` chunking for large reliable messages, `Host Settings` / `Mod Options` / `sos-online` title UI updates, and 3-player save fixtures + tests (`tests/saves/`).
+- **Latest release on `main`:** `v0.1.64`, published 2026-11-25: renamed the repository to `miguelguzmanr/sos-online` and updated the in-game updater, release script, and docs.
+- **Installed on the user's PC:** Release build built from `tests/three-player-save` (`0.73-modified`).
+- **Updates are manual from v0.1.60 on.** v0.1.56 and older download v0.1.60 at their next start; after that, *sos-online \<version\> (\<update\> available)* on the title screen and *Check for Updates* under **Mod Options**.
+- **Test saves:** existing single/2-player scripts run from the user's newest save (`--sosonline-start=0a`), while `tests/three-player-*.sh` and `tests/rejoin-paused.sh` use the sandboxed fixtures in `tests/saves/` (`midgame-necromancer/`, `endgame-worldmap/`).
 
 ## Open items, by priority
 
-From the first session on v0.1.53 (user's report, 2026-11-16 late): the Bosslug fight was perfect, but there were two desyncs, and **in both the automatic rejoin never worked** (the same rejoin loop as before; both players had to go back to the title screen). Both play with controllers.
+From the first session on v0.1.53 (user's report, 2026-11-16 late): the Bosslug fight had two desyncs, and **in both the automatic rejoin never worked** (looped until both players returned to the title screen). Both play with controllers.
 
-1. **The rejoin loop.** Read the two logs the friend sent (`BepInEx\SosOnline\logs\received\*-20261116-225803.zip` and `*-20261116-230629.zip`: their session and state logs from 22:39) next to the host's logs of the same time (`BepInEx\SosOnline\logs\sosonline-20261116-2239*.log`, `state-*`).
-2. **The fishing minigame desynced.**
+1. **Verify the rejoin loop fix live over Steam.** *Root cause found in `friend-20261116-*.zip` (`v0.1.53`, fixed on `tests/three-player-save`):* `GameBridge.ReloadInPlace` called `LevelManager.LoadLevel` without closing open UI screens (`ShopMenu` from an aborted replay at `f36570`, `PauseMenu` from solo before invite at `f161`) or resetting `PauseManager`, leaving `pause=[on]` across loads and looping immediately on `mismatch #1: pause differs (local [on])`. Fixed via `MenuStatus.CloseOpenMenus` + `GameBridge.ClearMenusAndPause` on `ReloadInPlace` and `ResyncWaiting` (`tests/rejoin-paused.sh` passed `54/54` snapshots, `0` differ). Needs live Steam verification.
+2. **Verify fishing minigame live over Steam.** *Root cause found & fixed on `tests/three-player-save`:* `Fish*`, `FishingLine`, and `FishZone` (`Init`, `SpawnAllFish`, `InitSceneFish`, `SpawnFish`, `InitFishInstance`, `GetRandomFishSpawnPosition`) were unwrapped in `DeterministicRandom`. Fixed (`tests/three-player-fishing.sh` passed `55/55` and `65/65` FishingLake snapshots, `0` gameplay probe hits). Needs live Steam verification.
 3. **The first battle with Garl in the party desynced.** A title-menu test overwrote the host's `Autosave_SOS_SaveSlot0.sos` twice (2026-11-16 23:26, 23:30). The friend's mirror (`%USERPROFILE%\AppData\LocalLow\Sabotage Studio\Sea of Stars\SosOnlineSession\Autosave_SOS_SaveSlot0.sos`) may still hold the autosave; the user will ask for it. Checked 2026-11-17: no copy with Garl on the host PC. Both local slot-0 files, Steam Cloud (same checksums, synced 23:30:53) and the copies in Downloads hold the Forbidden Cavern state (Zale and Valere, level 2). Windows shadow copies need admin (Explorer → the save folder → Properties → Previous Versions). Every test run is sandboxed since (`SosOnlineTest-steam` for non-UDP runs).
 4. **Ask the friend to copy their `SosOnlineSession` folder** before their next online session (the playtest's state may only be there; v0.1.61 backs it up by itself once installed).
 5. **The reorganised Online page over Steam:** hosting adds Invite Friends, and a Join page full of friends (the status lines hide when the list reaches the copyright). Tested on UDP only; B on popups and on the page confirmed by the user with a pad.
@@ -63,10 +63,11 @@ The Bosslug fight runs in step: 11 runs in a row of `battle-turns.sh` with 0 dif
 
 ### Not yet verified
 
-- **Steam P2P beyond a few real sessions.** The rejoin over Steam is broken (open item 1).
-- **Combat beyond the tested fights:** combos, ultimate moves, Moonerang deflections, the co-op "additional player" QTEs (`*AdditionalPlayersQTEState`). `TimeQTEHandler` compensation is untested.
+- **Steam P2P beyond the initial sessions.** Live Steam testing is still needed for the rejoin-loop fix (#1), fishing (#2), and items #5–6 above.
+- **3-player World Map NPC & transient menu timing:** `tests/three-player-endgame.sh` still hits `3` `npcs differs` snapshots (`0.1m` ambient `NPC_Vespertine_Man01` / `NPC_SmallCroustalion` step after `GameMenu` unpause or pre-release loading; `0` RNG callers left in probe), and `tests/three-player-menus.sh` had a 1-frame `f2700` diff on one run right after Assign Players closed at `f2672`.
+- **Untested scenes & minigames:** Wheels, crypt generation, co-op additional-player QTEs, `FixedUpdate` RNG ordering, and multi-frame coroutines/open generics in scenes not yet exercised by `--sosonline-rngprobe`.
 - **Long sessions, area transitions with heavy streaming, cutscenes.** Async loading is the most likely source of desyncs.
-- **Three players in combat**, and Assign Players with three players (P3's colour is approximate).
+- **3-player Assign Players badge accuracy:** `tests/three-player-menus.sh` exercises 3-player Assign Players; P3's colour is approximate.
 - Names with accented letters keep them, but the game's small font may not draw them.
 
 ## Known limitations (by design, for now)

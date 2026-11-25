@@ -11,6 +11,15 @@ Standalone `.sos` saves for running sandboxed tests via `--sosonline-sandboxfile
 
 Both saves originated as `saveVersion: 1` community saves (`r/seaofstars`) and load cleanly on Sunset Edition (`v3.0.60151`) when paired with `SOS_SaveDataIndex.sos` (verified in 3-player UDP sandboxed runs).
 
+## Scripts using these fixtures
+
+- `tests/three-player-battle.sh`: 3-player Necromancer's Lair battle over a lagged link (`midgame-necromancer`)
+- `tests/three-player-combos.sh`: 3-player battle with `--sosonline-botvary` cycling skills, combos, and boosts (`midgame-necromancer`)
+- `tests/three-player-menus.sh`: 3-player menus, Assign Players, and camping (`midgame-necromancer`)
+- `tests/three-player-fishing.sh`: 3-player Sunglow Lake fishing (`endgame-worldmap` → `FishingLake`)
+- `tests/three-player-endgame.sh`: 3-player endgame World Map + 6-character menu (`endgame-worldmap`)
+- `tests/rejoin-paused.sh`: Stage 2 drop-in rejoin regression when guest is paused / in menus (`midgame-necromancer`)
+
 ## Usage
 
 Pass both the slot file and `tests/saves/SOS_SaveDataIndex.sos` to `--sosonline-sandboxfile` on the host (guests mirror saves from the host):

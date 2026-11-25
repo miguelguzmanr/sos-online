@@ -40,9 +40,9 @@ You need Sea of Stars on Steam (Windows) and `SosOnline-<version>.zip` from the 
 <details>
 <summary>Updates</summary>
 
-The bottom-left corner of the title screen shows the mod's version, e.g. *Online Co-op Version 0.56*, and adds *(Update available)* when there's a newer release. Nothing is downloaded until you ask:
+The bottom-left corner of the title screen shows the mod's version, e.g. *sos-online 0.73*, and shows *(\<version\> available)* when there's a newer release. Nothing is downloaded until you ask:
 
-1. Title screen → **Online** → **Options** → **Check for Updates** → **Install**. The update is installed only if its signature matches.
+1. Title screen → **Online** → **Mod Options** → **Check for Updates** → **Install**. The update is installed only if its signature matches.
 2. **Restart** (through Steam), or **Later**: it runs from the next start.
 
 At start the mod makes one request to GitHub to see whether there's a newer release; nothing personal is sent.
@@ -88,9 +88,9 @@ To go back to one, quit the game and copy the file over the one in the save fold
 
 ## Something went wrong?
 
-**Friends:** choose **Send logs to host** (pause screen, or title screen → **Online** → **Options**). Your game sends your recent logs, a copy of the session's save, and a crash dump if the game crashed, to the host only.
+**Friends:** choose **Send logs to host** (pause screen, or title screen → **Online** → **Mod Options**). Your game sends your recent logs, a copy of the session's save, and a crash dump if the game crashed, to the host only.
 
-**Host:** press **F8** → **Open logs folder** (or title screen → **Online** → **Options** → **Open Logs Folder**), and attach the newest `sosonline-*.log` and `state-*.log` to an [issue](https://github.com/miguelguzmanr/sos-online/issues), with roughly what happened and when. The logs contain the Steam names of the players in the session; nothing else personal.
+**Host:** press **F8** → **Open logs folder** (or title screen → **Online** → **Mod Options** → **Open Logs Folder**), and attach the newest `sosonline-*.log` and `state-*.log` to an [issue](https://github.com/miguelguzmanr/sos-online/issues), with roughly what happened and when. The logs contain the Steam names of the players in the session; nothing else personal.
 
 ## Credits
 
