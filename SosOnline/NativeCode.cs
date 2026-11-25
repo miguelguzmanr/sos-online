@@ -23,6 +23,24 @@ namespace SosOnline;
 internal static unsafe class NativeCode
 {
     private static Dictionary<IntPtr, List<string>> _byPointer;
+    private static long[] _sortedPtrs;
+    private static readonly List<(long start, long end)> _textSections = new();
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct MEMORY_BASIC_INFORMATION
+    {
+        public IntPtr BaseAddress;
+        public IntPtr AllocationBase;
+        public uint AllocationProtect;
+        public ushort PartitionId;
+        public IntPtr RegionSize;
+        public uint State;
+        public uint Protect;
+        public uint Type;
+    }
+
+    [DllImport("kernel32.dll")]
+    private static extern UIntPtr VirtualQuery(IntPtr lpAddress, out MEMORY_BASIC_INFORMATION lpBuffer, UIntPtr dwLength);
 
     private static string Str(nint p) => p == 0 ? "" : Marshal.PtrToStringAnsi(p) ?? "";
 
@@ -30,6 +48,25 @@ internal static unsafe class NativeCode
     {
         if (_byPointer != null) return;
         _byPointer = new Dictionary<IntPtr, List<string>>();
+        _textSections.Clear();
+        var module = GetModuleHandle("GameAssembly.dll");
+        if (module != IntPtr.Zero)
+        {
+            long baseAddr = module.ToInt64();
+            int pe = *(int*)(baseAddr + 0x3C);
+            short numSec = *(short*)(baseAddr + pe + 6);
+            short optSize = *(short*)(baseAddr + pe + 20);
+            long secBase = baseAddr + pe + 24 + optSize;
+            for (int s = 0; s < numSec; s++)
+            {
+                long sh = secBase + s * 40;
+                uint chars = *(uint*)(sh + 36);
+                if ((chars & 0x20000000) == 0) continue; // IMAGE_SCN_MEM_EXECUTE
+                long sStart = baseAddr + *(uint*)(sh + 12);
+                long sEnd = sStart + *(uint*)(sh + 8);
+                _textSections.Add((sStart, sEnd));
+            }
+        }
         uint count = 0;
         var assemblies = IL2CPP.il2cpp_domain_get_assemblies(IL2CPP.il2cpp_domain_get(), ref count);
         for (uint a = 0; a < count; a++)
@@ -53,6 +90,44 @@ internal static unsafe class NativeCode
                 }
             }
         }
+        _sortedPtrs = _byPointer.Keys.Select(p => p.ToInt64()).OrderBy(x => x).ToArray();
+    }
+
+    private static bool InTextSection(long addr)
+    {
+        for (int i = 0; i < _textSections.Count; i++)
+        {
+            var (s, e) = _textSections[i];
+            if (addr >= s + 8 && addr < e) return true;
+        }
+        return false;
+    }
+
+    /// <summary>Walks committed stack slots from <paramref name="sp"/> to resolve GameAssembly.dll call return addresses.</summary>
+    public static string CallerChainFromStack(long* sp, int maxSlots = 256, int maxFrames = 4)
+    {
+        Build();
+        if (_sortedPtrs == null || _sortedPtrs.Length == 0 || _textSections.Count == 0) return "?";
+        if (VirtualQuery((IntPtr)sp, out var mbi, (UIntPtr)sizeof(MEMORY_BASIC_INFORMATION)) == UIntPtr.Zero) return "?";
+        long stackEnd = mbi.BaseAddress.ToInt64() + (long)mbi.RegionSize;
+        int slots = (int)Math.Min(maxSlots, Math.Max(0, (stackEnd - (long)sp) / 8));
+        var parts = new List<string>(maxFrames);
+        for (int i = 0; i < slots && parts.Count < maxFrames; i++)
+        {
+            long addr = sp[i];
+            if (!InTextSection(addr)) continue;
+            byte* p = (byte*)addr;
+            bool looksLikeCall = p[-5] == 0xE8 || p[-6] == 0xFF || p[-2] == 0xFF || p[-3] == 0xFF || p[-4] == 0xFF || p[-7] == 0xFF;
+            if (!looksLikeCall) continue;
+            int idx = Array.BinarySearch(_sortedPtrs, addr);
+            if (idx < 0) idx = (~idx) - 1;
+            if (idx < 0) continue;
+            long fn = _sortedPtrs[idx];
+            var names = _byPointer[(IntPtr)fn];
+            string label = names.Count == 1 ? names[0] : $"{names[0]}(+{names.Count - 1})";
+            if (parts.Count == 0 || parts[^1] != label) parts.Add(label);
+        }
+        return parts.Count > 0 ? string.Join(" <- ", parts) : "non-GameAssembly";
     }
 
     /// <summary>Native code pointer of an interop method, via its NativeMethodInfoPtr field.</summary>

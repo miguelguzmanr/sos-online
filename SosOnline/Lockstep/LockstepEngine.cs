@@ -367,7 +367,9 @@ internal sealed class LockstepEngine
         _times.Remove(Frame - HistoryFrames);
         // Reseed every frame: whatever consumed UnityEngine.Random a variable number of times last frame
         // (async loading, visibility-driven effects) can't carry divergence into this one.
-        UnityEngine.Random.InitState(unchecked(Seed ^ ((Frame + RngFrameOffset) * 486187739)));
+        DeterministicRandom.InternalSeeding = true;
+        try { UnityEngine.Random.InitState(unchecked(Seed ^ ((Frame + RngFrameOffset) * 486187739))); }
+        finally { DeterministicRandom.InternalSeeding = false; }
         if (_scheduled.Remove(Frame, out var actions))
             foreach (var a in actions)
                 try { a(); } catch (Exception e) { Plugin.Log.LogError($"[lockstep] scheduled action at {Frame} failed: {e}"); }

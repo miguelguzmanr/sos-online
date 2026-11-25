@@ -42,6 +42,7 @@ public sealed class Plugin : BasePlugin
             if (TestHarness.TryArg("dashprobe", out _)) Diagnostics.InstallDashProbe(harmony);
             TimingCompensation.Install(harmony);
             DeterministicRandom.Install(harmony);
+            if (TestHarness.TryArg("rngprobe", out _)) RngProbe.Install(harmony);
             CombatTrace.Install(harmony);
             SpawnTrace.Install(harmony);
             if (TestHarness.TryArg("whichrva", out var rvas))

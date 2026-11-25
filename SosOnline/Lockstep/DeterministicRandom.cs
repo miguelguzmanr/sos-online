@@ -141,6 +141,8 @@ internal static class DeterministicRandom
     private static UnityEngine.Random.State _saved;
 
     public static int Rolls { get; private set; }
+    public static bool InScope => _depth > 0 && _seeded;
+    internal static bool InternalSeeding;
 
     private static bool Active
     {
@@ -160,22 +162,41 @@ internal static class DeterministicRandom
         if (!TestHarness.TryArg("nolockfix", out _)) targets = targets.Concat(LockTargets);
         if (!TestHarness.TryArg("nosummonfix", out _)) targets = targets.Concat(SummonTargets);
         foreach (var (type, name) in targets)
-            foreach (var m in type.GetMethods(BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.DeclaredOnly).Where(m => m.Name == name))
+        {
+            int hits = 0;
+            foreach (var m in type.GetMethods(BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly).Where(m => m.Name == name))
             {
+                hits++;
                 // Never detour native code shared with unrelated methods.
                 if (NativeCode.IsFolded(m)) { Plugin.Log.LogWarning($"[random] {type.Name}.{name} is folded with other methods; left alone"); continue; }
-                try { harmony.Patch(m, prefix: enter, postfix: exit); patched++; }
+                try { harmony.Patch(m, prefix: enter, finalizer: exit); patched++; }
                 catch (Exception e) { Plugin.Log.LogWarning($"[random] {type.Name}.{name} not patched: {e.Message}"); }
             }
+            if (hits == 0) Plugin.Log.LogWarning($"[random] {type.Name}.{name} not found");
+        }
         foreach (var (outer, prefix) in CoroutineTargets)
-            foreach (var nested in outer.GetNestedTypes(BindingFlags.Public | BindingFlags.NonPublic).Where(t => t.Name.StartsWith(prefix, StringComparison.Ordinal)))
+        {
+            int hits = 0;
+            foreach (var nested in outer.GetNestedTypes(BindingFlags.Public | BindingFlags.NonPublic).Where(t => MatchesCoroutine(t.Name, prefix)))
             {
+                hits++;
                 var m = nested.GetMethod("MoveNext", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
                 if (m == null || NativeCode.IsFolded(m)) { Plugin.Log.LogWarning($"[random] {nested.Name}.MoveNext not patched"); continue; }
-                try { harmony.Patch(m, prefix: enter, postfix: exit); patched++; }
+                try { harmony.Patch(m, prefix: enter, finalizer: exit); patched++; }
                 catch (Exception e) { Plugin.Log.LogWarning($"[random] {nested.Name}.MoveNext not patched: {e.Message}"); }
             }
+            if (hits == 0) Plugin.Log.LogWarning($"[random] {outer.Name}+{prefix} coroutine not found");
+        }
         Plugin.Log.LogInfo($"[random] {patched} gameplay random roll(s) made deterministic");
+    }
+
+    private static bool MatchesCoroutine(string typeName, string prefix)
+    {
+        if (prefix.EndsWith("_", StringComparison.Ordinal))
+            return typeName.StartsWith(prefix + "d__", StringComparison.Ordinal);
+        return typeName.StartsWith("_" + prefix + "_d__", StringComparison.Ordinal)
+            || typeName.StartsWith("__" + prefix + "_d__", StringComparison.Ordinal)
+            || typeName.StartsWith(prefix + "_d__", StringComparison.Ordinal);
     }
 
     /// <summary>The outermost wrapped method running now, or null (the summon probe logs it).</summary>
@@ -194,7 +215,9 @@ internal static class DeterministicRandom
             var e = Session.Instance.Engine;
             if (e.AppliedFrame != _frame) { _frame = e.AppliedFrame; _count = 0; }
             _saved = UnityEngine.Random.state;
-            UnityEngine.Random.InitState(unchecked(e.Seed ^ (_frame * 486187739) ^ ((++_count) * 1640531527) ^ 0x5EED));
+            InternalSeeding = true;
+            try { UnityEngine.Random.InitState(unchecked(e.Seed ^ (_frame * 486187739) ^ ((++_count) * 1640531527) ^ 0x5EED)); }
+            finally { InternalSeeding = false; }
             _seeded = true;
             _outer = __originalMethod?.DeclaringType?.Name + "." + __originalMethod?.Name;
             Rolls++;
@@ -202,14 +225,15 @@ internal static class DeterministicRandom
         catch { }
     }
 
-    private static void Exit()
+    private static Exception Exit(Exception __exception)
     {
-        if (--_depth > 0) return;
+        if (--_depth > 0) return __exception;
         _depth = 0;
         if (_seeded)
         {
             _seeded = false;
             try { UnityEngine.Random.state = _saved; } catch { }
         }
+        return __exception;
     }
 }

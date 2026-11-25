@@ -850,6 +850,7 @@ internal static class TestHarness
         {
             Plugin.Log.LogInfo($"[timing] stats: deferred attacks {TimingCompensation.DeferredAttacks}, attack regrades {TimingCompensation.AttackRegrades}, block checks {TimingCompensation.BlockChecks}, upgrades {TimingCompensation.BlockUpgrades}, downgrades {TimingCompensation.BlockDowngrades}, look-ahead wait {Session.Instance.Engine.LookaheadWaitMs:F0} ms");
             Plugin.Log.LogInfo($"[sync] snapshot capture: {StateSnapshot.CaptureCount} taken, avg {StateSnapshot.CaptureMsTotal / Math.Max(1, StateSnapshot.CaptureCount):F2} ms, max {StateSnapshot.CaptureMsMax:F2} ms");
+            RngProbe.LogSummary();
             Plugin.Log.LogInfo($"[test] quitting at frame {frame}");
             _stateLog?.Flush();
             SpikeB.Close();
