@@ -1,7 +1,7 @@
 # Sea of Stars Online Co-op
 
-[![Latest release](https://img.shields.io/github/v/release/miguelguzmanr/sosonline?label=release)](https://github.com/miguelguzmanr/sosonline/releases/latest)
-[![Downloads](https://img.shields.io/github/downloads/miguelguzmanr/sosonline/total)](https://github.com/miguelguzmanr/sosonline/releases)
+[![Latest release](https://img.shields.io/github/v/release/miguelguzmanr/sos-online?label=release)](https://github.com/miguelguzmanr/sos-online/releases/latest)
+[![Downloads](https://img.shields.io/github/downloads/miguelguzmanr/sos-online/total)](https://github.com/miguelguzmanr/sos-online/releases)
 
 Play **Sea of Stars: Sunset Edition** co-op online with your Steam friends. The game already has local co-op for up to three players; this mod lets players 2 and 3 join from their own PCs.
 
@@ -26,11 +26,11 @@ Play **Sea of Stars: Sunset Edition** co-op online with your Steam friends. The 
 ## Installation
 
 > [!WARNING]
-> The only official download is the [Releases page](https://github.com/miguelguzmanr/sosonline/releases/latest) of this repository.
+> The only official download is the [Releases page](https://github.com/miguelguzmanr/sos-online/releases/latest) of this repository.
 
 Everyone in a session needs **the same version of the mod** and of the game. Install it once; after that, update from the game's **Online** menu.
 
-You need Sea of Stars on Steam (Windows) and `SosOnline-<version>.zip` from the [latest release](https://github.com/miguelguzmanr/sosonline/releases/latest).
+You need Sea of Stars on Steam (Windows) and `SosOnline-<version>.zip` from the [latest release](https://github.com/miguelguzmanr/sos-online/releases/latest).
 
 1. **Install BepInEx 6 (IL2CPP).** Download [BepInEx-Unity.IL2CPP-win-x64-6.0.0-be.793](https://builds.bepinex.dev/projects/bepinex_be/793/BepInEx-Unity.IL2CPP-win-x64-6.0.0-be.793%2Bdbc82f0.zip) and extract it into the game folder, next to `SeaOfStars.exe`. To find the folder: Steam → right-click Sea of Stars → *Manage* → *Browse local files*.
 2. **Start the game once from Steam** and wait for the title screen. The first start takes a minute or two longer while BepInEx prepares itself; a console window opens next to the game. Then quit.
@@ -90,7 +90,7 @@ To go back to one, quit the game and copy the file over the one in the save fold
 
 **Friends:** choose **Send logs to host** (pause screen, or title screen → **Online** → **Options**). Your game sends your recent logs, a copy of the session's save, and a crash dump if the game crashed, to the host only.
 
-**Host:** press **F8** → **Open logs folder** (or title screen → **Online** → **Options** → **Open Logs Folder**), and attach the newest `sosonline-*.log` and `state-*.log` to an [issue](https://github.com/miguelguzmanr/sosonline/issues), with roughly what happened and when. The logs contain the Steam names of the players in the session; nothing else personal.
+**Host:** press **F8** → **Open logs folder** (or title screen → **Online** → **Options** → **Open Logs Folder**), and attach the newest `sosonline-*.log` and `state-*.log` to an [issue](https://github.com/miguelguzmanr/sos-online/issues), with roughly what happened and when. The logs contain the Steam names of the players in the session; nothing else personal.
 
 ## Credits
 

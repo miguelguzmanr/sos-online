@@ -37,12 +37,12 @@ $zip = Get-ChildItem (Join-Path $root "dist") -Filter "SosOnline-0.1.$count+*.zi
 if (-not $zip -or $zip.Name -like "*-modified*") { throw "Expected a clean dist\SosOnline-0.1.$count+<commit>.zip." }
 
 if (-not $Notes) {
-    $previous = gh release view --repo miguelguzmanr/sosonline --json tagName --jq .tagName 2>$null
+    $previous = gh release view --repo miguelguzmanr/sos-online --json tagName --jq .tagName 2>$null
     $range = if ($previous) { "$(git -C $root rev-list -n 1 $previous 2>$null)..HEAD" } else { "HEAD" }
     if ($range -like "..HEAD") { $range = "HEAD" }
     $Notes = (git -C $root log --format="- %s" $range | Select-Object -First 30) -join "`n"
 }
 
-gh release create $tag $zip.FullName --repo miguelguzmanr/sosonline --title "Sea of Stars Online Co-op $tag" --notes $Notes --target main
+gh release create $tag $zip.FullName --repo miguelguzmanr/sos-online --title "Sea of Stars Online Co-op $tag" --notes $Notes --target main
 if ($LASTEXITCODE -ne 0) { throw "Release failed." }
 Write-Host "Released $tag. Players see it as an available update at their next start."

@@ -25,7 +25,7 @@ Determinism is the whole game: anything a PC reads that isn't synced input or sy
 - **Player-facing text:** short. Toasts at most 80 characters, popup choices at most about 25. A one-sentence toast has no final period ("Robin joined"); periods only between two or more sentences; "!" stays. Add or change strings in `docs/messages.csv` first; the user reviews wording there.
 - **Keep the game's own behaviour** where it has one (two players may pick the same character; save slots keep "Slot N").
 - **Guard user-supplied text** (player names) against length and special characters.
-- **Public repo** (`miguelguzmanr/sosonline`): keep Steam names out of commits, docs and screenshots (they appear in logs).
+- **Public repo** (`miguelguzmanr/sos-online`): keep Steam names out of commits, docs and screenshots (they appear in logs).
 
 ## Long sessions
 
@@ -197,7 +197,7 @@ pwsh -File tools\make-release-zip.ps1
 
 Updates are manual since 2026-11-17 (`Update/AutoUpdate.cs`); before, the mod downloaded and installed every newer release at start.
 
-- **At start** the mod only looks up the [latest release](https://github.com/miguelguzmanr/sosonline/releases/latest) (one request to `api.github.com`; not in test runs). If it's newer, `AutoUpdate.Available` is set.
+- **At start** the mod only looks up the [latest release](https://github.com/miguelguzmanr/sos-online/releases/latest) (one request to `api.github.com`; not in test runs). If it's newer, `AutoUpdate.Available` is set.
 - **Title screen version line** (`UI/VersionLabel.cs`): *Online Co-op Version 0.56*, plus *(Update available)*, bottom-left. It's a copy of the game's own version text (`VersionInfo`), moved to the root canvas (the game's line sits in a layout group) and mirrored: as far from the left edge as the game's drawn text is from the right edge, same bottom.
 - **Versions as players see them:** `AutoUpdate.Display` shows 0.1.56 as "0.56" (releases are always 0.1.&lt;commit count&gt;). Logs and assembly versions keep the full 0.1.56.
 - **Check for Updates** (title screen → Online → Options) looks up the release and asks: *Up to date (0.56).*, or *Update 0.57 is available.* → Install / Back. It downloads the zip and installs the DLL only if its signature matches the release key built into the mod (the running DLL is renamed to `.old`; nothing downloaded is loaded in the running game). On a locally modified build (`…-modified`) it offers the published release even when that isn't newer.

@@ -30,7 +30,7 @@ namespace SosOnline.Update;
 /// </summary>
 internal static class AutoUpdate
 {
-    private const string Repository = "miguelguzmanr/sosonline";
+    private const string Repository = "miguelguzmanr/sos-online";
     private const string LatestRelease = "https://api.github.com/repos/" + Repository + "/releases/latest";
 
     /// <summary>SubjectPublicKeyInfo of the release signing key (tools\new-signing-key.ps1).</summary>

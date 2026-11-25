@@ -2,13 +2,13 @@
 
 Current state of the project, for whoever picks it up next. Update it at the end of every working session: replace what changed, don't append a diary. Technical background is in [CLAUDE.md](CLAUDE.md); causes and fixes in detail are in [docs/FINDINGS.md](docs/FINDINGS.md), the drop-in plan and its progress in [docs/PLAN.md](docs/PLAN.md).
 
-*Last updated: 2026-11-18.*
+*Last updated: 2026-11-25.*
 
 ## State right now
 
-- **Branch:** `main`, pushed; everything is released in `v0.1.63`.
-- **Latest release:** `v0.1.63`, published 2026-11-18: README screenshots plus the title-screen version line that hides with the game's own (tested with `--sosonline-titleflow`). Before it: `v0.1.61` (save backups; save-sync, resync, end-playing, dropin-catchup and dropin-reload all 0 differences) and `v0.1.60` (manual updates, the co-op version line, the reorganised Online page). Sweep before v0.1.60 (2026-11-18): 20 of 21 passed (dropin-reload's host gave up with no session after 300 s, passed on a rerun); battle-turns-1 had the intermittent battle split, runs 2 and 3 had 0 mismatches. Earlier ones still around: `v0.1.56`, `v0.1.53`, `v0.1.52` (has the controller crash below), `v0.1.45`.
-- **Installed on the user's PC:** a test build (`...-modified`) of the same code as v0.1.63.
+- **Branch:** `main`, pushed; everything is released in `v0.1.64`.
+- **Latest release:** `v0.1.64`, published 2026-11-25: renamed the repository to `miguelguzmanr/sos-online` and updated the in-game updater, release script, and docs (compiled and deployed; sweep skipped per user request). Before it: `v0.1.63` (README screenshots plus the title-screen version line that hides with the game's own, tested with `--sosonline-titleflow`), `v0.1.61` (save backups; save-sync, resync, end-playing, dropin-catchup and dropin-reload all 0 differences) and `v0.1.60` (manual updates, the co-op version line, the reorganised Online page). Sweep before v0.1.60 (2026-11-18): 20 of 21 passed (dropin-reload's host gave up with no session after 300 s, passed on a rerun); battle-turns-1 had the intermittent battle split, runs 2 and 3 had 0 mismatches. Earlier ones still around: `v0.1.56`, `v0.1.53`, `v0.1.52` (has the controller crash below), `v0.1.45`.
+- **Installed on the user's PC:** Release build of `v0.1.64` (plus any local WIP UI edits restored after release).
 - **Updates are manual from v0.1.60 on.** v0.1.56 and older download v0.1.60 at their next start (the friend, P2, gets it that way, one last time); after that, *(Update available)* on the title screen and *Check for updates*.
 - **Test save:** tests run from the user's newest save (`--sosonline-start=0a`). Last known: the Forbidden Cavern, Bosslug fight at `ENCOUNTER=650`, a campfire 8 m from the start. It changes whenever the user plays.
 
