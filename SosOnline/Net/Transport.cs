@@ -27,7 +27,11 @@ internal sealed class SteamTransport : ITransport
 
     public string Describe(ulong peer) => SteamApi.FriendName(peer) is { Length: > 0 } n ? UI.PlayerNames.Clean(n, "the host") : peer.ToString();
 
-    public void Send(ulong peer, byte[] data, int length, bool reliable) => SteamApi.Send(peer, data, length, reliable, Channel);
+    public void Send(ulong peer, byte[] data, int length, bool reliable)
+    {
+        if (!SteamApi.Send(peer, data, length, reliable, Channel) && reliable)
+            Plugin.Log.LogWarning($"[steam] reliable send failed ({length} B to {peer})");
+    }
 
     public void Poll(Action<ulong, byte[]> onMessage) => SteamApi.Receive(Channel, onMessage);
 
@@ -54,16 +58,19 @@ internal sealed class UdpTransport : ITransport
         public uint NextSendSeq = 1;
         public uint NextRecvSeq = 1;
         public readonly SortedDictionary<uint, (byte[] data, DateTime sent)> Unacked = new();
-        public readonly SortedDictionary<uint, byte[]> OutOfOrder = new();
+        public readonly SortedDictionary<uint, (byte kind, byte[] payload)> OutOfOrder = new();
+        public System.IO.MemoryStream Assemble;
     }
 
-    private const byte KindData = 1, KindAck = 2, KindUnreliable = 3;
+    private const byte KindData = 1, KindAck = 2, KindUnreliable = 3, KindDataPart = 4;
+    private const int MaxChunkBytes = 32 * 1024;
 
     public UdpTransport(ushort port)
     {
         _port = port;
         _socket = new UdpClient(new IPEndPoint(IPAddress.Loopback, port));
         _socket.Client.Blocking = false;
+        try { _socket.Client.SendBufferSize = 512 * 1024; _socket.Client.ReceiveBufferSize = 512 * 1024; } catch { }
         // Ignore ICMP port unreachable resets when the other instance isn't up yet.
         const int SIO_UDP_CONNRESET = -1744830452;
         try { _socket.Client.IOControl(SIO_UDP_CONNRESET, new byte[] { 0 }, null); } catch { }
@@ -80,18 +87,30 @@ internal sealed class UdpTransport : ITransport
 
     public void Send(ulong peer, byte[] data, int length, bool reliable)
     {
-        var packet = new byte[length + 5];
-        Buffer.BlockCopy(data, 0, packet, 5, length);
-        if (reliable)
+        if (!reliable)
         {
-            var p = Peer(peer);
-            uint seq = p.NextSendSeq++;
-            packet[0] = KindData;
-            BitConverter.TryWriteBytes(packet.AsSpan(1), seq);
-            p.Unacked[seq] = (packet, DateTime.UtcNow);
+            var packet = new byte[length + 5];
+            packet[0] = KindUnreliable;
+            Buffer.BlockCopy(data, 0, packet, 5, length);
+            Raw(peer, packet);
+            return;
         }
-        else packet[0] = KindUnreliable;
-        Raw(peer, packet);
+        var p = Peer(peer);
+        int offset = 0;
+        do
+        {
+            int chunk = Math.Min(MaxChunkBytes, length - offset);
+            bool last = offset + chunk >= length;
+            var packet = new byte[chunk + 5];
+            packet[0] = last ? KindData : KindDataPart;
+            uint seq = p.NextSendSeq++;
+            BitConverter.TryWriteBytes(packet.AsSpan(1), seq);
+            if (chunk > 0) Buffer.BlockCopy(data, offset, packet, 5, chunk);
+            p.Unacked[seq] = (packet, DateTime.UtcNow);
+            Raw(peer, packet);
+            offset += chunk;
+        }
+        while (offset < length);
     }
 
     // ---- Simulated network (tests): --sosonline-lag=MS, --sosonline-jitter=MS, --sosonline-spikes=PERCENT.
@@ -120,7 +139,8 @@ internal sealed class UdpTransport : ITransport
 
     private void RawNow(ulong peer, byte[] packet)
     {
-        try { _socket.Send(packet, packet.Length, new IPEndPoint(IPAddress.Loopback, (int)peer)); } catch (SocketException) { }
+        try { _socket.Send(packet, packet.Length, new IPEndPoint(IPAddress.Loopback, (int)peer)); }
+        catch (SocketException e) { Plugin.Log.LogWarning($"[udp] send {packet.Length} B to {peer} failed: {e.SocketErrorCode}"); }
     }
 
     private void FlushDelayed()
@@ -175,16 +195,31 @@ internal sealed class UdpTransport : ITransport
                     onMessage(peer, packet.AsSpan(5).ToArray());
                     break;
                 case KindData:
+                case KindDataPart:
                     var ack = new byte[5];
                     ack[0] = KindAck;
                     BitConverter.TryWriteBytes(ack.AsSpan(1), seq);
                     Raw(peer, ack);
                     if (seq < p.NextRecvSeq) break;
-                    p.OutOfOrder[seq] = packet.AsSpan(5).ToArray();
-                    while (p.OutOfOrder.Remove(p.NextRecvSeq, out var payload))
+                    p.OutOfOrder[seq] = (packet[0], packet.AsSpan(5).ToArray());
+                    while (p.OutOfOrder.Remove(p.NextRecvSeq, out var entry))
                     {
                         p.NextRecvSeq++;
-                        onMessage(peer, payload);
+                        if (entry.kind == KindDataPart)
+                        {
+                            (p.Assemble ??= new System.IO.MemoryStream()).Write(entry.payload, 0, entry.payload.Length);
+                        }
+                        else if (p.Assemble != null && p.Assemble.Length > 0)
+                        {
+                            p.Assemble.Write(entry.payload, 0, entry.payload.Length);
+                            var full = p.Assemble.ToArray();
+                            p.Assemble.SetLength(0);
+                            onMessage(peer, full);
+                        }
+                        else
+                        {
+                            onMessage(peer, entry.payload);
+                        }
                     }
                     break;
             }
