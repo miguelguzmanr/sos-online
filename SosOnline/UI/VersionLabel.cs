@@ -41,9 +41,10 @@ internal static class VersionLabel
         get
         {
             var current = SosOnline.Update.AutoUpdate.DisplayCurrent;
-            return SosOnline.Update.AutoUpdate.Available != null
-                ? $"Online Co-op Version {current} (Update available)"
-                : $"Online Co-op Version {current}";
+            var update = SosOnline.Update.AutoUpdate.Available;
+            return update != null
+                ? $"sos-online {current} ({SosOnline.Update.AutoUpdate.Display(update)} available)"
+                : $"sos-online {current}";
         }
     }
 
