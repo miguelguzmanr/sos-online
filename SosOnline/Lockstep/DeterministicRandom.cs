@@ -114,6 +114,12 @@ internal static class DeterministicRandom
         (typeof(FishHookedFinalFightState), nameof(FishHookedFinalFightState.UpdateSidePullDirection)),
         (typeof(FishReelingZoneGoToState), nameof(FishReelingZoneGoToState.SelectTargetX)),
         (typeof(FishingLine), nameof(FishingLine.Snap)),
+        (typeof(FishZone), nameof(FishZone.Init)),
+        (typeof(FishZone), nameof(FishZone.SpawnAllFish)),
+        (typeof(FishZone), nameof(FishZone.InitSceneFish)),
+        (typeof(FishZone), nameof(FishZone.SpawnFish)),
+        (typeof(FishZone), nameof(FishZone.InitFishInstance)),
+        (typeof(FishZone), nameof(FishZone.GetRandomFishSpawnPosition)),
         // Wheels & minigames.
         (typeof(Sabotage.Wheels.WheelsRevealEnemySlotsState), nameof(Sabotage.Wheels.WheelsRevealEnemySlotsState.ComputeFromResultSheet)),
         (typeof(MemoryMinigame), nameof(MemoryMinigame.GenerateTiles)),

@@ -29,6 +29,8 @@ internal static class CombatBot
     /// <summary>--sosonline-botswitch=N: every Nth menu press is a move to the other character first, the way a player
     /// takes a character that isn't theirs (0: never).</summary>
     public static int SwitchEvery;
+    /// <summary>--sosonline-botvary: periodically browse Skills / Combos and Boost during battle menus.</summary>
+    public static bool VaryMoves;
     private static int _menuPresses;
 
     public static InputSnapshot Apply(int frame, InputSnapshot snap)
@@ -84,6 +86,22 @@ internal static class CombatBot
                     snap.Bits[m] |= ActionBits.Button | ActionBits.ButtonDown;
                 }
                 Plugin.Log.LogInfo($"[bot] f{frame} switch character");
+            }
+            else if (VaryMoves && _menuPresses % 5 == 0)
+            {
+                Press(snap, "Combat_Boost");
+                Plugin.Log.LogInfo($"[bot] f{frame} boost");
+            }
+            else if (VaryMoves && _menuPresses % 4 == 1)
+            {
+                int v = ActionTable.IndexOf("UIMoveVertical");
+                if (v >= 0)
+                {
+                    snap.Axis[v] = InputSnapshot.Quantize(-1f);
+                    snap.AxisRaw[v] = InputSnapshot.Quantize(-1f);
+                    snap.Bits[v] |= ActionBits.Button | ActionBits.ButtonDown | ActionBits.NegButton;
+                }
+                Plugin.Log.LogInfo($"[bot] f{frame} cycle move");
             }
             else Press(snap, "UI_Confirm");
         }

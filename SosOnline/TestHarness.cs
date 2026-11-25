@@ -148,6 +148,7 @@ internal static class TestHarness
         if (Args.ContainsKey("castprobe") || Args.ContainsKey("callprobe")) Lockstep.CombatTrace.CastProbe = true;
         if (Args.TryGetValue("readprobe", out var rp)) { var r = rp.Split(','); Lockstep.InputOverride.ReadProbeFrom = int.Parse(r[0]); Lockstep.InputOverride.ReadProbeTo = int.Parse(r[1]); }
         if (Args.TryGetValue("botswitch", out var bsw)) CombatBot.SwitchEvery = int.Parse(bsw);
+        if (Args.ContainsKey("botvary")) CombatBot.VaryMoves = true;
         if (Args.TryGetValue("lag", out var lag)) Net.UdpTransport.LagMs = int.Parse(lag);
         if (Args.TryGetValue("jitter", out var jit)) Net.UdpTransport.JitterMs = int.Parse(jit);
         if (Args.TryGetValue("spikes", out var spk)) Net.UdpTransport.SpikePercent = int.Parse(spk);
@@ -849,6 +850,43 @@ internal static class TestHarness
         if (Args.ContainsKey("assignprobe")) Diagnostics.AssignProbe(frame);
         if (Args.TryGetValue("encounter", out var ef) && int.TryParse(ef, out int encounterFrame) && frame == encounterFrame)
             StartNearestEncounter();
+        if (Args.TryGetValue("level", out var lvSpec))
+        {
+            int colon = lvSpec.IndexOf(':');
+            if (colon > 0 && int.TryParse(lvSpec[..colon], out int lf) && lf == frame)
+            {
+                string guid = lvSpec[(colon + 1)..];
+                try
+                {
+                    var levels = GameBridge.Levels;
+                    var lr = new LevelReference(guid);
+                    if (levels?.GetLevelDefinition(lr) != null)
+                    {
+                        levels.LoadLevel(new LevelLoading { levelToLoad = lr, showTransition = true, removeTransitionWhenDone = true, initializerParams = new GameplayLevelInitializerParams() });
+                        Plugin.Log.LogInfo($"[test] f{frame} loading level {guid}");
+                    }
+                    else Plugin.Log.LogWarning($"[test] f{frame} level {guid} not found");
+                }
+                catch (Exception e) { Plugin.Log.LogWarning($"[test] level {guid}: {e.Message}"); }
+            }
+        }
+        if (AtList("fish", frame))
+        {
+            try
+            {
+                var leader = GameBridge.Party?.Leader;
+                var user = leader?.GetComponentInChildren<InteractiveObjectUser>();
+                var trig = UnityEngine.Object.FindObjectsOfType<FishingTrigger>()
+                    .OrderBy(t => leader == null ? 0 : (t.transform.position - leader.transform.position).sqrMagnitude).FirstOrDefault();
+                if (trig != null && user != null)
+                {
+                    trig.OnInteract(user);
+                    Plugin.Log.LogInfo($"[test] f{frame} started fishing at {trig.name}");
+                }
+                else Plugin.Log.LogWarning($"[test] f{frame} fishing trigger missing (trig={trig != null}, user={user != null})");
+            }
+            catch (Exception e) { Plugin.Log.LogWarning($"[test] fish failed: {e.Message}"); }
+        }
         if (Shots.Contains(frame))
             ScreenCapture.CaptureScreenshot(Path.Combine(OutDir, $"shot-{InstanceId}-{frame:D6}.png"));
         if (frame == _quitFrame)
