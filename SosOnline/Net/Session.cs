@@ -197,6 +197,7 @@ internal sealed class Session
         Rejoining = false;
         _resyncing = true; // keeps this PC's game as it is for the reload (no return to solo)
         StopLockstep(why);
+        GameBridge.ClearMenusAndPause();
         WaitingForResync = true;
         ResyncWaiting = true;
         Status = "Waiting for the host's save to rejoin…";
@@ -1440,6 +1441,9 @@ internal sealed class Session
     /// <summary>A level load is ending sooner than it was released for.</summary>
     public int LoadBarrierLateReleases { get; private set; }
 
+    /// <summary>1-based sequence of the active (or next) level load barrier during lockstep.</summary>
+    public int CurrentLoadSeq => _heldSeq >= 0 ? _loadSeq : _loadSeq + 1;
+
     private void ResetLoadBarrier()
     {
         _loadSeq = 0;
@@ -1841,6 +1845,7 @@ internal sealed class Session
         {
             // Not leaving: the host puts us back in the queue and we drop in again with its next autosave.
             AfterLockstep();
+            GameBridge.ClearMenusAndPause();
             WaitingForResync = true;
             ResyncWaiting = true;
             Status = "Waiting for the host's save to rejoin…";

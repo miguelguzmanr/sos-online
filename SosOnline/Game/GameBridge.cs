@@ -385,6 +385,33 @@ internal static class GameBridge
     }
 
     /// <summary>
+    /// Closes any open modal menus and clears local PauseManager state so an in-place reload (or resync wait) does
+    /// not carry a stale paused flag across LevelManager.LoadLevel into the synced session.
+    /// </summary>
+    public static void ClearMenusAndPause()
+    {
+        int closed = UI.MenuStatus.CloseOpenMenus();
+        bool wasPaused = false;
+        int reqs = 0;
+        try
+        {
+            var pm = SafeInstance<PauseManager>();
+            if (pm != null)
+            {
+                wasPaused = pm.isPaused;
+                reqs = pm.pauseRequests;
+                for (int g = 0; g < 16 && pm.pauseRequests > 0; g++) pm.ResumeIncremental();
+                if (pm.isPaused) pm.Resume();
+                if (pm.pauseRequests != 0) pm.pauseRequests = 0;
+                if (pm.isPaused) pm.isPaused = false;
+            }
+        }
+        catch (Exception e) { Plugin.Log.LogWarning($"[reload] ClearMenusAndPause: {e.Message}"); }
+        if (closed > 0 || wasPaused || reqs > 0)
+            Plugin.Log.LogInfo($"[reload] cleared local menu/pause state (menus={closed}, paused={wasPaused}, requests={reqs})");
+    }
+
+    /// <summary>
     /// Loads autosave <paramref name="slotIndex"/> from gameplay, without the title screen. Restores the
     /// managers from the slot (SaveManager.onSaveSlotLoaded), then loads the slot's checkpoint level behind the
     /// game's own transition. Runs on the same lockstep frame on every peer.
@@ -398,6 +425,7 @@ internal static class GameBridge
             if (saves == null || levels == null) { Plugin.Log.LogError("ReloadInPlace: managers missing"); return false; }
             var slot = autoSave ? saves.GetAutoSaveSlot(slotIndex) : saves.GetSaveSlot(slotIndex);
             if (slot == null) { Plugin.Log.LogError($"ReloadInPlace: slot {slotIndex} (auto={autoSave}) not found"); return false; }
+            ClearMenusAndPause();
             var cp = slot.checkpointData;
             Plugin.Log.LogInfo($"[reload] slot {slotIndex}: level {cp?.level?.levelDefinitionGuid} savepoint {cp?.savepointId} pos {cp?.position} entrance {slot.lastUsedEntranceId}");
             saves.LoadSaveSlotAndSetLastIndex(slot);

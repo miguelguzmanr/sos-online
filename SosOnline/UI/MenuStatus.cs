@@ -131,6 +131,38 @@ internal static class MenuStatus
         return "Menu";
     }
 
+    /// <summary>Immediately closes/pools any open modal menu screens (used before an in-place save reload).</summary>
+    public static int CloseOpenMenus()
+    {
+        int closed = 0;
+        try
+        {
+            var ui = Manager<UIManager>.instance;
+            var byType = ui?.screensByType;
+            if (ui == null || byType == null) return 0;
+            _il2cppTypes ??= Menus.Select(m => Il2CppType.From(m.type)).ToArray();
+            for (int i = Menus.Length - 1; i >= 0; i--)
+            {
+                if (!byType.ContainsKey(_il2cppTypes[i])) continue;
+                var views = byType[_il2cppTypes[i]];
+                if (views == null) continue;
+                for (int v = views.Count - 1; v >= 0; v--)
+                {
+                    var view = views[v];
+                    if (view == null || !view.gameObject.activeInHierarchy) continue;
+                    try
+                    {
+                        ui.PoolScreen(view, false);
+                        closed++;
+                    }
+                    catch (Exception e) { Plugin.Log.LogWarning($"[reload] PoolScreen({Menus[i].label}): {e.Message}"); }
+                }
+            }
+        }
+        catch (Exception e) { Plugin.Log.LogWarning($"[reload] CloseOpenMenus: {e.Message}"); }
+        return closed;
+    }
+
     /// <summary>(main line, second line) of the banner, or null when nobody has the game paused or a menu open.</summary>
     private static (string main, string sub)? Banner()
     {

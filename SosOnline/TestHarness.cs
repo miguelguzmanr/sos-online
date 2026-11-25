@@ -799,6 +799,11 @@ internal static class TestHarness
         if (At("pauseleave", frame)) { Plugin.Log.LogInfo($"[test] synced pause-menu leave of P2 at {frame}"); session.LeaveSlotDeterministic(1); }
         if (AtList("hpdiverge", frame) && (Args.ContainsKey("hpdivergeagain") || _diverged.Add(frame))) { DivergeHp(frame, "hpdiverge"); Diverged = true; }
         if (At("hpnudge", frame)) DivergeHp(frame, "hpnudge");
+        if (AtList("localpause", frame))
+        {
+            try { Manager<PauseManager>.instance?.Pause(true); Plugin.Log.LogInfo($"[test] f{frame} forced local Pause(true)"); }
+            catch (Exception e) { Plugin.Log.LogWarning($"[test] localpause: {e.Message}"); }
+        }
         if (AtList("pausestate", frame))
             try { var pm = Manager<PauseManager>.instance; Plugin.Log.LogInfo($"[test] f{frame} pause state: paused {pm?.isPaused}, disablers {pm?.pauseDisablers}, battle {Game.GameBridge.InBattle}, can save {Game.GameBridge.CanSaveNow}"); }
             catch (Exception e) { Plugin.Log.LogWarning($"[test] pause state: {e.Message}"); }

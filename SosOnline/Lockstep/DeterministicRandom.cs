@@ -184,6 +184,7 @@ internal static class DeterministicRandom
         (typeof(EncounterLootBag), nameof(EncounterLootBag.FindDestination)),
         (typeof(Sabotage.Core.RandomUtils.RandomFloat), nameof(Sabotage.Core.RandomUtils.RandomFloat.GetRandomValue)),
         (typeof(Sabotage.Core.RandomUtils.RandomInt), nameof(Sabotage.Core.RandomUtils.RandomInt.GetRandomValue)),
+        (typeof(Sabotage.Core.RandomList.ShuffleExtensions), nameof(Sabotage.Core.RandomList.ShuffleExtensions.ShuffleList)),
         (typeof(Sabotage.Graph.BehaviorTree.Nodes.Leaf.Utils.GetRandomFloatNode), nameof(Sabotage.Graph.BehaviorTree.Nodes.Leaf.Utils.GetRandomFloatNode.Execute)),
         (typeof(Sabotage.Graph.BehaviorTree.Nodes.Leaf.Utils.GetRandomIntNode), nameof(Sabotage.Graph.BehaviorTree.Nodes.Leaf.Utils.GetRandomIntNode.Execute)),
     };
@@ -342,7 +343,10 @@ internal static class DeterministicRandom
         {
             _seeded = false;
             var e = Session.Instance.Engine;
-            if (e.AppliedFrame != _frame) { _frame = e.AppliedFrame; _perMethodCounts.Clear(); }
+            // During additive scene loading (e.g. World Map sub-scenes), NPCs finish spawning on different local frames
+            // before EndCurrentLevelLoading is released; key loading rolls on CurrentLoadSeq instead of AppliedFrame.
+            int bucket = Game.GameBridge.LoadingLevel ? unchecked(-Session.Instance.CurrentLoadSeq - 1) : e.AppliedFrame;
+            if (bucket != _frame) { _frame = bucket; _perMethodCounts.Clear(); }
             string typeName = __originalMethod?.DeclaringType?.FullName ?? __originalMethod?.DeclaringType?.Name ?? "";
             string methodName = __originalMethod?.Name ?? "";
             uint methodId = Fnv1a(typeName, methodName);
