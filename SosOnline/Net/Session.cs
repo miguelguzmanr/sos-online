@@ -1919,7 +1919,7 @@ internal sealed class Session
                 // Free gameplay where the game itself allows saving (no battle, cutscene or loading), and no battle
                 // for a few seconds (battles in rounds).
                 bool settled = Engine.AppliedFrame - _lastBattleFrame >= BattleSettleFrames;
-                _saveableFrames = GameBridge.CanSaveNow && settled ? _saveableFrames + 1 : 0;
+                _saveableFrames = GameBridge.CanDropInNow && settled ? _saveableFrames + 1 : 0;
                 if (_saveableFrames < 30) return;
                 _saveableFrames = 0;
                 // A joiner catching up would miss this reload: it comes in with it instead.
@@ -1974,7 +1974,7 @@ internal sealed class Session
                     _dropIn = DropInStep.None;
                     return;
                 }
-                if (!GameBridge.CanSaveNow) return; // a battle or cutscene started: wait for it to end
+                if (!GameBridge.CanDropInNow) return; // a battle or cutscene started: wait for it to end
                 if (Engine.AppliedFrame - _dropInSaveFrame > StaleDropInSaveFrames)
                 {
                     // The joiners took long (booting, a slow transfer). Reloading this save would undo everything

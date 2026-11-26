@@ -367,6 +367,30 @@ internal static class GameBridge
         }
     }
 
+    /// <summary>
+    /// The party leader is in one of the game's cinematic states (a scripted scene: the new game's intro, camping).
+    /// Some of these allow saving, but a drop-in's reload in place there restarts the scene (2026-11-25: the friend's
+    /// drop-in reloaded a new game 2.7 s into its intro).
+    /// </summary>
+    public static bool LeaderInCinematic
+    {
+        get
+        {
+            try
+            {
+                var party = Party?.LeaderAndFollowers;
+                if (party == null || party.Count == 0 || party[0] == null) return false;
+                var leader = new ISinglePlayerPlusCharacter(party[0].Pointer);
+                var name = leader.StateMachine?.CurrentState?.GetIl2CppType()?.Name;
+                return name != null && name.Contains("Cinematic");
+            }
+            catch { return false; }
+        }
+    }
+
+    /// <summary>Where a drop-in may autosave and reload in place: saving is allowed and no scripted scene is playing.</summary>
+    public static bool CanDropInNow => CanSaveNow && !LeaderInCinematic;
+
     public static bool Saving
     {
         get { try { return Saves?.Saving ?? false; } catch { return false; } }
