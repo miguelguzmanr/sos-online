@@ -354,7 +354,7 @@ Every start of the game writes its own log, so nothing is lost when you restart.
 **By hand** (the host's own logs, or without a session), from the same session on **both PCs**:
 
 1. Open the logs folder: press **F8** in game → **Open logs folder**, or title screen → **Online** → **Settings** → **Open Logs Folder**. It is `BepInEx\SosOnline\logs` in the game folder.
-2. Send the newest `sosonline-<date-time>.log` and `state-<date-time>.log` (the file names carry when the game was started). If you restarted the game since the problem, take the pair from that earlier start; the last 10 starts are kept.
+2. Send the newest `sosonline-<date-time>.log` and `state-<date-time>.log` (the file names carry when the game was started). If you restarted the game since the problem, take the pair from that earlier start; the last 10 starts are kept. Test runs (any `--sosonline-*` flag) write their timestamped logs to `BepInEx\SosOnline\logs\tests` instead (last 40 starts, rotated on their own), so they never push real logs out; their **Send logs** and **Open logs folder** use that folder too. The per-instance `log-<port>.txt` and `state-<port>.log` the test scripts read stay in `BepInEx\SosOnline`.
 3. Say roughly what happened and when (the log lines carry the time of day).
 4. If the game crashed, also send `BepInEx\LogOutput.log` from the game folder (it has the game's own messages) and the newest `SeaOfStars.exe.*.dmp` from `%LOCALAPPDATA%\CrashDumps\` (Windows' crash dump of the game). Sea of Stars writes no `Player.log`.
 

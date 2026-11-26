@@ -21,12 +21,23 @@ namespace SosOnline;
 /// compared frame by frame to find where they went apart.</item>
 /// </list>
 /// The last <see cref="Keep"/> starts are kept. F8 and the title screen's Online menu open the folder.
+/// Test runs (any <c>--sosonline-*</c> flag) write theirs to <c>logs\tests</c> instead, with their own rotation
+/// (<see cref="KeepTests"/>), so a test run never pushes a player's real logs out.
 /// </summary>
 internal static class SessionLogs
 {
     public const int Keep = 10;
+    /// <summary>A test run starts several instances, so its folder keeps more starts.</summary>
+    public const int KeepTests = 40;
 
-    public static string Folder => Path.Combine(Paths.BepInExRootPath, "SosOnline", "logs");
+    /// <summary>Started with any --sosonline-* flag. Read here because <see cref="Init"/> runs before TestHarness.Init.</summary>
+    public static bool IsTestRun { get; } =
+        Environment.GetCommandLineArgs().Any(a => a.StartsWith("--sosonline-", StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>This start's logs: the real logs folder, or its <c>tests</c> subfolder in a test run.</summary>
+    public static string Folder => IsTestRun ? Path.Combine(RealFolder, "tests") : RealFolder;
+
+    private static string RealFolder => Path.Combine(Paths.BepInExRootPath, "SosOnline", "logs");
 
     /// <summary>The mod's version and the commit it was built from ("0.1.0+e3d3ca0").</summary>
     public static string Build { get; } =
@@ -57,10 +68,12 @@ internal static class SessionLogs
         }
     }
 
-    /// <summary>Old starts beyond the last <see cref="Keep"/> are deleted (log and state file of each).</summary>
+    /// <summary>Old starts beyond the last <see cref="Keep"/> (<see cref="KeepTests"/> in a test run) are deleted (log
+    /// and state file of each), in this start's folder only.</summary>
     private static void Prune()
     {
-        var starts = new DirectoryInfo(Folder).GetFiles("sosonline-*.log").OrderByDescending(f => f.Name).Skip(Keep - 1).ToList();
+        int keep = IsTestRun ? KeepTests : Keep;
+        var starts = new DirectoryInfo(Folder).GetFiles("sosonline-*.log").OrderByDescending(f => f.Name).Skip(keep - 1).ToList();
         foreach (var log in starts)
         {
             string stamp = log.Name.Substring("sosonline-".Length, log.Name.Length - "sosonline-".Length - ".log".Length);
