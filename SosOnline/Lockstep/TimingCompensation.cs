@@ -137,7 +137,6 @@ internal static class TimingCompensation
             if (r != null && r.owner != null) players.Add(p);
         }
 
-        TeamQTEResult rebuilt = null;
         bool changed = false;
         var grades = new List<(Player p, EQTEResult v)>();
         foreach (var p in players)
@@ -152,13 +151,28 @@ internal static class TimingCompensation
             Plugin.Log.LogInfo($"[timing] attack impact f{impact.Frame} judged f{Engine.AppliedFrame} player {p.id}: game={game} graded={mine}");
         }
         if (!changed) return result;
-        foreach (var (p, v) in grades)
-        {
-            if (rebuilt == null) rebuilt = TeamQTEResult.GetPooledInstance(p, v);
-            else rebuilt.AddResult(new QTEResult(p, v));
-        }
+        foreach (var (p, v) in grades) SetResult(result, p, v);
         AttackRegrades++;
-        return rebuilt ?? result;
+        return result;
+    }
+
+    /// <summary>
+    /// Sets one player's verdict inside the game's own result. The result keeps its QTE id and every other player's
+    /// entry: replacing it with a new pooled result dropped both, and the game crashed reading them in the Mooncradle
+    /// training battle (findings §17).
+    /// </summary>
+    private static void SetResult(TeamQTEResult result, Player p, EQTEResult verdict)
+    {
+        var list = result.results;
+        if (list != null)
+            for (int i = 0; i < list.Count; i++)
+            {
+                var entry = list[i];
+                if (entry == null || entry.owner == null || entry.owner.id != p.id) continue;
+                list[i] = new QTEResult(p, verdict);
+                return;
+            }
+        result.AddResult(new QTEResult(p, verdict));
     }
 
     public static int AttackRegrades;
@@ -249,8 +263,7 @@ internal static class TimingCompensation
             }
 
             var verdict = success ? EQTEResult.SuccessBeforeEvent : EQTEResult.FailDidNoPress;
-            var replaced = TeamQTEResult.GetPooledInstance(owner, verdict);
-            __result = replaced;
+            SetResult(__result, owner, verdict);
             if (success) BlockUpgrades++; else BlockDowngrades++;
             Plugin.Log.LogInfo($"[timing] block at f{hit} by player {owner.id}: game={(gameSaid ? "success" : "fail")} → {verdict} (press at f{usedFrame}, origin f{usedFrame - delay})");
         }

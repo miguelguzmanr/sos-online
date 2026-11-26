@@ -46,6 +46,8 @@ namespace SosOnline;
 ///   --sosonline-versionshot       title screen: screenshot ui-version with the co-op version line, then quit
 ///   --sosonline-sendlogs=F        guest: Send Logs to Host once lockstep reaches frame F
 ///   --sosonline-guardtest         log where the test-run save guard sends a few paths (writes nothing)
+///   --sosonline-nodlc             act as a PC without any DLC (in and out of sessions)
+///   --sosonline-botblock=N        the bot blocks N frames after this PC sees the block window open
 ///   --sosonline-onlineshot        title screen: Online page (ui-online-page), Host (ui-online-hosting), Options
 ///                                 (ui-online-options), Back, Load Game (ui-online-saves), Back, stop hosting, quit. Use with --sosonline-udp=PORT.
 ///   --sosonline-popupanswer=L,... answer the mod's popups that offer one of these labels ("_" for a space)
@@ -145,6 +147,7 @@ internal static class TestHarness
         if (Args.ContainsKey("nocatchup")) Session.Instance.CatchUpEnabled = false;
         if (Args.TryGetValue("botoffset", out var bo)) CombatBot.ImpactOffset = int.Parse(bo);
         if (Args.TryGetValue("botphase", out var bp)) CombatBot.Phase = int.Parse(bp);
+        if (Args.TryGetValue("botblock", out var bb)) CombatBot.BlockOffset = int.Parse(bb);
         if (Args.ContainsKey("castprobe") || Args.ContainsKey("callprobe")) Lockstep.CombatTrace.CastProbe = true;
         if (Args.TryGetValue("readprobe", out var rp)) { var r = rp.Split(','); Lockstep.InputOverride.ReadProbeFrom = int.Parse(r[0]); Lockstep.InputOverride.ReadProbeTo = int.Parse(r[1]); }
         if (Args.TryGetValue("botswitch", out var bsw)) CombatBot.SwitchEvery = int.Parse(bsw);

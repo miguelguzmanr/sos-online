@@ -54,6 +54,7 @@
     <Reference Include="$(Interop)\Sabotage.StateMachine.dll" Private="false" />
     <Reference Include="$(Interop)\VerletRope.dll" Private="false" />
     <Reference Include="$(Interop)\Sabotage.Platform.dll" Private="false" />
+    <Reference Include="$(Interop)\Sabotage.Pooling.dll" Private="false" />
     <Reference Include="$(Interop)\Sabotage.Localization.dll" Private="false" />
     <Reference Include="$(Interop)\Facepunch.Steamworks.Win64.dll" Private="false" />
     <Reference Include="$(Interop)\UnityEngine.UI.dll" Private="false" />

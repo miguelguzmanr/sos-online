@@ -22,6 +22,10 @@ internal static class CombatBot
     /// <summary>Frames after the visible impact at which the bot presses.</summary>
     public static int ImpactOffset = 1;
 
+    /// <summary>--sosonline-botblock=N: frames after the block window opens at which the bot blocks (-1: never).</summary>
+    public static int BlockOffset = -1;
+    private static int _blockSeen = -1;
+
     /// <summary>--sosonline-botphase: offset of this bot's menu presses in the 45-frame schedule, so two players
     /// press at different moments (in a real battle they race for the turn) instead of on the same frames.</summary>
     public static int Phase;
@@ -60,7 +64,21 @@ internal static class CombatBot
                     Plugin.Log.LogInfo($"[bot] impact f{impact}: pressed at origin f{origin} (applies f{frame})");
                 }
             }
-            if (a.timedBlockHandler != null && a.timedBlockHandler.IsInputPhaseStarted()) timedPhase = true;
+            if (a.timedBlockHandler != null && a.timedBlockHandler.IsInputPhaseStarted())
+            {
+                timedPhase = true;
+                // --sosonline-botblock=N: block N frames after this PC first sees the block window open.
+                if (BlockOffset >= 0)
+                {
+                    int origin = Session.Instance.Engine.AppliedFrame + 1;
+                    if (_blockSeen < 0 || origin - _blockSeen > 120) { _blockSeen = origin; }
+                    if (origin == _blockSeen + BlockOffset)
+                    {
+                        Press(snap, "Interact");
+                        Plugin.Log.LogInfo($"[bot] block window seen f{_blockSeen}: pressed at origin f{origin} (applies f{frame})");
+                    }
+                }
+            }
         }
 
         // Outside timing phases, confirm menus (attack → target) on a fixed schedule of *target* frames,
