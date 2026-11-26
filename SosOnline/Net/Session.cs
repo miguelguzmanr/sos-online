@@ -66,6 +66,8 @@ internal sealed class Session
         public double HoldUntil;
         /// <summary>Host: this guest's character was checked against the one it played before (since it last began playing).</summary>
         public bool CharacterChecked;
+        /// <summary>The DLC this guest owns (Steam app ids, from its hello).</summary>
+        public List<int> Dlc = new();
     }
 
     private enum CatchUpStep { None, Files, Running }
@@ -162,7 +164,34 @@ internal sealed class Session
     public bool HasPending => _peers.Values.Any(p => p.Pending);
 
     /// <summary>Host: a pending joiner that drops in by catching up (Stage 3) rather than by a reload.</summary>
-    private bool WantsCatchUp(Peer p) => CatchUpEnabled && !p.ForceStage2 && (p.CatchUp != CatchUpStep.None || _area.Valid);
+    private bool WantsCatchUp(Peer p) => CatchUpEnabled && !p.ForceStage2 && !NarrowsDlc(p) && (p.CatchUp != CatchUpStep.None || _area.Valid);
+
+    /// <summary>The joiner lacks a DLC the session uses: everyone reloads without it (a replay can't switch it off).</summary>
+    private static bool NarrowsDlc(Peer p) => DlcGate.Session != null && DlcGate.Session.Any(id => !p.Dlc.Contains(id));
+
+    /// <summary>Host: the session's DLC once <paramref name="joiners"/> are in (it only ever narrows).</summary>
+    private static List<int> SessionDlcWith(IEnumerable<Peer> joiners)
+    {
+        IEnumerable<int> set = DlcGate.Session ?? (IEnumerable<int>)DlcGate.Owned();
+        foreach (var p in joiners) { var own = p.Dlc; set = set.Where(own.Contains).ToList(); }
+        return set.OrderBy(i => i).ToList();
+    }
+
+    private static void WriteDlc(BinaryWriter w, List<int> ids)
+    {
+        w.Write(ids.Count);
+        foreach (int id in ids) w.Write(id);
+    }
+
+    private string _sentDlc = "";
+    private double _nextDlcCheck;
+
+    private static List<int> ReadDlc(BinaryReader r)
+    {
+        var ids = new List<int>();
+        for (int n = r.ReadInt32(); n > 0; n--) ids.Add(r.ReadInt32());
+        return ids;
+    }
 
     private bool HasStage2Pending => _peers.Values.Any(p => p.Pending && !WantsCatchUp(p) && Now >= p.HoldUntil);
 
@@ -293,6 +322,13 @@ internal sealed class Session
         if (!IsHost || Phase != Phase.Lobby) return;
         if (!GameBridge.AtTitleScreen) { SetError("Go to the Title screen first."); return; }
         if (!ActionTable.Ready) { SetError("Input system not ready yet."); return; }
+        int totw = DlcGate.WatchmakerAppId();
+        if (DlcGate.SaveNeedsWatchmaker(Path.Combine(SaveMirror.OwnDir, SaveMirror.SlotFile(slotIndex, autoSave)))
+            && _peers.Values.Any(p => totw == 0 || !p.Dlc.Contains(totw)))
+        {
+            SetError("This save needs DLC a friend doesn't have");
+            return;
+        }
         _startSlot = slotIndex;
         _startAuto = autoSave;
         int fileCount = SendSaveFiles(_peers.Values, false);
@@ -349,6 +385,7 @@ internal sealed class Session
         double timeBase = NextClockBase(_peers.Values);
         var occupied = new bool[InputOverride.SlotCount];
         for (int s = 0; s < occupied.Length; s++) occupied[s] = SlotPeer[s] != 0;
+        var dlc = SessionDlcWith(_peers.Values);
 
         foreach (var peer in _peers.Values)
         {
@@ -359,10 +396,12 @@ internal sealed class Session
             w.Write(_startAuto);
             foreach (bool o in occupied) w.Write(o);
             w.Write(timeBase);
+            WriteDlc(w, dlc);
             Send(peer.Id, ms, true);
         }
         int saveSlot = _startSlot;
         bool auto = _startAuto;
+        DlcGate.Apply(dlc, 0);
         BeginLockstep(seed, delay, occupied, 0, null, timeBase, () => GameBridge.EnterGameFromSlot(saveSlot, auto));
     }
 
@@ -545,6 +584,7 @@ internal sealed class Session
 
     public void Update()
     {
+        Patches.DlcLog.Check();
         UpdateLogShare();
         TrySoloLeaves();
         // A guest goes back to its own saves once it has left and is on the title screen again.
@@ -578,6 +618,21 @@ internal sealed class Session
         {
             _nextHello = now + 1.0;
             SendHello();
+        }
+        // A guest that said hello while its game was still starting may not have known its DLC yet.
+        if (Role == Role.Guest && Phase != Phase.Connecting && now >= _nextDlcCheck)
+        {
+            _nextDlcCheck = now + 2.0;
+            var dlc = DlcGate.Owned();
+            string key = string.Join(",", dlc);
+            if (key != _sentDlc)
+            {
+                _sentDlc = key;
+                var (w, ms) = Protocol.Begin(Msg.DlcOwned);
+                WriteDlc(w, dlc);
+                Send(HostId, ms, true);
+                Plugin.Log.LogInfo($"[dlc] told the host this PC's DLC: {DlcGate.Describe(dlc)}");
+            }
         }
         if (now >= _nextPing)
         {
@@ -711,6 +766,9 @@ internal sealed class Session
         w.Write(Application.version ?? "");
         w.Write(ActionTable.Hash);
         w.Write(LocalName);
+        var dlc = DlcGate.Owned();
+        _sentDlc = string.Join(",", dlc);
+        WriteDlc(w, dlc);
         Send(HostId, ms, true);
     }
 
@@ -743,6 +801,8 @@ internal sealed class Session
                 string gameVersion = r.ReadString();
                 uint actionHash = r.ReadUInt32();
                 string rawName = r.ReadString();
+                // Older builds end here; they are refused for their protocol below.
+                var dlc = r.BaseStream.Position < r.BaseStream.Length ? ReadDlc(r) : new List<int>();
                 if (peer != null) { SendWelcome(peer); return; } // duplicate hello
                 string reason = null;
                 if (proto != Protocol.Version)
@@ -750,6 +810,8 @@ internal sealed class Session
                 else if (gameVersion != (Application.version ?? "")) reason = $"different Sea of Stars version.";
                 else if (ActionTable.Ready && actionHash != 0 && actionHash != ActionTable.Hash) reason = "different game setup.";
                 else if (Phase == Phase.AwaitingReady) reason = "the game is starting. Try again in a moment.";
+                else if (Phase == Phase.Running && DlcGate.RunningGameNeedsWatchmaker() && !dlc.Contains(DlcGate.WatchmakerAppId()))
+                    reason = "this save needs DLC you don't have";
                 int slot = Array.FindIndex(SlotPeer, 1, id => id == 0);
                 string name = PlayerNames.Clean(rawName, $"Player {Math.Max(slot, 1) + 1}");
                 if (reason == null && slot < 0) reason = "the game is full.";
@@ -761,7 +823,7 @@ internal sealed class Session
                     Plugin.Log.LogInfo($"[session] rejected {name}: {reason}");
                     return;
                 }
-                peer = new Peer { Id = from, Slot = slot, Name = name, LastHeard = Now, Pending = Phase == Phase.Running };
+                peer = new Peer { Id = from, Slot = slot, Name = name, LastHeard = Now, Pending = Phase == Phase.Running, Dlc = dlc };
                 _peers[from] = peer;
                 SlotPeer[slot] = from;
                 SlotName[slot] = name;
@@ -771,7 +833,7 @@ internal sealed class Session
                     if (SlotPaused[s]) SendPauseStatus(peer.Id, s, true);
                 Status = peer.Pending ? $"{name} is joining as P{slot + 1}…" : $"{name} joined as P{slot + 1}.";
                 Toast.Show(Status);
-                Plugin.Log.LogInfo($"[session] {name} joined as slot {slot} (mod {modVersion})");
+                Plugin.Log.LogInfo($"[session] {name} joined as slot {slot} (mod {modVersion}, DLC {DlcGate.Describe(dlc)})");
                 if (modVersion != SessionLogs.Build)
                 {
                     // Not refused (the protocol matched), but a different build is the first suspect if anything breaks.
@@ -782,6 +844,11 @@ internal sealed class Session
             }
             case Msg.Ping: Pong(from, r); break;
             case Msg.Pong: OnPong(peer, r); break;
+            case Msg.DlcOwned:
+                if (peer == null) break;
+                peer.Dlc = ReadDlc(r);
+                Plugin.Log.LogInfo($"[dlc] {peer.Name} owns: {DlcGate.Describe(peer.Dlc)}");
+                break;
             case Msg.Ready:
                 if (peer == null) return;
                 if (r.ReadInt32() == peer.TransferId) peer.Ready = true;
@@ -956,6 +1023,8 @@ internal sealed class Session
                 var occupied = new bool[InputOverride.SlotCount];
                 for (int s = 0; s < occupied.Length; s++) occupied[s] = r.ReadBoolean();
                 double timeBase = r.ReadDouble();
+                var dlc = ReadDlc(r);
+                DlcGate.Apply(dlc, 0);
                 BeginLockstep(seed, delay, occupied, 0, null, timeBase, () => GameBridge.EnterGameFromSlot(slot, auto));
                 break;
             }
@@ -1016,9 +1085,10 @@ internal sealed class Session
                 var spawn = r.ReadBoolean() ? PartySpawn.Read(r) : null;
                 double timeBase = r.ReadDouble();
                 bool areaReturn = r.ReadBoolean();
+                var dlc = ReadDlc(r);
                 if (!Engine.Running) break;
                 foreach (int s in slots) Engine.AddSlot(s, at);
-                ScheduleReloadInPlace(at, saveSlot, spawn, slots, timeBase, areaReturn);
+                ScheduleReloadInPlace(at, saveSlot, spawn, slots, timeBase, dlc, areaReturn);
                 break;
             }
             case Msg.Input:
@@ -1283,6 +1353,7 @@ internal sealed class Session
             LoadBarrier.Release();
         }
         GameBridge.UnlockTime();
+        DlcGate.Clear();
         // A guest that re-syncs drops in again by a reload; anyone else plays alone from here.
         if (!_resyncing) ReturnToSolo();
         try { GameBridge.Input?.AutoAssignUnassignedControllers(); } catch { }
@@ -2110,6 +2181,7 @@ internal sealed class Session
         _area.Invalidate("a player joined");
         // Everyone's clock moves to one base on the join frame; the joiners' clocks came from their own game.
         double timeBase = NextClockBase(_joiners.Select(id => _peers[id]));
+        var dlc = SessionDlcWith(_joiners.Select(id => _peers[id]));
 
         // Everyone already playing: add the slots and reload in place on the join frame.
         foreach (var peer in _peers.Values.Where(p => !p.Pending))
@@ -2123,6 +2195,7 @@ internal sealed class Session
             spawn?.Write(w);
             w.Write(timeBase);
             w.Write(areaReturn);
+            WriteDlc(w, dlc);
             Send(peer.Id, ms, true);
         }
 
@@ -2144,6 +2217,7 @@ internal sealed class Session
             w.Write(spawn != null);
             spawn?.Write(w);
             w.Write(timeBase);
+            WriteDlc(w, dlc);
             Send(id, ms, true);
 
             foreach (var (frame, ch) in Engine.BufferedFrom(at).OrderBy(f => f.frame).ToList())
@@ -2156,11 +2230,11 @@ internal sealed class Session
             peer.LastInputFrame = at + Engine.Delay - 1;
         }
 
-        ScheduleReloadInPlace(at, _dropInSlot, spawn, slots, timeBase, areaReturn);
+        ScheduleReloadInPlace(at, _dropInSlot, spawn, slots, timeBase, dlc, areaReturn);
         BroadcastRoster();
         string names = string.Join(", ", _joiners.Select(id => _peers[id].Name));
         Status = $"{names} joined.";
-        Plugin.Log.LogInfo($"[dropin] {names} (slots {string.Join(",", slots)}) join at f{at}, reload slot {_dropInSlot}, spawn {spawn}");
+        Plugin.Log.LogInfo($"[dropin] {names} (slots {string.Join(",", slots)}) join at f{at}, reload slot {_dropInSlot}, spawn {spawn}, DLC {DlcGate.Describe(dlc)}");
         _joiners.Clear();
     }
 
@@ -2177,14 +2251,15 @@ internal sealed class Session
         int saveSlot = r.ReadInt32();
         var spawn = r.ReadBoolean() ? PartySpawn.Read(r) : null;
         double timeBase = r.ReadDouble();
+        var dlc = ReadDlc(r);
         if (Phase == Phase.Running) return;
         _awaitingMirrorReload = false;
         Plugin.Log.LogInfo($"[dropin] joining at f{at}, reload slot {saveSlot}, spawn {spawn}");
-        BeginLockstep(seed, delay, occupied, at, playerIndex, double.NaN, () => ReloadInPlace(at, saveSlot, spawn, timeBase));
+        BeginLockstep(seed, delay, occupied, at, playerIndex, double.NaN, () => { DlcGate.Apply(dlc, at); ReloadInPlace(at, saveSlot, spawn, timeBase); });
     }
 
     /// <summary>Every PC already in the session: on the join frame, register the new slots and reload in place.</summary>
-    private void ScheduleReloadInPlace(int at, int saveSlot, PartySpawn spawn, List<int> newSlots, double timeBase, bool areaReturn = false)
+    private void ScheduleReloadInPlace(int at, int saveSlot, PartySpawn spawn, List<int> newSlots, double timeBase, List<int> dlc, bool areaReturn = false)
     {
         // Test: a level load in progress on the join frame (the party walked through a door, say). Once per run.
         if (TestHarness.TryArg("loadatjoin", out _) && !_loadAtJoinDone)
@@ -2206,6 +2281,7 @@ internal sealed class Session
                 return;
             }
             GameBridge.RegisterSlotPlayers(newSlots);
+            DlcGate.Apply(dlc, at); // before the reload, so the reloaded game sees the session's DLC
             ReloadInPlace(at, saveSlot, spawn, timeBase);
         });
     }
@@ -2394,6 +2470,7 @@ internal sealed class Session
         _area.Party.Write(w);
         w.Write(Engine.AppliedFrame);
         _area.WriteRoster(w);
+        WriteDlc(w, DlcGate.Session?.OrderBy(i => i).ToList() ?? new List<int>());
         Send(peer.Id, ms, true);
 
         int blocks = 0;
@@ -2470,11 +2547,14 @@ internal sealed class Session
         var party = PartySpawn.Read(r);
         int live = r.ReadInt32();
         var (roster, characters) = AreaLog.ReadRoster(r);
+        var dlc = ReadDlc(r);
         if (Phase == Phase.Running) return;
         _awaitingMirrorReload = false;
         bool rejoin = ResyncWaiting || _resyncing;
         Plugin.Log.LogInfo($"[catchup] start at f{L} (load {seq}, clock {clockBase:R}), {live - L} frames behind; save slot {saveSlot}, playing {string.Join(",", playing.Select(s => $"P{s + 1}"))}, party {party}{(rejoin ? "; rejoining after a divergence" : "")}");
 
+        // The session's DLC hasn't changed since L: a joiner that would narrow it is never sent a catch-up.
+        DlcGate.Apply(dlc, L);
         BeginLockstep(seed, delay, occupied, L, playerIndex, double.NaN, () => { });
         Rejoining = rejoin;
         // Its own slot may have been in the session since before L (a re-sync): that slot's input is the logged one.

@@ -42,11 +42,12 @@ internal enum Msg : byte
     LogReceived = 35, // host → guest: the logs arrived
     LogRequest = 36,  // host → guests: the host asks for logs (a toast; the guest decides)
     AreaFiles = 37,   // host → guests playing: transfer id, the area entry save files (the host returns to the area start)
+    DlcOwned = 38,    // guest → host: the DLC this PC owns, again (the game reads Steam's answer a while after its start)
 }
 
 internal static class Protocol
 {
-    public const int Version = 12; // 9: snapshots carry each character's facing; 10: and the game's pause flag; 11: log sharing; 12: character changes in the catch-up, area files
+    public const int Version = 13; // 9: snapshots carry each character's facing; 10: and the game's pause flag; 11: log sharing; 12: character changes in the catch-up, area files; 13: DLC owned and the session's DLC
 
     public static (BinaryWriter w, MemoryStream ms) Begin(Msg type)
     {

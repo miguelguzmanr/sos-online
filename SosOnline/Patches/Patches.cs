@@ -122,3 +122,43 @@ internal static class FocusPatch
         return false;
     }
 }
+
+/// <summary>
+/// Logs which DLC this PC may use, at start and whenever it changes. The game checks DLC per PC
+/// (<c>PlatformManager.IsDLCUsable</c>, used by story nodes and the new-game setup), so PCs that differ here can play
+/// different scenes from the same save. During a session the answers are the session's (<see cref="DlcGate"/>).
+/// Diagnostics only.
+/// </summary>
+internal static class DlcLog
+{
+    private static float _next;
+    private static string _last;
+
+    /// <summary>Called every frame (<c>Session.Update</c>); looks every 10 s of real time.</summary>
+    public static void Check()
+    {
+        float now = UnityEngine.Time.realtimeSinceStartup;
+        if (now < _next) return;
+        _next = now + 10f;
+        try
+        {
+            PlatformManager platform;
+            try { platform = Manager<PlatformManager>.instance; } catch { return; }
+            if (platform == null) return;
+            var defs = platform.dlcDefinitions;
+            if (defs == null) return;
+            var parts = new System.Collections.Generic.List<string>();
+            for (int i = 0; i < defs.Count; i++)
+            {
+                var d = defs[i];
+                if (d == null) continue;
+                parts.Add($"{d.Name} (app {d.SteamDLCAppId}) {(platform.IsDLCUsable(d) ? "usable" : "not usable")}");
+            }
+            string line = parts.Count == 0 ? "none defined" : string.Join(", ", parts);
+            if (line == _last) return;
+            _last = line;
+            Plugin.Log.LogInfo($"[dlc] {line}");
+        }
+        catch (System.Exception e) { _next = float.MaxValue; Plugin.Log.LogWarning($"[dlc] check failed: {e.Message}"); }
+    }
+}
