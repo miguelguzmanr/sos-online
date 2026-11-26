@@ -218,7 +218,7 @@ internal static class TestHarness
         if (now < _ucAt) return;
         if (_ucStep == 1) { ShowTitleChoices(GameBridge.FindTitleScreen()); _ucAt = now + 2; }
         else if (_ucStep == 2) { UI.NativeMenus.OpenTitleMenu(); _ucAt = now + 2; }
-        else if (_ucStep == 3) { UI.NativeMenus.ClickEntry("Settings"); _ucAt = now + 1; _ucStep = 30; return; }
+        else if (_ucStep == 3) { UI.NativeMenus.ClickEntry("Mod Options"); _ucAt = now + 1; _ucStep = 30; return; }
         else if (_ucStep == 30) { Plugin.Log.LogInfo("[test] choosing Check for Updates"); UI.NativeMenus.ClickEntry("Check for Updates"); _ucAt = now + 15; _ucStep = 4; return; }
         // With --sosonline-popupanswer the popup is answered by now: the Online page must have its cursor back.
         else if (_ucStep == 4) { Plugin.Log.LogInfo($"[test] after the update popup: {UI.NativeMenus.TitleMenuState()}"); Shot("ui-after-update-popup"); UI.NativeMenus.TestPressBack(); _ucAt = now + 1; }
@@ -302,18 +302,24 @@ internal static class TestHarness
             case 3: Shot("ui-online-page"); _vsAt = now + 1; break;
             case 4: UI.NativeMenus.ClickEntry("Host"); _vsAt = now + 4; break;
             case 5: Plugin.Log.LogInfo($"[test] hosting: {State()}"); Shot("ui-online-hosting"); _vsAt = now + 1; break;
-            case 6: UI.NativeMenus.ClickEntry("Settings"); _vsAt = now + 2; break;
+            case 6: UI.NativeMenus.ClickEntry("Host Settings"); _vsAt = now + 2; break;
             case 7: Plugin.Log.LogInfo($"[test] options: {State()}"); Shot("ui-online-options"); _vsAt = now + 1; break;
             case 8: UI.NativeMenus.SelectEntryForTest("Open to Friends"); _vsAt = now + 1; break;
             case 9: Plugin.Log.LogInfo($"[test] options, Open to Friends: {State()}"); Shot("ui-online-options-help"); _vsAt = now + 1; break;
-            case 10: UI.NativeMenus.ClickEntry("Back"); _vsAt = now + 1; break;
-            case 11: Plugin.Log.LogInfo($"[test] back: {State()}"); UI.NativeMenus.ClickEntry("Load Game"); _vsAt = now + 2; break;
-            case 12: Plugin.Log.LogInfo($"[test] saves: {State()}"); Shot("ui-online-saves"); _vsAt = now + 1; break;
-            case 13: UI.NativeMenus.ClickEntry("Back"); _vsAt = now + 1; break;
-            case 14: Plugin.Log.LogInfo($"[test] back: {State()}"); UI.NativeMenus.ShowLongPageForTest(6); _vsAt = now + 2; break;
-            case 15: Plugin.Log.LogInfo($"[test] long page: {State()}"); Shot("ui-online-long"); _vsAt = now + 1; break;
+            case 10: UI.NativeMenus.SelectEntryForTest("Battle System"); _vsAt = now + 1; break;
+            case 11: Plugin.Log.LogInfo($"[test] options, Battle System: {State()}"); Shot("ui-online-options-turns"); _vsAt = now + 1; break;
+            case 12: UI.NativeMenus.ClickEntry("Back"); _vsAt = now + 1; break;
+            case 13: UI.NativeMenus.ClickEntry("Mod Options"); _vsAt = now + 2; break;
+            case 14: UI.NativeMenus.SelectEntryForTest("Advanced Status Bar"); _vsAt = now + 1; break;
+            case 15: Plugin.Log.LogInfo($"[test] mod options: {State()}"); Shot("ui-online-modoptions"); _vsAt = now + 1; break;
             case 16: UI.NativeMenus.ClickEntry("Back"); _vsAt = now + 1; break;
-            case 17: Plugin.Log.LogInfo($"[test] back: {State()}"); Session.Instance.Leave(); _vsAt = now + 2; break;
+            case 17: Plugin.Log.LogInfo($"[test] back: {State()}"); UI.NativeMenus.ClickEntry("Load Game"); _vsAt = now + 2; break;
+            case 18: Plugin.Log.LogInfo($"[test] saves: {State()}"); Shot("ui-online-saves"); _vsAt = now + 1; break;
+            case 19: UI.NativeMenus.ClickEntry("Back"); _vsAt = now + 1; break;
+            case 20: Plugin.Log.LogInfo($"[test] back: {State()}"); UI.NativeMenus.ShowLongPageForTest(6); _vsAt = now + 2; break;
+            case 21: Plugin.Log.LogInfo($"[test] long page: {State()}"); Shot("ui-online-long"); _vsAt = now + 1; break;
+            case 22: UI.NativeMenus.ClickEntry("Back"); _vsAt = now + 1; break;
+            case 23: Plugin.Log.LogInfo($"[test] back: {State()}"); Session.Instance.Leave(); _vsAt = now + 2; break;
             default: Plugin.Log.LogInfo("[test] online page shot done"); Application.Quit(); break;
         }
         _vsStep++;
@@ -621,14 +627,65 @@ internal static class TestHarness
             foreach (var t in view.GetComponentsInChildren<TMPro.TextMeshProUGUI>(false))
                 Plugin.Log.LogInfo($"[uiprobe]   txt {NodePath(t.transform, view.transform)} font={t.font?.name} mat={t.fontSharedMaterial?.name} size={t.fontSize} color={t.color} '{Snip(t.text)}'");
         }
+        // --sosonline-uiprobetext=TEXT: the whole widget around any visible text containing TEXT (any screen, not only views).
+        if (Args.TryGetValue("uiprobetext", out var find))
+            foreach (var t in UnityEngine.Object.FindObjectsOfType<TMPro.TextMeshProUGUI>())
+            {
+                if (t == null || !t.gameObject.activeInHierarchy || t.text == null || t.text.IndexOf(find, StringComparison.OrdinalIgnoreCase) < 0) continue;
+                var root = t.transform;
+                for (int i = 0; i < 4 && root.parent != null; i++) root = root.parent;
+                Plugin.Log.LogInfo($"[uiprobe] f{frame} widget around '{Snip(t.text)}': {NodePath(t.transform, null)}");
+                DumpNode(root, 0);
+            }
         var canvas = Manager<UIManager>.instance?.canvasInstance;
         if (canvas != null) Plugin.Log.LogInfo($"[uiprobe] canvas {canvas.renderMode} scale={canvas.scaleFactor} ref={canvas.GetComponent<UnityEngine.UI.CanvasScaler>()?.referenceResolution} size={canvas.pixelRect}");
     }
+
+    /// <summary>--sosonline-spritedump=F,…: logs every loaded sprite (name, texture, size) once per name.</summary>
+    private static void DumpSprites(int frame)
+    {
+        int n = 0;
+        foreach (var sp in Resources.FindObjectsOfTypeAll<Sprite>())
+        {
+            if (sp == null || !_dumpedSprites.Add(sp.name + "|" + sp.texture?.name)) continue;
+            n++;
+            Plugin.Log.LogInfo($"[spritedump] {sp.name} tex={sp.texture?.name} rect={sp.rect.width:F0}x{sp.rect.height:F0} ppu={sp.pixelsPerUnit}");
+        }
+        Plugin.Log.LogInfo($"[spritedump] f{frame}: {n} new sprites");
+    }
+    private static readonly HashSet<string> _dumpedSprites = new();
 
     private static string Snip(string text)
     {
         text = (text ?? "").Replace('\n', ' ');
         return text.Length > 40 ? text[..40] : text;
+    }
+
+    /// <summary>A UI node and its active children: rect, anchors, images, texts and layout groups.</summary>
+    private static void DumpNode(Transform t, int depth)
+    {
+        if (t == null || !t.gameObject.activeInHierarchy || depth > 8) return;
+        string pad = new string(' ', 2 + depth * 2);
+        var rt = t.TryCast<RectTransform>();
+        string r = rt == null ? "" : $" pos={rt.anchoredPosition} size={rt.rect.width:F1}x{rt.rect.height:F1} sizeDelta={rt.sizeDelta} amin={rt.anchorMin} amax={rt.anchorMax} pivot={rt.pivot} scale={rt.localScale}";
+        Plugin.Log.LogInfo($"[uiprobe]{pad}{t.name}{r}");
+        var img = t.GetComponent<UnityEngine.UI.Image>();
+        if (img != null && img.enabled)
+        {
+            var sp = img.sprite;
+            Plugin.Log.LogInfo($"[uiprobe]{pad}  img sprite={sp?.name} border={sp?.border} rect={sp?.rect} type={img.type} color={img.color} ppu={sp?.pixelsPerUnit} mult={img.pixelsPerUnitMultiplier} preserve={img.preserveAspect}");
+        }
+        var txt = t.GetComponent<TMPro.TextMeshProUGUI>();
+        if (txt != null && txt.enabled)
+            Plugin.Log.LogInfo($"[uiprobe]{pad}  txt font={txt.font?.name} size={txt.fontSize} auto={txt.enableAutoSizing} color={txt.color} align={txt.alignment} margin={txt.margin} spacing={txt.characterSpacing} style={txt.fontStyle} pref={txt.preferredWidth:F1}x{txt.preferredHeight:F1} bounds={txt.textBounds.size} '{Snip(txt.text)}'");
+        var h = t.GetComponent<UnityEngine.UI.HorizontalOrVerticalLayoutGroup>();
+        if (h != null && h.enabled)
+            Plugin.Log.LogInfo($"[uiprobe]{pad}  layout {h.GetIl2CppType().Name} padding=({h.padding.left},{h.padding.right},{h.padding.top},{h.padding.bottom}) spacing={h.spacing} align={h.childAlignment} ctrl=({h.childControlWidth},{h.childControlHeight}) expand=({h.childForceExpandWidth},{h.childForceExpandHeight})");
+        var fit = t.GetComponent<UnityEngine.UI.ContentSizeFitter>();
+        if (fit != null && fit.enabled) Plugin.Log.LogInfo($"[uiprobe]{pad}  fitter h={fit.horizontalFit} v={fit.verticalFit}");
+        var le = t.GetComponent<UnityEngine.UI.LayoutElement>();
+        if (le != null && le.enabled) Plugin.Log.LogInfo($"[uiprobe]{pad}  element min={le.minWidth}x{le.minHeight} pref={le.preferredWidth}x{le.preferredHeight} ignore={le.ignoreLayout}");
+        for (int i = 0; i < t.childCount; i++) DumpNode(t.GetChild(i), depth + 1);
     }
 
     private static string NodePath(Transform t, Transform root)
@@ -831,6 +888,21 @@ internal static class TestHarness
                 Plugin.Log.LogInfo($"[test] f{frame} pause screen: choose '{label}' -> {(UI.LocalPause.ChooseForTest(label) ? "done" : "not on the open page")}");
             }
         if (At("uiprobe", frame)) ProbeUi(frame);
+        if (Args.TryGetValue("spritedump", out var sd) && sd.Split(',').Contains(frame.ToString())) DumpSprites(frame);
+        // --sosonline-turncmd=F:1|2,…: the host takes over (1) or passes (2) the current battle turn on frame F.
+        // --sosonline-removeat=F:SLOT: the host removes that slot's player on frame F.
+        foreach (var (key, act) in new (string, Action<int>)[]
+                 { ("turncmd", v => Session.Instance.TurnCommand((byte)v)), ("removeat", v => Session.Instance.RemovePlayer(v)) })
+            if (Args.TryGetValue(key, out var list))
+                foreach (var item in list.Split(','))
+                {
+                    var parts = item.Split(':');
+                    if (parts.Length == 2 && int.TryParse(parts[0], out int f) && f == frame && int.TryParse(parts[1], out int v))
+                    {
+                        Plugin.Log.LogInfo($"[test] f{frame} {key} {v}");
+                        act(v);
+                    }
+                }
         if (At("assigntest", frame))
         {
             var pm = UnityEngine.Object.FindObjectsOfType<PauseMenu>().FirstOrDefault();

@@ -30,7 +30,7 @@ internal static class GameUi
 
     private static readonly Dictionary<string, Sprite> Sprites = new();
     private static TMP_FontAsset _copyFont, _smallFont;
-    private static Material _copyMaterial, _smallMaterial;
+    private static Material _copyMaterial, _smallMaterial, _smallPlainMaterial;
     private static bool _searched;
     private static float _nextSearch;
 
@@ -70,6 +70,7 @@ internal static class GameUi
             if (mat == null) continue;
             if (mat.name == "copy1056-webfontBitmap_DropShadow") _copyMaterial = mat;
             else if (mat.name == "kroegerBitmapDropShadow") _smallMaterial = mat;
+            else if (mat.name == "kroegerSDF Material") _smallPlainMaterial = mat;
         }
         _searched = Sprites.Count == Needed.Length && _copyFont != null;
         if (_searched) Plugin.Log.LogInfo($"[gameui] game UI art found ({Sprites.Count} sprites, fonts {_copyFont?.name}, {_smallFont?.name})");
@@ -126,11 +127,33 @@ internal static class GameUi
         return rt;
     }
 
+    private static readonly Dictionary<string, Sprite> Optional = new();
+    private static float _nextOptionalSearch;
+
+    /// <summary>
+    /// A sprite of the game's that may not be loaded yet (the player icons load with the co-op HUD): null until it is.
+    /// Looks again every few seconds while any asked-for one is missing.
+    /// </summary>
+    public static Sprite Find(string name)
+    {
+        if (Sprites.TryGetValue(name, out var s) || (Optional.TryGetValue(name, out s) && s != null)) return s;
+        if (!Optional.ContainsKey(name)) { Optional[name] = null; _nextOptionalSearch = 0; }
+        if (Time.realtimeSinceStartup < _nextOptionalSearch) return null;
+        _nextOptionalSearch = Time.realtimeSinceStartup + 3f;
+        try
+        {
+            foreach (var sprite in Resources.FindObjectsOfTypeAll<Sprite>())
+                if (sprite != null && Optional.ContainsKey(sprite.name) && Optional[sprite.name] == null) Optional[sprite.name] = sprite;
+        }
+        catch { }
+        return Optional.TryGetValue(name, out s) ? s : null;
+    }
+
     public static Image Image(Transform parent, string name, string sprite, Image.Type type, Color color)
     {
         var rt = Rect(parent, name);
         var img = rt.gameObject.AddComponent<Image>();
-        img.sprite = Sprites.TryGetValue(sprite, out var s) ? s : null;
+        img.sprite = sprite == null ? null : Sprites.TryGetValue(sprite, out var s) ? s : Find(sprite);
         img.type = type;
         img.color = color;
         img.raycastTarget = false;
@@ -148,6 +171,32 @@ internal static class GameUi
         Stretch(Image(bg.transform, "Shadow", "Shadow-rounded", UnityEngine.UI.Image.Type.Sliced, PanelShadow).rectTransform, 1);
         Stretch(Image(bg.transform, "Outline", "panel-border-rounded", UnityEngine.UI.Image.Type.Sliced, PanelOutline).rectTransform, 5);
         return bg.rectTransform;
+    }
+
+    /// <summary>
+    /// The frame of the game's co-op notices ("P3 LEFT"): the panel background without the ornament, its shadow nudged
+    /// 3 pixels right and 2 down, the rounded outline 5 pixels out. Measured from <c>PlayerLeftNotification</c>.
+    /// </summary>
+    public static RectTransform NoticePanel(Transform parent, string name)
+    {
+        var bg = Image(parent, name, "panel-background-t1", UnityEngine.UI.Image.Type.Tiled, PanelBackground);
+        var shadow = Image(bg.transform, "Shadow", "Shadow-rounded", UnityEngine.UI.Image.Type.Sliced, PanelShadow).rectTransform;
+        Stretch(shadow);
+        shadow.offsetMin = new Vector2(2, -4);
+        shadow.offsetMax = new Vector2(4, -2);
+        Stretch(Image(bg.transform, "Outline", "panel-border-rounded", UnityEngine.UI.Image.Type.Sliced, PanelOutline).rectTransform, 5);
+        return bg.rectTransform;
+    }
+
+    /// <summary>The co-op notices' text: the small font, white, in capitals, as in "P3 LEFT".</summary>
+    public static TextMeshProUGUI NoticeText(Transform parent, string name)
+    {
+        var t = Text(parent, name, true, TextAlignmentOptions.Left);
+        if (_smallPlainMaterial != null && _smallFont != null) t.fontSharedMaterial = _smallPlainMaterial;
+        t.color = TextMain;
+        t.fontStyle = FontStyles.UpperCase;
+        t.enableWordWrapping = false;
+        return t;
     }
 
     /// <summary>The menus' two-tone separator line, 6 pixels high.</summary>

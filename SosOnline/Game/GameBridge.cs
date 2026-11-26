@@ -36,6 +36,9 @@ internal static class GameBridge
     }
 
     /// <summary>Rewired player that session slot <paramref name="slot"/> drives (slot 0 = host).</summary>
+    /// <summary>The game's player number (1-3) a session slot plays as: what its P1/P2/P3 icons and colours show.</summary>
+    public static int PlayerNumber(int slot) => (slot >= 0 && slot < SlotPlayerIndex.Length ? SlotPlayerIndex[slot] : slot) + 1;
+
     public static Player PlayerForSlot(int slot)
     {
         if (slot >= 0 && slot < SlotPlayerIndex.Length) slot = SlotPlayerIndex[slot];

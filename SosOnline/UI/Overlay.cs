@@ -85,7 +85,7 @@ internal static class Overlay
         Styles();
         var s = Session.Instance;
         CatchUpScreen.OnGUI();
-        if (s.Phase == Phase.Running && !s.CatchingUp) DrawHud(s);
+        if (s.Phase == Phase.Running && !s.CatchingUp && Settings.AdvancedStatus) DrawHud(s);
         MenuStatus.OnGUI();
         LocalPause.OnGUI();
         if (!Open)
@@ -210,7 +210,10 @@ internal static class Overlay
         string sync = s.Sync.Desynced ? "<color=#ff6060>DESYNC</color>" : "<color=#80ff80>synced</color>";
         string ping = s.Peers.Any() ? $" · {s.Peers.Max(p => p.rtt):F0} ms" : "";
         string stall = e.LastStallMs > 30 ? $" · <color=#ffcc40>waiting {e.LastStallMs:F0} ms</color>" : "";
-        GUI.Label(new Rect(12, 8, 900, 24), $"Online co-op · {string.Join(", ", names)}{ping} · {sync}{stall}", _small);
+        // Top right: the player bar is in the top-left corner.
+        var text = new GUIContent($"Online co-op · {string.Join(", ", names)}{ping} · {sync}{stall}");
+        float w = Math.Min(_small.CalcSize(text).x + 4, Screen.width - 24);
+        GUI.Label(new Rect(Screen.width - w - 12, 8, w, 24), text, _small);
     }
 
     private static void Label(string text, GUIStyle style)

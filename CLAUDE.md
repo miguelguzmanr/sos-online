@@ -137,6 +137,17 @@ tools/new-signing-key.ps1   create the release signing key (once)
 | Third player joins mid-session (drop-in in place) | The joiner is booting when it joins; the first autosave goes stale and is replaced. Existing players: 92–95 frames (about 1.6 s) from the join frame to the load's release, never via the title screen; both guests play again 5 frames later and the joiner walks its character. After the join, the joiner's state matches the host's exactly (73–81 of 73–81 snapshots, four runs); guest 1 differs only by up to 1 cm in positions, within the 2 cm correction, with no mismatch reported. |
 | Assign Players | Opened online; P2's cursor took the P1 column. After confirm, on both PCs the guest drives P1/Zale and the host P2/Valere. The screen closes through the game's own path; all 57 snapshots match. |
 
+### Battle turns
+
+**The game's way** (traced 2026-11-26): a battle starts by unassigning every co-op character. For each player turn the game takes the next character from the turn queue (`EncounterController.GetNextActor`), picks a player at random from the seeded RNG (one turn per player per round), makes every party actor answer to that player (`PlayerCombatActor.SetPlayer`) and calls `SetCurrentPlayer`. That player can move the cursor to any character that still acts. The game waits for them: an idle player stalls the battle.
+
+**Your character, your turn** (`Lockstep/BattleTurns.cs`, host setting **Battle System**: **Custom (Fixed Characters)** by default; **Classic (Random Characters)** is the game's own way, fixed when the session starts and sent with every lockstep start):
+- Outside battles every PC records which character each slot controls, on the applied frame (synced state).
+- `SetCurrentPlayer` gets the owner of the character the turn starts on; when nobody playing owns it, the game's pick (or, if that player has nothing left this round, the owner of the first character still to act). The actors are set to answer to that player.
+- The cursor starts on the current player's own character (or one nobody owns), and moving it skips characters other players own.
+
+**Host commands** (host pause screen, which opens in battles for the host only; the game has no pause there): **Take over this turn** and **Pass turn to P2** go out as `Msg.TurnCommand` on a frame every PC can still schedule; on it every PC calls `SetCurrentPlayer` for the receiver, who may then control any character until that turn ends. Nothing happens if no player is choosing a command by then. **Remove a player** (also outside battles) sends `Msg.Removed` and the usual scheduled leave. A catch-up replay doesn't see turn commands (they aren't in the area log): a joiner replaying across one diverges and falls back to a reload.
+
 ### Native-code safety
 
 IL2CPP folds identical native functions (empty virtuals, trivial getters and setters, shared generic code) into one. Detouring such a function also hooks every method sharing it, with unrelated `this` objects. Two defenses (`NativeCode.cs`):
@@ -151,7 +162,7 @@ The menus use the game's own widgets, so they look, sound and navigate like the 
 - **Title screen:**
   - An **Online** entry, copied from the Options button.
   - Choosing it swaps the title list for the co-op entries, with a status line under them.
-  - Entries: **Host**, **Join** (friends who are hosting), **Load Game** (pick the save), **Invite Friends** (Steam overlay), **Stop Hosting** / **Leave Co-op**, **Settings**, **Back**. **Settings** holds **Input Delay**, **Open to Friends**, **Check for Updates**, **Send Logs to Host** / **Ask for Logs** and **Open Logs Folder** (each only when it applies), so the list and its status lines stay above the game's copyright row (the status is hidden on a page long enough to reach it). Entries are in Title Case. B puts the cursor on **Back**; B on **Back** goes back, and the cursor lands on the entry that opened the page. Once an update is downloaded, **Restart to Update (0.45 -> 0.46)** comes first.
+  - Entries: **Host**, **Join** (friends who are hosting), **Load Game** (pick the save), **Invite Friends** (Steam overlay), **Stop Hosting** / **Leave Co-op**, **Host Settings**, **Mod Options**, **Back**. **Host Settings** holds **Input Delay**, **Open to Friends**, **Battle System** and **Ask for Logs**; **Mod Options** holds **Check for Updates**, **Send Logs to Host**, **Advanced Status Bar** and **Open Logs Folder** (each only when it applies). The status under the list is one line (the players are on the player bar), so the list stays above the game's copyright row (the status is hidden on a page long enough to reach it). Entries are in Title Case. B puts the cursor on **Back**; B on **Back** goes back, and the cursor lands on the entry that opened the page. Once an update is downloaded, **Restart to Update (0.45 -> 0.46)** comes first.
 - **Pause menu:**
   - An **Online** item, added with the game's own `PauseMenu.AddPauseMenuItem`.
   - It opens the game's standard two-choice popup.
@@ -161,7 +172,9 @@ The menus use the game's own widgets, so they look, sound and navigate like the 
   - Every player-facing string is listed in [docs/messages.csv](docs/messages.csv): where it shows, its length and its source line. Wording changes are reviewed there first.
   - Toasts (the notices at the top) hold at most 80 characters: one short sentence about what happened, at most what to do. Longer text is cut at a word and logged as a warning. They stay 2.5 s + 0.06 s per character (3.5–12 s).
   - Player names are cleaned where they enter the mod (`UI/PlayerNames.cs`): no control, zero-width or line-break characters, `<` and `>` replaced so a name can't inject text markup, at most 24 characters, and "Player N" when the game's fonts can't draw most of it.
-- **F8** opens a small debug panel, and a one-line HUD shows players, ping and sync state during a session.
+- **Player bar** (`UI/PlayerBar.cs`): a column at the top left, in the frame of the game's co-op notices (no ornament). One row per player: their P icon (the game's `icn-player-square-N`, by the game's player number) and, only when it matters, a status icon: *Joining* or *Waiting* (this PC waited over 0.1 s for their input in the last 1.5 s) with the game's clock, *Paused* with its paused clock, *Re-syncing* or the ping above 150 ms with its warning sign. In play it shows icons only, for 4 s after a change and while a problem lasts, then fades. On the title screen, the pause screens (the mod's own and the game's), Assign Players and the save screen it stays and adds names and the status words; over the game's other menus (main menu, shops, map), which have a panel there, it hides. Each column is as wide as its widest entry, so rows never move when a status comes or goes.
+- **Player notices** (`UI/PlayerNotice.cs`): the look and place of the game's own co-op notice ("[P3] LEFT", right side; measured with `--sosonline-uiprobetext`), stacked above the game's own. *[P2]'s turn* / *[P1] Your turn* for 2.5 s when a battle turn goes to another player; *[P2] Paused* on the other PCs while that player has their own pause screen open; *[P2] Assign Players* (the menu in use) on every PC while a player has the game's menu open for everyone. The game's own join and leave notices stay; during a session they get the player's name in front: *[P3] ROBIN LEFT*. The top toasts are for session events (co-op started or ended, a lost connection, updates).
+- **F8** opens a small debug panel. **Mod Options** → **Advanced Status Bar** adds the old one-line status (players, ping, sync, waits) at the top right.
 
 ## Build and install
 
@@ -222,7 +235,7 @@ pwsh -File tools\publish-release.ps1
 | `tests/dropin.sh` | Three instances: a third player joins 30 s in (`JOIN_DELAY`). `HOSTFLAGS`/`JOINFLAGS` add flags, e.g. `--sosonline-nocatchup` (reload in place), `--sosonline-loadatjoin`, `--sosonline-play=0` (join from its own game). Compares both guests' states with the host's. |
 | `tests/dropin-two.sh` | Host alone, then two joiners in one area; both catch up from the same area entry. |
 | `tests/stage1.sh` | The host plays its own save with the lobby open; guest A joins, leaves from the pause screen (co-op to solo), guest B joins later. |
-| `tests/menu-status.sh` | Pause screen and menu banner while a third player catches up. |
+| `tests/menu-status.sh` | Pause screen and menu notice while a third player catches up. |
 | `tests/battle-turns.sh` | A battle where both players take turns over a simulated lagged link (`LAG`, `JITTER`, `SPIKES`); prints both PCs' turn decisions and the first differing snapshot. Run it 3–4 times: battle splits are intermittent. |
 | `tests/save-sync.sh` | A manual save (`SAVER=host` or `guest`) over a lagged link; both PCs must open and close the question on the same frames. |
 | `tests/resync.sh` | A forced divergence (`DIVERGE`): the guest rejoins by replay (or a reload); compares it with the host afterwards. `EXTRA=--sosonline-hpdivergeagain` makes the replay diverge too (the reload fallback). |
@@ -250,6 +263,10 @@ Session flags:
 | `--sosonline-guardtest` | Logs where the test-run save guard sends a few paths (real folder, sandbox, mirrors); writes nothing. |
 | `--sosonline-nodlc` | This instance acts as a PC without any DLC, in and out of sessions. |
 | `--sosonline-name=TEXT` | A test player name; escapes like `\n` and `\u0020` for characters a command line can't carry. |
+| `--sosonline-ownturns=0\|1` | Overrides the host's **Battle System** setting (1: Custom, 0: Classic). |
+| `--sosonline-turncmd=F:1\|2,…` | The host takes over (1) or passes (2) the current battle turn on frame F. |
+| `--sosonline-removeat=F:SLOT` | The host removes that slot's player on frame F. |
+| `--sosonline-spritedump=F,…` | Logs every loaded sprite's name, texture and size (once per name) on those frames. |
 | `--sosonline-background` | Runs behind your work: muted, this PC's keyboard, mouse and pads ignored. `tests/launch.sh` passes it unless `VISIBLE=1`. |
 
 `tests/session.sh` launches a host plus guests, staggering late joiners. It doesn't start a late joiner once the host's game has quit.
@@ -323,7 +340,7 @@ The README has the short version for players; this is the complete one.
 **Or start together from the title screen:** Title screen → **Online** → **Host**, friends join, then **Load Game** and pick a save.
 
 **During a session:**
-- **Pause** (Start / Esc) opens a pause screen on your PC only; the game keeps running for everyone and the others see "P2 is paused". It has **Options** (volumes, brightness, display: this PC only), **Pause for everyone** and **Leave co-op** (the host: **End co-op** for everyone). In battles and cutscenes the game's own pause still stops everyone.
+- **Pause** (Start / Esc) opens a pause screen on your PC only; the game keeps running for everyone and the others see "[P2] PAUSED" on the right. It has **Options** (volumes, brightness, display: this PC only), **Pause for everyone** and **Leave co-op** (the host: **End co-op** for everyone). In battles and cutscenes the game's own pause still stops everyone.
 - **Pause for everyone** opens the game's own pause menu on every PC, as in local co-op: the game stops for everyone and only you move in it. Use it for **Assign Players**, **Return to title** and the like.
 - **Choosing who plays whom:** pause → **Pause for everyone** → **Assign Players**; each player moves their own cursor. A friend who rejoins gets the character they had back, if it's free.
 - **Leaving:** pause → **Leave co-op**. Your character goes back to the party AI and the others keep playing; your own game is yours again (your pad and keyboard drive the leader). When the last friend leaves, the host simply keeps playing; the lobby stays open.
@@ -340,7 +357,7 @@ Use a gamepad or keyboard; the mouse is not synchronized. Saves made during co-o
 Nothing Steam-specific has been tested end to end yet (see *Not yet verified* in STATUS.md). Worth checking, in this order:
 1. The friend sees the invite and joins from the title screen; both PCs show the friend in the HUD line (F8 opens the debug panel).
 2. The friend drops in and takes a party member; both walk around for a few minutes. The HUD should keep saying *synced*.
-3. Pause on one PC: only that PC shows the pause screen, the other shows "P… is paused".
+3. Pause on one PC: only that PC shows the pause screen, the other shows "[P…] PAUSED" on the right.
 4. A battle with timed hits from both players.
 5. The friend leaves and rejoins (gets the same character back); the host walks into a new area first so the rejoin catches up instead of reloading.
 6. Accept an invite while in your own game (one confirmation, then the join).
@@ -349,7 +366,7 @@ Nothing Steam-specific has been tested end to end yet (see *Not yet verified* in
 
 Every start of the game writes its own log, so nothing is lost when you restart.
 
-**Friends: press a button.** While connected to the host's session (also after a crash: rejoin first), choose **Send logs to host**. It's on the pause screen (Esc, outside battles and cutscenes) and in the title screen's **Online** → **Settings**. Your game zips your last two starts' logs, BepInEx's `LogOutput.log` (which also has the game's own messages) and the session's save files (`saves/`, about 24 KB each: the state a desync report needs), and sends them to the host only. If the game crashed since, the zip also includes the newest Windows crash dump of the game (`%LOCALAPPDATA%\CrashDumps\SeaOfStars.exe.*.dmp`, a snapshot of the game's memory at the crash). The host gets a toast and the zip in `BepInEx\SosOnline\logs\received`. The host can also choose **Ask for logs**, which shows friends a reminder; they still decide.
+**Friends: press a button.** While connected to the host's session (also after a crash: rejoin first), choose **Send logs to host**. It's on the pause screen (Esc, outside battles and cutscenes) and in the title screen's **Online** → **Settings**. Your game zips your last two starts' logs, BepInEx's `LogOutput.log` (which also has the game's own messages) and the session's save files (`saves/`, about 24 KB each: the state a desync report needs; only from the session folder, never your own saves), and sends them to the host only. If the game crashed since, the zip also includes the newest Windows crash dump of the game (`%LOCALAPPDATA%\CrashDumps\SeaOfStars.exe.*.dmp`, a snapshot of the game's memory at the crash). The host gets a toast and the zip in `BepInEx\SosOnline\logs\received`. The host can also choose **Ask for logs**, which shows friends a reminder; they still decide.
 
 **By hand** (the host's own logs, or without a session), from the same session on **both PCs**:
 

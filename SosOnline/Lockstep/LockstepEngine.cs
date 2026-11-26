@@ -32,6 +32,9 @@ internal sealed class LockstepEngine
     public bool[] Occupied { get; private set; } = new bool[InputOverride.SlotCount];
 
     public float LastStallMs { get; private set; }
+
+    /// <summary>When this PC last waited over 100 ms for a slot's input (real time; display only).</summary>
+    public readonly float[] WaitedAt = { -99f, -99f, -99f };
     public float MaxStallMs { get; private set; }
     public int StallTimeoutMs = 20000;
 
@@ -345,6 +348,7 @@ internal sealed class LockstepEngine
         // 2. Wait for everyone's input for this frame.
         if (!Complete(Frame))
         {
+            var waitedFor = MissingSlots(Frame);
             var sw = Stopwatch.StartNew();
             while (!Complete(Frame))
             {
@@ -356,6 +360,7 @@ internal sealed class LockstepEngine
             }
             LastStallMs = (float)sw.Elapsed.TotalMilliseconds;
             if (LastStallMs > MaxStallMs) MaxStallMs = LastStallMs;
+            if (LastStallMs > 100) foreach (int s in waitedFor) WaitedAt[s] = UnityEngine.Time.realtimeSinceStartup;
         }
         else LastStallMs = 0;
 

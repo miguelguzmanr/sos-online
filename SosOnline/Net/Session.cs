@@ -183,6 +183,14 @@ internal sealed class Session
         foreach (int id in ids) w.Write(id);
     }
 
+    /// <summary>
+    /// The session's rules after its DLC set, in every message that starts lockstep on a PC (Start, DropIn,
+    /// DropInReload, CatchUp). The host's own settings while it isn't running yet, else the session's.
+    /// </summary>
+    private void WriteRules(BinaryWriter w) => w.Write(Engine.Running ? BattleTurns.OwnTurns : Settings.OwnTurns);
+
+    private static void ReadRules(BinaryReader r) => BattleTurns.SetRule(r.ReadBoolean());
+
     private string _sentDlc = "";
     private double _nextDlcCheck;
 
@@ -397,6 +405,7 @@ internal sealed class Session
             foreach (bool o in occupied) w.Write(o);
             w.Write(timeBase);
             WriteDlc(w, dlc);
+            WriteRules(w);
             Send(peer.Id, ms, true);
         }
         int saveSlot = _startSlot;
@@ -458,6 +467,9 @@ internal sealed class Session
 
     /// <summary>Host: the session was ended for everyone; disconnect once guests had time to stop on the same frame.</summary>
     private double _closeAt = -1;
+
+    /// <summary>Guest: our slot reached its leave frame; disconnect once our last inputs have reached the host.</summary>
+    private double _leaveAt = -1;
 
     /// <summary>When this PC last stopped lockstep because the host ended the session (guests: the host's Bye is expected).</summary>
     private double _endedAt = -1000;
@@ -607,6 +619,12 @@ internal sealed class Session
         _lastUpdate = now;
         if (!Pump()) return;
 
+        if (_leaveAt >= 0 && now >= _leaveAt)
+        {
+            _leaveAt = -1;
+            Leave();
+            return;
+        }
         if (_closeAt >= 0 && now >= _closeAt)
         {
             Leave();
@@ -1024,6 +1042,7 @@ internal sealed class Session
                 for (int s = 0; s < occupied.Length; s++) occupied[s] = r.ReadBoolean();
                 double timeBase = r.ReadDouble();
                 var dlc = ReadDlc(r);
+                ReadRules(r);
                 DlcGate.Apply(dlc, 0);
                 BeginLockstep(seed, delay, occupied, 0, null, timeBase, () => GameBridge.EnterGameFromSlot(slot, auto));
                 break;
@@ -1086,6 +1105,7 @@ internal sealed class Session
                 double timeBase = r.ReadDouble();
                 bool areaReturn = r.ReadBoolean();
                 var dlc = ReadDlc(r);
+                ReadRules(r);
                 if (!Engine.Running) break;
                 foreach (int s in slots) Engine.AddSlot(s, at);
                 ScheduleReloadInPlace(at, saveSlot, spawn, slots, timeBase, dlc, areaReturn);
@@ -1151,6 +1171,18 @@ internal sealed class Session
                 Engine.Schedule(at, () => GameBridge.AssignCharacter(slot, character));
                 break;
             }
+            case Msg.TurnCommand:
+            {
+                int at = r.ReadInt32();
+                byte cmd = r.ReadByte();
+                if (!Engine.Running) break;
+                Engine.Schedule(at, () => BattleTurns.Apply(cmd, at));
+                break;
+            }
+            case Msg.Removed:
+                Plugin.Log.LogInfo("[session] the host removed this PC from co-op");
+                Toast.Show("The host removed you from co-op");
+                break;
             case Msg.EndAt:
             {
                 int at = r.ReadInt32();
@@ -1222,11 +1254,14 @@ internal sealed class Session
         if (IsHost)
         {
             if (peer.Slot > 0) { SlotPeer[peer.Slot] = 0; SlotName[peer.Slot] = null; OnPauseStatus(peer.Slot, false); }
-            if (Phase == Phase.Running && !peer.Pending && peer.LeavingAt < 0 && Engine.Occupied[peer.Slot])
+            // A guest already leaving that went silent before its leave frame: its last inputs will never come, so
+            // it leaves earlier, on the frame after the last one we got (nobody can be past it: we relay its input).
+            int leaveFrame = Math.Max(peer.LastInputFrame + 1, Engine.AppliedFrame + 1);
+            if (Phase == Phase.Running && !peer.Pending && Engine.Occupied[peer.Slot] && (peer.LeavingAt < 0 || leaveFrame < peer.LeavingAt))
             {
                 // Everyone has (or will get through us) this guest's input up to the last frame we received, and
                 // nobody can be past the frame after it. From there on the slot is empty on every peer.
-                int leaveFrame = Math.Max(peer.LastInputFrame + 1, Engine.AppliedFrame + 1);
+                peer.LeavingAt = leaveFrame;
                 ApplySlotLeave(peer.Slot, leaveFrame);
                 foreach (var other in _peers.Values)
                 {
@@ -1240,7 +1275,14 @@ internal sealed class Session
             if (Phase == Phase.AwaitingReady) TryBeginLockstep();
             _joiners.Remove(id);
             Status = $"{peer.Name} {why}.";
-            Toast.Show(Phase == Phase.Running ? $"{peer.Name} {why}. The AI plays their character." : Status);
+            // A plain leave in play shows as the game's own notice ("[P3] ROBIN LEFT", GameNoticeName).
+            if (Phase != Phase.Running) Toast.Show(Status);
+            else if (!why.StartsWith("left")) Toast.Show($"{peer.Name} {why}. The AI plays their character.");
+        }
+        else if (_leaveAt >= 0)
+        {
+            // We left and were only waiting for our last inputs to arrive: the host closing on us is expected.
+            Leave();
         }
         else
         {
@@ -1270,6 +1312,8 @@ internal sealed class Session
         ResetLoadBarrier();
         // An area log from an earlier run counts frames of that run.
         if (IsHost) _area.Clear("a new run started");
+        if (IsHost && !Engine.Running) BattleTurns.SetRule(Settings.OwnTurns);
+        BattleTurns.Reset();
         _resyncing = false;
         _soloRestored = false;
         _soloLeavesPending = false;
@@ -1354,6 +1398,7 @@ internal sealed class Session
         }
         GameBridge.UnlockTime();
         DlcGate.Clear();
+        BattleTurns.SetRule(false);
         // A guest that re-syncs drops in again by a reload; anyone else plays alone from here.
         if (!_resyncing) ReturnToSolo();
         try { GameBridge.Input?.AutoAssignUnassignedControllers(); } catch { }
@@ -1447,6 +1492,7 @@ internal sealed class Session
     private void OnFrameApplied(int frame)
     {
         CombatTrace.OnFrame(frame);
+        BattleTurns.OnFrame(frame);
         if (_catchUp != null && frame == _catchUp.L) CatchUpEntry(frame);
         if (frame == _entryFrame)
         {
@@ -1885,6 +1931,37 @@ internal sealed class Session
         }
     }
 
+    /// <summary>
+    /// Host, from its pause screen in a battle: take over the current turn, or pass it to the next player
+    /// (<see cref="BattleTurns.Apply"/>), on a frame every PC can still schedule.
+    /// </summary>
+    public void TurnCommand(byte cmd)
+    {
+        if (!IsHost || Phase != Phase.Running) return;
+        int frame = FirstSafeFrame;
+        Plugin.Log.LogInfo($"[localpause] f{Engine.AppliedFrame} turn command {cmd} at f{frame}");
+        foreach (var peer in _peers.Values.Where(p => !p.Pending))
+        {
+            var (w, ms) = Protocol.Begin(Msg.TurnCommand);
+            w.Write(frame);
+            w.Write(cmd);
+            Send(peer.Id, ms, true);
+        }
+        Engine.Schedule(frame, () => BattleTurns.Apply(cmd, frame));
+    }
+
+    /// <summary>Host: removes a player from co-op. Their character goes back to the party AI; they keep playing solo.</summary>
+    public void RemovePlayer(int slot)
+    {
+        if (!IsHost || Phase != Phase.Running || slot <= 0) return;
+        var peer = _peers.Values.FirstOrDefault(p => p.Slot == slot && !p.Pending);
+        if (peer == null) return;
+        Plugin.Log.LogInfo($"[localpause] f{Engine.AppliedFrame} removing P{slot + 1}");
+        var (w, ms) = Protocol.Begin(Msg.Removed);
+        Send(peer.Id, ms, true);
+        LeaveScheduled(peer);
+    }
+
     /// <summary>Host: "End session" in the local pause screen. Every PC stops lockstep on the same frame.</summary>
     public void EndSessionScheduled(string reason)
     {
@@ -1925,7 +2002,9 @@ internal sealed class Session
         }
         Toast.Show("You left co-op but may continue playing");
         AfterLockstep();
-        Leave();
+        // Our input up to the leave frame may still be on its way: disconnecting now would drop it, and the others
+        // would wait for it until the host gives up on us.
+        _leaveAt = Now + CloseDelay;
     }
 
     /// <summary>Silence after which the host drops a guest that holds up the simulation.</summary>
@@ -2196,6 +2275,7 @@ internal sealed class Session
             w.Write(timeBase);
             w.Write(areaReturn);
             WriteDlc(w, dlc);
+            WriteRules(w);
             Send(peer.Id, ms, true);
         }
 
@@ -2218,6 +2298,7 @@ internal sealed class Session
             spawn?.Write(w);
             w.Write(timeBase);
             WriteDlc(w, dlc);
+            WriteRules(w);
             Send(id, ms, true);
 
             foreach (var (frame, ch) in Engine.BufferedFrom(at).OrderBy(f => f.frame).ToList())
@@ -2252,7 +2333,9 @@ internal sealed class Session
         var spawn = r.ReadBoolean() ? PartySpawn.Read(r) : null;
         double timeBase = r.ReadDouble();
         var dlc = ReadDlc(r);
+        bool ownTurns = r.ReadBoolean();
         if (Phase == Phase.Running) return;
+        BattleTurns.SetRule(ownTurns);
         _awaitingMirrorReload = false;
         Plugin.Log.LogInfo($"[dropin] joining at f{at}, reload slot {saveSlot}, spawn {spawn}");
         BeginLockstep(seed, delay, occupied, at, playerIndex, double.NaN, () => { DlcGate.Apply(dlc, at); ReloadInPlace(at, saveSlot, spawn, timeBase); });
@@ -2471,6 +2554,7 @@ internal sealed class Session
         w.Write(Engine.AppliedFrame);
         _area.WriteRoster(w);
         WriteDlc(w, DlcGate.Session?.OrderBy(i => i).ToList() ?? new List<int>());
+        WriteRules(w);
         Send(peer.Id, ms, true);
 
         int blocks = 0;
@@ -2522,7 +2606,7 @@ internal sealed class Session
         _area.LogRoster(at, slot, true);
         BroadcastRoster();
         Status = $"{peer.Name} joined";
-        Toast.Show($"{peer.Name} joined");
+        // No toast: the game's own notice says it when they take a party member ("[P2] SAM JOINED", GameNoticeName).
         Plugin.Log.LogInfo($"[catchup] {peer.Name} caught up (at f{joinerFrame}, {Now - peer.CatchUpSince:F1} s after the transfer started); joins as slot {slot} at f{at}");
     }
 
@@ -2548,7 +2632,9 @@ internal sealed class Session
         int live = r.ReadInt32();
         var (roster, characters) = AreaLog.ReadRoster(r);
         var dlc = ReadDlc(r);
+        bool ownTurns = r.ReadBoolean();
         if (Phase == Phase.Running) return;
+        BattleTurns.SetRule(ownTurns);
         _awaitingMirrorReload = false;
         bool rejoin = ResyncWaiting || _resyncing;
         Plugin.Log.LogInfo($"[catchup] start at f{L} (load {seq}, clock {clockBase:R}), {live - L} frames behind; save slot {saveSlot}, playing {string.Join(",", playing.Select(s => $"P{s + 1}"))}, party {party}{(rejoin ? "; rejoining after a divergence" : "")}");
@@ -2704,6 +2790,7 @@ internal sealed class Session
         LobbyId = HostId = 0;
         _pendingCall = 0;
         _closeAt = -1;
+        _leaveAt = -1;
         _nextHello = _nextPing = _nextLobbyPoll = 0;
         _awaitingMirrorReload = false;
         _dropIn = DropInStep.None;

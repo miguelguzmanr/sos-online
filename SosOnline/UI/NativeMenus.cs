@@ -725,8 +725,8 @@ internal static class NativeMenus
             ShowPage(_currentPage);
             return;
         }
-        // The Settings page describes the highlighted entry: refresh as soon as the cursor moves.
-        string selectedKey = _currentPage == OptionsPage ? SelectedEntryKey() : null;
+        // The Options pages describe the highlighted entry: refresh as soon as the cursor moves.
+        string selectedKey = (_currentPage == OptionsPage || _currentPage == HostOptionsPage) ? SelectedEntryKey() : null;
         if (Time.unscaledTime >= _nextStatusRefresh || selectedKey != _statusKey)
         {
             _nextStatusRefresh = Time.unscaledTime + 0.5f;
@@ -752,6 +752,7 @@ internal static class NativeMenus
             case Phase.Idle:
                 yield return ("Host", () => s.Host());
                 yield return ("Join", () => ShowPage(FriendsPage));
+                yield return ("Host Settings", () => ShowPage(HostOptionsPage));
                 break;
             case Phase.CreatingLobby:
             case Phase.JoiningLobby:
@@ -764,12 +765,13 @@ internal static class NativeMenus
                 {
                     if (s.Phase == Phase.Lobby) yield return ("Load Game", () => ShowPage(SavesPage));
                     if (!s.UsingUdp) yield return ("Invite Friends", () => s.InviteFriends());
+                    yield return ("Host Settings", () => ShowPage(HostOptionsPage));
                     yield return ("Stop Hosting", () => s.Leave());
                 }
                 else yield return ("Leave Co-op", () => s.Leave());
                 break;
         }
-        yield return ("Settings", () => ShowPage(OptionsPage));
+        yield return ("Mod Options", () => ShowPage(OptionsPage));
         yield return ("Back", () => CloseSubmenu(true));
     }
 
@@ -777,18 +779,28 @@ internal static class NativeMenus
     private static IEnumerable<(string, Action)> OptionsPage()
     {
         var s = Session.Instance;
-        if (s.Phase == Phase.Idle || (s.IsHost && (s.Phase == Phase.Lobby || s.Phase == Phase.AwaitingReady)))
-            yield return ($"Input Delay: {(s.ConfiguredDelay == 0 ? "Auto" : s.ConfiguredDelay.ToString())}", () => ShowPage(DelayPage));
-        if (!s.InSession || s.IsHost)
-            yield return ($"Open to Friends: {(Settings.OpenToFriends ? "On" : "Off")}", () => { Settings.OpenToFriends = !Settings.OpenToFriends; ShowPage(OptionsPage); });
         // Per PC: only outside a run (the in-session pause popup runs on every PC and may only offer the same choices).
         if (s.Phase != Phase.Running && SosOnline.Update.AutoUpdate.Downloaded == null)
             yield return (SosOnline.Update.AutoUpdate.CheckLabel, () => { SosOnline.Update.AutoUpdate.CheckNow(); ShowPage(OptionsPage); });
         // Here rather than on the main page, which then never reaches the copyright (the pause screen has them too).
         if (s.InSession && !s.IsHost) yield return ("Send Logs to Host", () => s.SendLogsToHost());
-        else if (s.IsHost && s.Peers.Any()) yield return ("Ask for Logs", () => s.AskForLogs());
+        yield return ($"Advanced Status Bar: {(Settings.AdvancedStatus ? "On" : "Off")}", () => { Settings.AdvancedStatus = !Settings.AdvancedStatus; ShowPage(OptionsPage, "Advanced Status Bar"); });
         yield return ("Open Logs Folder", SessionLogs.OpenFolder);
-        yield return ("Back", () => ShowPage(MainPage, "Settings"));
+        yield return ("Back", () => ShowPage(MainPage, "Mod Options"));
+    }
+
+    private static IEnumerable<(string, Action)> HostOptionsPage()
+    {
+        var s = Session.Instance;
+        if (s.Phase == Phase.Idle || (s.IsHost && (s.Phase == Phase.Lobby || s.Phase == Phase.AwaitingReady)))
+            yield return ($"Input Delay: {(s.ConfiguredDelay == 0 ? "Auto" : s.ConfiguredDelay.ToString())}", () => ShowPage(DelayPage));
+        if (!s.InSession || s.IsHost)
+            yield return ($"Open to Friends: {(Settings.OpenToFriends ? "On" : "Off")}", () => { Settings.OpenToFriends = !Settings.OpenToFriends; ShowPage(HostOptionsPage); });
+        // Fixed for a session when it starts: changeable while no lockstep runs.
+        if (!s.InSession || (s.IsHost && s.Phase != Phase.Running))
+            yield return ($"Battle System: {(Settings.OwnTurns ? "Custom (Fixed Characters)" : "Classic (Random Characters)")}", () => { Settings.OwnTurns = !Settings.OwnTurns; ShowPage(HostOptionsPage, "Battle System"); });
+        if (s.IsHost && s.Peers.Any()) yield return ("Ask for Logs", () => s.AskForLogs());
+        yield return ("Back", () => ShowPage(MainPage, "Host Settings"));
     }
 
     private static List<(ulong id, string name, ulong lobby)> _friendsCache = new();
@@ -821,9 +833,9 @@ internal static class NativeMenus
         foreach (int d in new[] { 0, 3, 5, 8 })
         {
             int delay = d;
-            yield return (delay == 0 ? "Auto" : $"{delay} Frames ({delay * 17} ms)", () => { s.ConfiguredDelay = delay; ShowPage(OptionsPage, "Input Delay"); });
+            yield return (delay == 0 ? "Auto" : $"{delay} Frames ({delay * 17} ms)", () => { s.ConfiguredDelay = delay; ShowPage(HostOptionsPage, "Input Delay"); });
         }
-        yield return ("Back", () => ShowPage(OptionsPage, "Input Delay"));
+        yield return ("Back", () => ShowPage(HostOptionsPage, "Input Delay"));
     }
 
     // ================================================================== pause menu
@@ -937,6 +949,8 @@ internal static class NativeMenus
     {
         ["Input Delay"] = "Frames each press waits so every PC stays in step.\nAuto adapts it to the ping.",
         ["Open to Friends"] = "Keep a Steam lobby open while you play,\nso friends can drop into your game",
+        ["Battle System"] = "Classic: a random player picks each turn's character.\nCustom: each player plays their own character.",
+        ["Advanced Status Bar"] = "A detailed line at the top during co-op:\nplayers, ping, sync and waits",
         ["Check for Updates"] = "Look for a newer version of the mod",
         ["Checking for Updates…"] = "Look for a newer version of the mod",
         ["Send Logs to Host"] = "Send your recent logs to the host,\nto help find a problem",
@@ -948,7 +962,7 @@ internal static class NativeMenus
     /// <summary>The status lines for the page showing: on Options, what the highlighted entry does.</summary>
     private static string PageStatus(Session s)
     {
-        if (_currentPage == OptionsPage && SelectedEntryKey() is { } key && OptionsHelp.TryGetValue(key, out var help)) return help;
+        if ((_currentPage == OptionsPage || _currentPage == HostOptionsPage) && SelectedEntryKey() is { } key && OptionsHelp.TryGetValue(key, out var help)) return help;
         return StatusText(s);
     }
 
@@ -958,8 +972,7 @@ internal static class NativeMenus
             return string.IsNullOrEmpty(s.LastError)
                 ? "Play with up to two friends online.\nEach player controls a party member, like local co-op."
                 : s.LastError;
-        var lines = new List<string> { s.Status, PlayersLine(s) };
-        if (s.Peers.Any()) lines.Add($"Ping {s.Peers.Max(p => p.rtt):F0} ms");
-        return string.Join("\n", lines);
+        // The players, their pings and states are on the player bar (top left).
+        return s.Status;
     }
 }

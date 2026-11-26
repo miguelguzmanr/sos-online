@@ -44,6 +44,7 @@ public sealed class Plugin : BasePlugin
             DeterministicRandom.Install(harmony);
             if (TestHarness.TryArg("rngprobe", out _)) RngProbe.Install(harmony);
             CombatTrace.Install(harmony);
+            BattleTurns.Install(harmony);
             SpawnTrace.Install(harmony);
             if (TestHarness.TryArg("whichrva", out var rvas))
                 foreach (var hex in rvas.Split(',', StringSplitOptions.RemoveEmptyEntries))
@@ -63,12 +64,30 @@ public sealed class Plugin : BasePlugin
 /// <summary>The player's settings (BepInEx/config/sosonline.coop.cfg).</summary>
 internal static class Settings
 {
-    private static BepInEx.Configuration.ConfigEntry<bool> _openToFriends;
+    private static BepInEx.Configuration.ConfigEntry<bool> _openToFriends, _ownTurns, _advancedStatus;
 
     public static void Bind(BepInEx.Configuration.ConfigFile config)
     {
         _openToFriends = config.Bind("Online", "OpenToFriends", false,
             "Keep a Steam lobby open while you play, so friends can join your game from Steam at any time.");
+        _ownTurns = config.Bind("Online", "OwnCharacterTurns", true,
+            "Host: in battles, each player gets the turns of their own character (off: the game picks a player at random, as in local co-op).");
+        _advancedStatus = config.Bind("Display", "AdvancedStatusBar", false,
+            "Show the detailed one-line status (players, ping, sync, waits) at the top of the screen during a session.");
+    }
+
+    /// <summary>Host setting: "Your character, your turn" in battles (fixed for a session when it starts).</summary>
+    public static bool OwnTurns
+    {
+        get => TestHarness.TryArg("ownturns", out var v) ? v != "0" : _ownTurns?.Value ?? true;
+        set { if (_ownTurns != null) _ownTurns.Value = value; }
+    }
+
+    /// <summary>This PC: the detailed one-line status at the top during a session.</summary>
+    public static bool AdvancedStatus
+    {
+        get => _advancedStatus?.Value ?? false;
+        set { if (_advancedStatus != null) _advancedStatus.Value = value; }
     }
 
     /// <summary>A Steam lobby is open whenever this PC plays its own game; friends join from Steam, no hosting step.</summary>
@@ -100,6 +119,7 @@ public sealed class OnlineBehaviour : MonoBehaviour
             Toast.Update();
             SessionLogs.Update();
             Overlay.Update();
+            PlayerBar.Update();
             NativeMenus.Update();
             VersionLabel.Update();
             SteamInvites.Update();

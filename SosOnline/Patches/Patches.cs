@@ -19,6 +19,24 @@ internal static class RewiredUpdatePatch
     }
 }
 
+/// <summary>Logs the game's controller rumble during a session: which player it is for.</summary>
+[HarmonyPatch]
+internal static class RumbleLog
+{
+    private static System.Collections.Generic.IEnumerable<System.Reflection.MethodBase> TargetMethods()
+    {
+        foreach (var m in typeof(InputManager).GetMethods())
+            if (m.Name == nameof(InputManager.RumbleController) && !NativeCode.IsFolded(m)) yield return m;
+    }
+
+    private static void Prefix(InputManager __instance, Player __0)
+    {
+        if (!InputOverride.Active || !NativeCode.Is<InputManager>(__instance)) return;
+        int slot = GameBridge.SlotOf(__0);
+        Plugin.Log.LogInfo($"[rumble] f{Session.Instance.Engine.AppliedFrame} for player {__0?.id} (slot {slot}, this PC's slot {Session.Instance.LocalSlot}, joysticks {__0?.controllers.joystickCount})");
+    }
+}
+
 /// <summary>
 /// While lockstep runs, input devices are routed by the mod. The game's automatic (re)assignment, which reacts to
 /// local hardware events, would otherwise change game state on one peer only.

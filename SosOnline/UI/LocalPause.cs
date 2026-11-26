@@ -27,7 +27,11 @@ internal static class LocalPause
     /// <summary>"Pause for everyone" chosen: the next captured input of this PC's slot carries a pause press.</summary>
     private static bool _forwardStart;
 
-    private enum Page { Main, Options, ConfirmLeave, ConfirmReturn, NoSave }
+    private enum Page { Main, Options, ConfirmLeave, ConfirmReturn, NoSave, Battle, Players, ConfirmRemove }
+
+    /// <summary>The player <see cref="Page.ConfirmRemove"/> asks about.</summary>
+    private static int _removeSlot = -1;
+    private static Page _playersFrom;
 
     private static Page _page;
     private static int _returnEntry;
@@ -62,6 +66,8 @@ internal static class LocalPause
 
         if (IsOpen && (s.Phase != Phase.Running || s.CatchingUp)) Close("session not running");
         if (IsOpen && (_page == Page.NoSave || _page == Page.ConfirmReturn) && !HostNoSave(s)) Close("return to area start no longer needed");
+        if (IsOpen && _page == Page.Battle && !GameBridge.InBattle) Close("the battle ended");
+        if (IsOpen && (_page == Page.ConfirmRemove || _page == Page.Players) && !RemovableSlots(s).Any()) GoTo(_playersFrom, 0);
 
         if (!IsOpen && own && _forwardStart)
         {
@@ -93,6 +99,8 @@ internal static class LocalPause
         var s = Session.Instance;
         if (s.Phase != Phase.Running || s.CatchingUp || !s.Engine.InSessionAt(s.LocalSlot, s.Engine.AppliedFrame)) return false;
         if (MenuStatus.Paused || MenuStatus.Path.Length > 0) return false;
+        // The game has no pause in battles; the host gets its moderation page there.
+        if (GameBridge.InBattle) return s.IsHost && RemovableSlots(s).Any();
         try
         {
             if (Manager<PauseManager>.instance?.isPaused ?? false) return false;
@@ -108,7 +116,7 @@ internal static class LocalPause
     private static void Open(int frame)
     {
         IsOpen = true;
-        _page = HostNoSave(Session.Instance) ? Page.NoSave : Page.Main;
+        _page = GameBridge.InBattle ? Page.Battle : HostNoSave(Session.Instance) ? Page.NoSave : Page.Main;
         _cursor = _page == Page.NoSave ? Entries().Count - 1 : 0; // on Back: a stray press mustn't undo the area
         _held.Clear();
         Plugin.Log.LogInfo($"[localpause] f{Session.Instance.Engine.AppliedFrame} opened (input frame {frame})");
@@ -176,12 +184,43 @@ internal static class LocalPause
         return true;
     }
 
-    private static List<Entry> Entries()
+    /// <summary>Host: the slots of players in the running session it may remove (not itself).</summary>
+    private static IEnumerable<int> RemovableSlots(Session s) =>
+        !s.IsHost ? Enumerable.Empty<int>()
+        : Enumerable.Range(1, InputOverride.SlotCount - 1).Where(i => !string.IsNullOrEmpty(s.SlotName[i]) && s.Engine.InSessionAt(i, s.Engine.AppliedFrame));
+
+    private static List<Entry> Entries() => Entries(_page);
+
+    private static List<Entry> Entries(Page page)
     {
         var s = Session.Instance;
         var list = new List<Entry>();
-        switch (_page)
+        switch (page)
         {
+            case Page.Battle:
+                list.Add(new Entry { Label = "Resume", Action = () => Close("resume") });
+                if (BattleTurns.CanCommand && BattleTurns.CurrentSlot != s.LocalSlot)
+                    list.Add(new Entry { Label = "Take over this turn", Action = () => { s.TurnCommand(BattleTurns.CmdTakeOver); Close("take over turn"); } });
+                if (BattleTurns.CanCommand && BattleTurns.NextSlot() is int next and >= 0 && next != BattleTurns.CurrentSlot)
+                    list.Add(new Entry { Label = $"Pass turn to P{GameBridge.PlayerNumber(next)}", Action = () => { s.TurnCommand(BattleTurns.CmdPass); Close("pass turn"); } });
+                list.Add(new Entry { Label = "Remove a player", Action = () => { _playersFrom = Page.Battle; GoTo(Page.Players, 0); } });
+                break;
+            case Page.Players:
+                foreach (int slot in RemovableSlots(s))
+                {
+                    int sl = slot;
+                    list.Add(new Entry { Label = $"P{GameBridge.PlayerNumber(sl)} {s.SlotName[sl]}", Action = () => { _removeSlot = sl; GoTo(Page.ConfirmRemove, 1); } });
+                }
+                list.Add(new Entry { Label = "Back", Action = () => GoTo(_playersFrom, _playersFrom == Page.Battle ? Entries(Page.Battle).Count - 1 : Entries(Page.Main).Count - 1) });
+                break;
+            case Page.ConfirmRemove:
+                list.Add(new Entry
+                {
+                    Label = "Remove",
+                    Action = () => { s.RemovePlayer(_removeSlot); Close("remove player"); },
+                });
+                list.Add(new Entry { Label = "Back", Action = () => GoTo(Page.Players, 0) });
+                break;
             case Page.ConfirmLeave:
                 list.Add(new Entry
                 {
@@ -226,6 +265,8 @@ internal static class LocalPause
                 // Last, so the cursor positions above stay as they were.
                 if (!s.IsHost) list.Add(new Entry { Label = "Send logs to host", Action = () => { s.SendLogsToHost(); Close("send logs"); } });
                 else if (s.Peers.Any()) list.Add(new Entry { Label = "Ask for logs", Action = () => { s.AskForLogs(); Close("ask for logs"); } });
+                if (s.IsHost && RemovableSlots(s).Any())
+                    list.Add(new Entry { Label = "Remove a player", Action = () => { _playersFrom = Page.Main; GoTo(Page.Players, 0); } });
                 break;
         }
         return list;
@@ -249,8 +290,10 @@ internal static class LocalPause
             if (Down(raw, _start)) { Close("resume (pause)"); return; }
             if (Down(raw, _back))
             {
-                if (_page == Page.Main || _page == Page.NoSave) Close("resume (back)");
+                if (_page == Page.Main || _page == Page.NoSave || _page == Page.Battle) Close("resume (back)");
                 else if (_page == Page.ConfirmReturn) GoTo(_returnFrom, _returnEntry);
+                else if (_page == Page.Players) GoTo(_playersFrom, Entries(_playersFrom).Count - 1);
+                else if (_page == Page.ConfirmRemove) GoTo(Page.Players, 0);
                 else GoTo(Page.Main, _page == Page.Options && LocalOptions.Available ? 1 : 0);
                 return;
             }
@@ -326,6 +369,9 @@ internal static class LocalPause
         Page.Options => "Options",
         Page.ConfirmLeave => s.IsHost ? "End co-op for everyone?" : "Leave co-op?",
         Page.ConfirmReturn => "Return to the area start?",
+        Page.Battle => "Battle",
+        Page.Players => "Remove a player",
+        Page.ConfirmRemove => $"Remove P{GameBridge.PlayerNumber(_removeSlot)} {Session.Instance.SlotName[Mathf.Max(0, _removeSlot)]}?",
         _ => "Paused",
     };
 
@@ -335,6 +381,8 @@ internal static class LocalPause
         Page.ConfirmLeave => s.IsHost ? "Everyone may continue playing solo." : "The AI takes over your character.",
         Page.ConfirmReturn => "Progress since entering this area will be lost.",
         Page.NoSave => "Only you are paused. The game keeps running.",
+        Page.Battle => BattleTurns.CurrentSlot >= 0 && BattleTurns.Choosing ? $"Waiting for P{GameBridge.PlayerNumber(BattleTurns.CurrentSlot)} to choose." : "The battle keeps going.",
+        Page.Players or Page.ConfirmRemove => "The AI plays their character. They play solo.",
         _ => "Only you are paused. The game keeps running.",
     };
 

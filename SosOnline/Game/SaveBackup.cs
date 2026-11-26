@@ -116,13 +116,14 @@ internal static class SaveBackup
         catch (Exception e) { Plugin.Log.LogWarning($"[backup] session saves not kept ({what}): {e.Message}"); }
     }
 
-    /// <summary>The session's save files for a log bundle: (name, path) of every save the game is using now.</summary>
+    /// <summary>The session's save files for a log bundle: (name, path) of every save in the mirror folder (the
+    /// session this PC plays or last played as a guest). Never this PC's own saves.</summary>
     public static List<(string entry, string path)> SessionFilesForLogs()
     {
         var result = new List<(string, string)>();
         try
         {
-            string source = SaveMirror.Active ? SaveMirror.MirrorDir : SaveMirror.OwnDir;
+            string source = SaveMirror.MirrorDir;
             if (Directory.Exists(source))
                 foreach (var f in Directory.GetFiles(source, "*.sos").Where(f => !SaveMirror.IsOptionsFile(f)))
                     result.Add(("saves/" + Path.GetFileName(f), f));

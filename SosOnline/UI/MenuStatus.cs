@@ -14,8 +14,9 @@ namespace SosOnline.UI;
 ///
 /// Online there is one game: when any player pauses or opens a menu, it opens on every PC on the same frame, the
 /// game stops for everyone, and the player who opened it (the game's "UI player") is the only one who can move in
-/// it. Everyone sees the same screens, but not whose cursor that is; this banner says so. It reads only the game's
-/// own state, which is identical on every PC, so it needs no network messages and changes nothing.
+/// it. Everyone sees the same screens, but not whose cursor that is; a notice says so ("[P2] ASSIGN PLAYERS",
+/// <see cref="PlayerBar"/>). It reads only the game's own state, which is identical on every PC, so it needs no network
+/// messages and changes nothing.
 /// </summary>
 internal static class MenuStatus
 {
@@ -36,7 +37,7 @@ internal static class MenuStatus
         (typeof(HowToPlayScreen), "How to play"),
         (typeof(AchievementScreen), "Achievements"),
         (typeof(ShopPopup), "Shop"),
-        (typeof(GenericPopupScreen), "a question"),
+        (typeof(GenericPopupScreen), "Question"),
     };
 
     private static Il2CppSystem.Type[] _il2cppTypes;
@@ -45,6 +46,10 @@ internal static class MenuStatus
     public static int Slot { get; private set; } = -1;
     /// <summary>The open menus, bottom to top ("Pause menu › Options"); empty when none is open.</summary>
     public static string Path { get; private set; } = "";
+    /// <summary>The open menus, bottom to top.</summary>
+    public static IReadOnlyList<string> Open { get; private set; } = Array.Empty<string>();
+    /// <summary>The menu in use (the top one of <see cref="Path"/>); empty when none is open.</summary>
+    public static string Menu { get; private set; } = "";
     public static bool Paused { get; private set; }
 
     private static float _nextPoll;
@@ -54,12 +59,11 @@ internal static class MenuStatus
     public static void Update()
     {
         var s = Session.Instance;
-        if (s.Phase != Phase.Running || s.CatchingUp) { Clear(); UpdateBanner(); return; }
+        if (s.Phase != Phase.Running || s.CatchingUp) { Clear(); return; }
         if (Time.realtimeSinceStartup < _nextPoll) return;
         _nextPoll = Time.realtimeSinceStartup + 0.15f;
         try { Poll(); }
         catch (Exception e) { Clear(); Plugin.Log.LogWarning($"[menu] {e.Message}"); _nextPoll = Time.realtimeSinceStartup + 5f; }
-        UpdateBanner();
 
         string now = Paused || Path.Length > 0 ? $"{Slot}|{Paused}|{Path}" : "";
         if (now != _logged)
@@ -75,6 +79,8 @@ internal static class MenuStatus
     {
         Slot = -1;
         Path = "";
+        Menu = "";
+        Open = Array.Empty<string>();
         Paused = false;
     }
 
@@ -104,6 +110,8 @@ internal static class MenuStatus
             }
         }
         Path = string.Join(GameUi.Arrow, open);
+        Menu = open.Count > 0 ? open[^1] : "";
+        Open = open;
         Slot = -1;
         if (Paused || open.Count > 0)
         {
@@ -191,54 +199,6 @@ internal static class MenuStatus
         string names = string.Join(" and ", slots.Select(i => s.SlotName[i]).Where(n => !string.IsNullOrEmpty(n)));
         return ($"{who} {(slots.Count == 1 ? "is" : "are")} paused",
             $"The game keeps running.");
-    }
-
-    // ------------------------------------------------------------------ game-styled banner (canvas)
-
-    private static Canvas _canvas;
-    private static RectTransform _panel;
-    private static TMPro.TextMeshProUGUI _main, _sub;
-    private static string _shownText;
-
-    private static void UpdateBanner()
-    {
-        var banner = Banner();
-        bool show = banner != null && GameUi.Ready;
-        if (show && _canvas == null) BuildBanner();
-        if (_canvas != null && _canvas.gameObject.activeSelf != show) _canvas.gameObject.SetActive(show);
-        if (!show) { _shownText = null; return; }
-        var (main, sub) = banner.Value;
-        if (main + sub == _shownText) return;
-        _shownText = main + sub;
-        main = GameUi.Drawable(main);
-        sub = GameUi.Drawable(sub, true);
-        _main.text = main;
-        _sub.text = sub;
-        float w = Mathf.Max(_main.GetPreferredValues(main, 600, 20).x, _sub.GetPreferredValues(sub, 600, 20).x);
-        _panel.sizeDelta = new Vector2(Mathf.Ceil(w) + 24, 34);
-    }
-
-    private static void BuildBanner()
-    {
-        // Above the game's menus and HUD, below the catch-up screen.
-        _canvas = GameUi.CreateCanvas("SosOnline_MenuStatus", 29000);
-        _panel = GameUi.Panel(_canvas.transform, "Panel");
-        _panel.anchorMin = _panel.anchorMax = _panel.pivot = new Vector2(0.5f, 0f);
-        _panel.anchoredPosition = new Vector2(0, 44); // clear of the game's bottom bar (button hints)
-        _main = GameUi.Text(_panel, "Main", false, TMPro.TextAlignmentOptions.Center);
-        _main.enableWordWrapping = false;
-        _main.rectTransform.anchorMin = new Vector2(0, 1);
-        _main.rectTransform.anchorMax = new Vector2(1, 1);
-        _main.rectTransform.pivot = new Vector2(0.5f, 1);
-        _main.rectTransform.sizeDelta = new Vector2(0, 12);
-        _main.rectTransform.anchoredPosition = new Vector2(0, -5);
-        _sub = GameUi.Text(_panel, "Sub", true, TMPro.TextAlignmentOptions.Center);
-        _sub.enableWordWrapping = false;
-        _sub.rectTransform.anchorMin = new Vector2(0, 1);
-        _sub.rectTransform.anchorMax = new Vector2(1, 1);
-        _sub.rectTransform.pivot = new Vector2(0.5f, 1);
-        _sub.rectTransform.sizeDelta = new Vector2(0, 12);
-        _sub.rectTransform.anchoredPosition = new Vector2(0, -18);
     }
 
     /// <summary>Fallback without the game's UI art: a plain banner at the bottom of the screen.</summary>
