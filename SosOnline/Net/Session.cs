@@ -537,7 +537,7 @@ internal sealed class Session
             w.Write(i);
             w.Write(count);
             w.WriteBytes(piece);
-            Send(HostId, ms, true);
+            if (HostId != 0 && Transport != null) Transport.SendBulk(HostId, ms.GetBuffer(), (int)ms.Length);
         }
         Plugin.Log.LogInfo($"[logs] sent {zip.Length / 1024} KB of logs to the host in {count} piece(s)");
         Toast.Show($"Sending logs to {SlotName[0] ?? "the host"} ({Math.Max(1, zip.Length / 1024)} KB)…");

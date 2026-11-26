@@ -232,15 +232,30 @@ internal static unsafe class SteamApi
         return state == 4 || state == 5;
     }
 
-    public static bool Send(ulong steamId, byte[] data, int length, bool reliable, int channel)
+    public const int ResultOK = 1, ResultLimitExceeded = 25;
+
+    /// <summary>Sends one message; returns Steam's EResult (1 = OK, 25 = LimitExceeded: the send queue is full).</summary>
+    public static int Send(ulong steamId, byte[] data, int length, bool reliable, int channel)
     {
         var identity = new NetIdentity { Type = IdentityTypeSteamId, Size = 8, SteamId = steamId };
         int flags = (reliable ? SendReliable : SendUnreliable) | SendNoNagle | SendAutoRestartBrokenSession;
         fixed (byte* p = data)
-        {
-            int result = SteamAPI_ISteamNetworkingMessages_SendMessageToUser(_messages, &identity, p, (uint)length, flags, channel);
-            return result == 1; // k_EResultOK
-        }
+            return SteamAPI_ISteamNetworkingMessages_SendMessageToUser(_messages, &identity, p, (uint)length, flags, channel);
+    }
+
+    /// <summary>
+    /// Reliable bytes Steam still holds for this peer: queued plus sent but not yet acknowledged
+    /// (SteamNetConnectionRealTimeStatus_t.m_cbPendingReliable + m_cbSentUnackedReliable). -1 when unknown.
+    /// </summary>
+    public static int PendingReliableBytes(ulong steamId)
+    {
+        var self = _messages;
+        if (self == IntPtr.Zero) return -1;
+        var identity = new NetIdentity { Type = IdentityTypeSteamId, Size = 8, SteamId = steamId };
+        byte* status = stackalloc byte[256]; // the struct is 120 bytes; room to spare
+        try { SteamAPI_ISteamNetworkingMessages_GetSessionConnectionInfo(self, &identity, IntPtr.Zero, (IntPtr)status); }
+        catch { return -1; }
+        return *(int*)(status + 40) + *(int*)(status + 44);
     }
 
     public static void Accept(ulong steamId)

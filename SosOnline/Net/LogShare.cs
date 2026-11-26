@@ -17,7 +17,8 @@ namespace SosOnline.Net;
 /// matters), BepInEx's <c>LogOutput.log</c> (it also captures the game's Unity messages), the game's
 /// <c>Player.log</c>/<c>Player-prev.log</c> if there are any (Sea of Stars normally writes none), and the newest
 /// Windows crash dump of the game made since those starts. It is built off the main thread (a few hundred ms) so lockstep never waits for it, and sent in
-/// pieces (<see cref="ChunkBytes"/>: under the UDP test transport's datagram limit, far under Steam's 512 KB).
+/// pieces (<see cref="ChunkBytes"/>: under the UDP test transport's datagram limit) through
+/// <see cref="ITransport.SendBulk"/>, which hands them to Steam only as fast as the link takes them.
 /// </summary>
 internal static class LogShare
 {

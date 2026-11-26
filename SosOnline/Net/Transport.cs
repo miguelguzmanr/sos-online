@@ -12,6 +12,11 @@ internal interface ITransport : IDisposable
     ulong LocalId { get; }
     string Describe(ulong peer);
     void Send(ulong peer, byte[] data, int length, bool reliable);
+    /// <summary>
+    /// Reliable, but sent only as fast as the link takes it, so it never holds up the game's own messages.
+    /// No order is kept against other messages.
+    /// </summary>
+    void SendBulk(ulong peer, byte[] data, int length);
     void Poll(Action<ulong, byte[]> onMessage);
     void Disconnect(ulong peer);
     /// <summary>The transport knows the peer is gone (connection closed or failed), without waiting for silence.</summary>
@@ -27,15 +32,72 @@ internal sealed class SteamTransport : ITransport
 
     public string Describe(ulong peer) => SteamApi.FriendName(peer) is { Length: > 0 } n ? UI.PlayerNames.Clean(n, "the host") : peer.ToString();
 
+    // Steam holds about 512 KB of reliable data per peer and refuses anything beyond (LimitExceeded). A refused
+    // reliable message used to be dropped: 84 of 85 pieces of a 5 MB log zip, and catch-up frames. Now a refused
+    // message waits here, in order, and every later reliable message to that peer waits behind it.
+    private readonly Dictionary<ulong, Queue<byte[]>> _held = new();
+    private readonly Dictionary<ulong, Queue<byte[]>> _bulk = new();
+    private const int BulkBudgetBytes = 128 * 1024; // bulk goes out only while Steam holds less than this
+    private const long MaxHeldBytes = 48L * 1024 * 1024;
+
     public void Send(ulong peer, byte[] data, int length, bool reliable)
     {
-        if (!SteamApi.Send(peer, data, length, reliable, Channel) && reliable)
-            Plugin.Log.LogWarning($"[steam] reliable send failed ({length} B to {peer})");
+        if (!reliable) { SteamApi.Send(peer, data, length, false, Channel); return; }
+        if (_held.TryGetValue(peer, out var held) && held.Count > 0) { Hold(peer, held, data, length); return; }
+        int result = SteamApi.Send(peer, data, length, true, Channel);
+        if (result == SteamApi.ResultOK) return;
+        if (!_held.TryGetValue(peer, out held)) _held[peer] = held = new Queue<byte[]>();
+        Plugin.Log.LogWarning($"[steam] send queue to {peer} full (result {result}); holding messages until it drains");
+        Hold(peer, held, data, length);
     }
 
-    public void Poll(Action<ulong, byte[]> onMessage) => SteamApi.Receive(Channel, onMessage);
+    private void Hold(ulong peer, Queue<byte[]> held, byte[] data, int length)
+    {
+        var copy = new byte[length];
+        Buffer.BlockCopy(data, 0, copy, 0, length);
+        held.Enqueue(copy);
+        long total = 0;
+        foreach (var m in held) total += m.Length;
+        if (total <= MaxHeldBytes) return;
+        held.Clear(); // the peer isn't taking anything; the session drops it on silence
+        Plugin.Log.LogWarning($"[steam] over {MaxHeldBytes >> 20} MB held for {peer}; dropped");
+    }
 
-    public void Disconnect(ulong peer) => SteamApi.Close(peer);
+    public void SendBulk(ulong peer, byte[] data, int length)
+    {
+        if (!_bulk.TryGetValue(peer, out var q)) _bulk[peer] = q = new Queue<byte[]>();
+        var copy = new byte[length];
+        Buffer.BlockCopy(data, 0, copy, 0, length);
+        q.Enqueue(copy);
+    }
+
+    public void Poll(Action<ulong, byte[]> onMessage)
+    {
+        foreach (var (peer, held) in _held)
+        {
+            while (held.Count > 0 && SteamApi.Send(peer, held.Peek(), held.Peek().Length, true, Channel) == SteamApi.ResultOK) held.Dequeue();
+            if (held.Count == 0 && _wasHolding.Remove(peer)) Plugin.Log.LogInfo($"[steam] send queue to {peer} drained");
+            else if (held.Count > 0) _wasHolding.Add(peer);
+        }
+        foreach (var (peer, q) in _bulk)
+        {
+            if (q.Count == 0 || (_held.TryGetValue(peer, out var held) && held.Count > 0)) continue;
+            int pending = SteamApi.PendingReliableBytes(peer);
+            if (pending < 0 || pending >= BulkBudgetBytes) continue;
+            if (SteamApi.Send(peer, q.Peek(), q.Peek().Length, true, Channel) == SteamApi.ResultOK) q.Dequeue();
+        }
+        SteamApi.Receive(Channel, onMessage);
+    }
+
+    private readonly HashSet<ulong> _wasHolding = new();
+
+    public void Disconnect(ulong peer)
+    {
+        _held.Remove(peer);
+        _bulk.Remove(peer);
+        _wasHolding.Remove(peer);
+        SteamApi.Close(peer);
+    }
 
     public bool IsLost(ulong peer) => SteamApi.SessionLost(peer);
 
@@ -112,6 +174,8 @@ internal sealed class UdpTransport : ITransport
         }
         while (offset < length);
     }
+
+    public void SendBulk(ulong peer, byte[] data, int length) => Send(peer, data, length, true);
 
     // ---- Simulated network (tests): --sosonline-lag=MS, --sosonline-jitter=MS, --sosonline-spikes=PERCENT.
     // Loopback delivers in well under a millisecond, so anything that depends on real time instead of the session's
