@@ -2,17 +2,31 @@
 
 Current state of the project, for whoever picks it up next. Update it at the end of every working session: replace what changed, don't append a diary. Technical background is in [CLAUDE.md](CLAUDE.md); causes and fixes in detail are in [docs/FINDINGS.md](docs/FINDINGS.md), the drop-in plan and its progress in [docs/PLAN.md](docs/PLAN.md).
 
-*Last updated: 2026-11-25.*
+*Last updated: 2026-11-26.*
 
 ## State right now
 
-- **Branch:** `main`, released as `v0.1.77`.
-- **Latest release on `main`:** `v0.1.77`, 2026-11-25. The repository's history was rewritten to remove a Steam name, and the GitHub repository recreated as `sosonline` and renamed to `sos-online`, so the old name redirects again (v0.1.63 and older look up releases there).
-- **Installed on the user's PC:** a build of `v0.1.77`'s code from `main`, installed before the release.
+- **Branch:** `main`, ahead of `v0.1.77` (unreleased): **Host Settings** and **Mod Options** merged back into one **Settings** entry. In v0.1.77 the hosting page over Steam had six entries, which pushed its status lines (*Hosting…*, the player list) onto the copyright row, so they were hidden (seen in the user's first v0.1.77 session). Also: drop-ins wait while the party leader is in a cinematic state (`GameBridge.CanDropInNow`). In the first v0.1.77 session the host started a new game with a friend joining; the game allows saving in the intro, so the drop-in reloaded in place 2.7 s into it and the intro restarted; the kids' MP also changed on that reload (VALERE 10 to 2, ZALE 8 to 3). Not tested yet: needs a drop-in test during a cutscene, the title-screen tests (`tests/uitest.cmd`) and the README screenshots retaken.
+- **Also on `main`, uncommitted, from the playtest of 2026-11-25 (three players over Steam on v0.1.77; findings §17):**
+  - The game crashed on two PCs in a tutorial training fight right after client-side timing upgraded a guest's block. The regraded result is now edited in place instead of replaced (`TimingCompensation.SetResult`).
+  - A friend's 5 MB log zip never arrived: Steam refused 84 of 85 pieces (send buffer full). Refused reliable messages are now kept and resent in order; log pieces go through `SendBulk`, paced by the pending bytes Steam reports.
+  - The host owns the *Throes of the Watchmaker* DLC and the friends don't: the host's new game got the DLC intro, a relic and the *Solstice Diploma*, very likely the cause of that session's desync. During a session a DLC now counts only if every player owns it (`Game/DlcGate.cs`, protocol 13); `--sosonline-nodlc` simulates a PC without it.
+  - Tested hidden on loopback: a guest's block upgraded on all three PCs with no crash (`three-player-battle.sh --sosonline-botblock=90`, 0 mismatches); the DLC gate at a session start and when a joiner without it drops in (every snapshot matched). Log pacing over Steam is untested.
+- **Hidden test mode** (game windows on a separate desktop, `--sosonline-background`) is in the `sos-online-bg` worktree, not merged. Tests in this session ran from `sos-online-test`, a detached worktree with main's changes plus the hidden mode; the game folder has that build installed.
+- **Latest release on `main`:** `v0.1.77`, 2026-11-25. The repository's history was rewritten and the GitHub repository recreated as `sosonline` and renamed to `sos-online`, so the old name redirects again (v0.1.63 and older look up releases there).
+- **Installed on the user's PC:** a test build from `sos-online-test` (main's uncommitted changes plus the hidden test mode), version 0.1.77+5bf1523-modified.
 - **Updates are manual from v0.1.60 on.** v0.1.56 and older download v0.1.60 at their next start; after that, *sos-online \<version\> (\<update\> available)* on the title screen and *Check for Updates* under **Mod Options**.
 - **Test saves:** existing single/2-player scripts run from the user's newest save (`--sosonline-start=0a`), while `tests/three-player-*.sh` and `tests/rejoin-paused.sh` use the sandboxed fixtures in `tests/saves/` (`midgame-necromancer/`, `endgame-worldmap/`).
 
 ## Open items, by priority
+
+From the playtest of 2026-11-25 (v0.1.77, three players over Steam):
+
+- **Next Steam session:** check that **Send Logs to Host** arrives with a crash dump in it (`[steam] send queue … full` / `drained` in the friend's log), that owners get *DLC is off: a friend doesn't have it* and everyone sees the base-game intro on a new game, and that a block or timed hit upgraded for a guest no longer crashes.
+- **Assign Players split** (session 1, f26740): it opened on the host while the pause menu closed on the guests. Not reproduced; possibly the DLC difference.
+- **Load Game refusal for a DLC save** (`saveRequiresTOTW` / `isInDLC`) and the host's refusal of a joiner while its game is in the DLC are untested: no save in the DLC yet.
+
+Earlier:
 
 From the first session on v0.1.53 (user's report, 2026-11-16 late): the Bosslug fight had two desyncs, and **in both the automatic rejoin never worked** (looped until both players returned to the title screen). Both play with controllers.
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Screenshots for the README, from loopback test sessions at 1280x720 with neutral player names (never Steam names:
-# the repository is public). Every instance takes a screenshot every 50 frames; the picks go to docs/screenshots by
+# Screenshots for the README, from loopback test sessions at 1280x720 with test player names.
+# Every instance takes a screenshot every 50 frames; the picks go to docs/screenshots by
 # hand. Output: BepInEx/SosOnline/readme/<run>-shot-<port>-<frame>.png in the game folder. About 12 minutes.
 # Usage: tests/readme-shots.sh [run...]   runs: online party dropin assign battle resync (default: all)
 # Close the game first. Tests play from sandbox copies of the saves (--sosonline-start / --sosonline-play).
