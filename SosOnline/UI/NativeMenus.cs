@@ -725,8 +725,8 @@ internal static class NativeMenus
             ShowPage(_currentPage);
             return;
         }
-        // The Options pages describe the highlighted entry: refresh as soon as the cursor moves.
-        string selectedKey = (_currentPage == OptionsPage || _currentPage == HostOptionsPage) ? SelectedEntryKey() : null;
+        // The Settings page describes the highlighted entry: refresh as soon as the cursor moves.
+        string selectedKey = _currentPage == OptionsPage ? SelectedEntryKey() : null;
         if (Time.unscaledTime >= _nextStatusRefresh || selectedKey != _statusKey)
         {
             _nextStatusRefresh = Time.unscaledTime + 0.5f;
@@ -752,7 +752,6 @@ internal static class NativeMenus
             case Phase.Idle:
                 yield return ("Host", () => s.Host());
                 yield return ("Join", () => ShowPage(FriendsPage));
-                yield return ("Host Settings", () => ShowPage(HostOptionsPage));
                 break;
             case Phase.CreatingLobby:
             case Phase.JoiningLobby:
@@ -765,13 +764,12 @@ internal static class NativeMenus
                 {
                     if (s.Phase == Phase.Lobby) yield return ("Load Game", () => ShowPage(SavesPage));
                     if (!s.UsingUdp) yield return ("Invite Friends", () => s.InviteFriends());
-                    yield return ("Host Settings", () => ShowPage(HostOptionsPage));
                     yield return ("Stop Hosting", () => s.Leave());
                 }
                 else yield return ("Leave Co-op", () => s.Leave());
                 break;
         }
-        yield return ("Mod Options", () => ShowPage(OptionsPage));
+        yield return ("Settings", () => ShowPage(OptionsPage));
         yield return ("Back", () => CloseSubmenu(true));
     }
 
@@ -779,24 +777,18 @@ internal static class NativeMenus
     private static IEnumerable<(string, Action)> OptionsPage()
     {
         var s = Session.Instance;
+        if (s.Phase == Phase.Idle || (s.IsHost && (s.Phase == Phase.Lobby || s.Phase == Phase.AwaitingReady)))
+            yield return ($"Input Delay: {(s.ConfiguredDelay == 0 ? "Auto" : s.ConfiguredDelay.ToString())}", () => ShowPage(DelayPage));
+        if (!s.InSession || s.IsHost)
+            yield return ($"Open to Friends: {(Settings.OpenToFriends ? "On" : "Off")}", () => { Settings.OpenToFriends = !Settings.OpenToFriends; ShowPage(OptionsPage); });
         // Per PC: only outside a run (the in-session pause popup runs on every PC and may only offer the same choices).
         if (s.Phase != Phase.Running && SosOnline.Update.AutoUpdate.Downloaded == null)
             yield return (SosOnline.Update.AutoUpdate.CheckLabel, () => { SosOnline.Update.AutoUpdate.CheckNow(); ShowPage(OptionsPage); });
         // Here rather than on the main page, which then never reaches the copyright (the pause screen has them too).
         if (s.InSession && !s.IsHost) yield return ("Send Logs to Host", () => s.SendLogsToHost());
+        else if (s.IsHost && s.Peers.Any()) yield return ("Ask for Logs", () => s.AskForLogs());
         yield return ("Open Logs Folder", SessionLogs.OpenFolder);
-        yield return ("Back", () => ShowPage(MainPage, "Mod Options"));
-    }
-
-    private static IEnumerable<(string, Action)> HostOptionsPage()
-    {
-        var s = Session.Instance;
-        if (s.Phase == Phase.Idle || (s.IsHost && (s.Phase == Phase.Lobby || s.Phase == Phase.AwaitingReady)))
-            yield return ($"Input Delay: {(s.ConfiguredDelay == 0 ? "Auto" : s.ConfiguredDelay.ToString())}", () => ShowPage(DelayPage));
-        if (!s.InSession || s.IsHost)
-            yield return ($"Open to Friends: {(Settings.OpenToFriends ? "On" : "Off")}", () => { Settings.OpenToFriends = !Settings.OpenToFriends; ShowPage(HostOptionsPage); });
-        if (s.IsHost && s.Peers.Any()) yield return ("Ask for Logs", () => s.AskForLogs());
-        yield return ("Back", () => ShowPage(MainPage, "Host Settings"));
+        yield return ("Back", () => ShowPage(MainPage, "Settings"));
     }
 
     private static List<(ulong id, string name, ulong lobby)> _friendsCache = new();
@@ -829,9 +821,9 @@ internal static class NativeMenus
         foreach (int d in new[] { 0, 3, 5, 8 })
         {
             int delay = d;
-            yield return (delay == 0 ? "Auto" : $"{delay} Frames ({delay * 17} ms)", () => { s.ConfiguredDelay = delay; ShowPage(HostOptionsPage, "Input Delay"); });
+            yield return (delay == 0 ? "Auto" : $"{delay} Frames ({delay * 17} ms)", () => { s.ConfiguredDelay = delay; ShowPage(OptionsPage, "Input Delay"); });
         }
-        yield return ("Back", () => ShowPage(HostOptionsPage, "Input Delay"));
+        yield return ("Back", () => ShowPage(OptionsPage, "Input Delay"));
     }
 
     // ================================================================== pause menu
@@ -956,7 +948,7 @@ internal static class NativeMenus
     /// <summary>The status lines for the page showing: on Options, what the highlighted entry does.</summary>
     private static string PageStatus(Session s)
     {
-        if ((_currentPage == OptionsPage || _currentPage == HostOptionsPage) && SelectedEntryKey() is { } key && OptionsHelp.TryGetValue(key, out var help)) return help;
+        if (_currentPage == OptionsPage && SelectedEntryKey() is { } key && OptionsHelp.TryGetValue(key, out var help)) return help;
         return StatusText(s);
     }
 

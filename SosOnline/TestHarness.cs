@@ -212,7 +212,7 @@ internal static class TestHarness
         if (now < _ucAt) return;
         if (_ucStep == 1) { ShowTitleChoices(GameBridge.FindTitleScreen()); _ucAt = now + 2; }
         else if (_ucStep == 2) { UI.NativeMenus.OpenTitleMenu(); _ucAt = now + 2; }
-        else if (_ucStep == 3) { UI.NativeMenus.ClickEntry("Mod Options"); _ucAt = now + 1; _ucStep = 30; return; }
+        else if (_ucStep == 3) { UI.NativeMenus.ClickEntry("Settings"); _ucAt = now + 1; _ucStep = 30; return; }
         else if (_ucStep == 30) { Plugin.Log.LogInfo("[test] choosing Check for Updates"); UI.NativeMenus.ClickEntry("Check for Updates"); _ucAt = now + 15; _ucStep = 4; return; }
         // With --sosonline-popupanswer the popup is answered by now: the Online page must have its cursor back.
         else if (_ucStep == 4) { Plugin.Log.LogInfo($"[test] after the update popup: {UI.NativeMenus.TitleMenuState()}"); Shot("ui-after-update-popup"); UI.NativeMenus.TestPressBack(); _ucAt = now + 1; }
@@ -296,7 +296,7 @@ internal static class TestHarness
             case 3: Shot("ui-online-page"); _vsAt = now + 1; break;
             case 4: UI.NativeMenus.ClickEntry("Host"); _vsAt = now + 4; break;
             case 5: Plugin.Log.LogInfo($"[test] hosting: {State()}"); Shot("ui-online-hosting"); _vsAt = now + 1; break;
-            case 6: UI.NativeMenus.ClickEntry("Host Settings"); _vsAt = now + 2; break;
+            case 6: UI.NativeMenus.ClickEntry("Settings"); _vsAt = now + 2; break;
             case 7: Plugin.Log.LogInfo($"[test] options: {State()}"); Shot("ui-online-options"); _vsAt = now + 1; break;
             case 8: UI.NativeMenus.SelectEntryForTest("Open to Friends"); _vsAt = now + 1; break;
             case 9: Plugin.Log.LogInfo($"[test] options, Open to Friends: {State()}"); Shot("ui-online-options-help"); _vsAt = now + 1; break;
