@@ -19,3 +19,5 @@
 *.dll     binary
 *.pdb     binary
 *.reg     binary
+# Game saves: a length-prefixed string, so line endings must stay byte-exact
+*.sos     binary

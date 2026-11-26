@@ -6,9 +6,9 @@ Current state of the project, for whoever picks it up next. Update it at the end
 
 ## State right now
 
-- **Branch:** `tests/three-player-save` (unreleased work ahead of `main` / `v0.1.64`): `DeterministicRandom` hardening + `193` deterministic RNG targets (with `--sosonline-rngprobe` + per-method/load-epoch seed isolation), rejoin pause-loop fix (`ClearMenusAndPause`), `UdpTransport` chunking for large reliable messages, `Host Settings` / `Mod Options` / `sos-online` title UI updates, and 3-player save fixtures + tests (`tests/saves/`).
+- **Branch:** `main`, unreleased work ahead of `v0.1.64` (release in progress, 2026-11-25): `DeterministicRandom` hardening + `193` deterministic RNG targets (with `--sosonline-rngprobe` + per-method/load-epoch seed isolation), rejoin pause-loop fix (`ClearMenusAndPause`), `UdpTransport` chunking for large reliable messages, **Host Settings** / **Mod Options** split and the *sos-online \<version\>* title line, 3-player save fixtures + tests (`tests/saves/`, stored as binary in `.gitattributes`: the save's length prefix breaks with CRLF).
 - **Latest release on `main`:** `v0.1.64`, published 2026-11-25: renamed the repository to `miguelguzmanr/sos-online` and updated the in-game updater, release script, and docs.
-- **Installed on the user's PC:** Release build built from `tests/three-player-save` (`0.73-modified`).
+- **Installed on the user's PC:** a local build of this work (`0.73-modified`).
 - **Updates are manual from v0.1.60 on.** v0.1.56 and older download v0.1.60 at their next start; after that, *sos-online \<version\> (\<update\> available)* on the title screen and *Check for Updates* under **Mod Options**.
 - **Test saves:** existing single/2-player scripts run from the user's newest save (`--sosonline-start=0a`), while `tests/three-player-*.sh` and `tests/rejoin-paused.sh` use the sandboxed fixtures in `tests/saves/` (`midgame-necromancer/`, `endgame-worldmap/`).
 

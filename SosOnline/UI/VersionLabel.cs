@@ -7,11 +7,11 @@ using Object = UnityEngine.Object;
 namespace SosOnline.UI;
 
 /// <summary>
-/// "Online Co-op Version 0.56" in the title screen's bottom-left corner, mirroring the game's own version line in the
+/// "sos-online 0.56" in the title screen's bottom-left corner, mirroring the game's own version line in the
 /// bottom-right: a copy of that text object (same font, size and colour) on the canvas, as far from the left edge as
 /// the game's line is from the right edge, on the same line. (The game's line sits in a layout group, so a sibling
 /// would be stacked under it.) Adds
-/// "(Update available)" once the release lookup (<see cref="SosOnline.Update.AutoUpdate.Available"/>) finds a newer one.
+/// "(0.57 available)" once the release lookup (<see cref="SosOnline.Update.AutoUpdate.Available"/>) finds a newer one.
 /// </summary>
 internal static class VersionLabel
 {
