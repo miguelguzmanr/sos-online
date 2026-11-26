@@ -5,7 +5,7 @@
 # Usage: tests/readme-shots.sh [run...]   runs: online party dropin assign battle resync (default: all)
 # Close the game first. Tests play from sandbox copies of the saves (--sosonline-start / --sosonline-play).
 cd "$(dirname "$0")/.." || exit 1
-. tests/game-dir.sh; O="$GAME/BepInEx/SosOnline"; OUT="$O/readme"; mkdir -p "$OUT"
+. tests/game-dir.sh; . tests/launch.sh; O="$GAME/BepInEx/SosOnline"; OUT="$O/readme"; mkdir -p "$OUT"
 S="$(cygpath -m "$PWD/tests/scripts")"
 SAVES="$LOCALAPPDATA/../LocalLow/Sabotage Studio/Sea of Stars"
 export WIN_W=1280 WIN_H=720
@@ -16,7 +16,7 @@ keep() { for f in "$O"/shot-*.png; do [ -f "$f" ] && mv "$f" "$OUT/$1-$(basename
 names=("--sosonline-name=Alex" "--sosonline-name=Sam" "--sosonline-name=Robin")
 
 online() { # The title screen's Online page, hosting (UDP, no Steam lobby), Options, the version line.
-(cd "$GAME" && ./SeaOfStars.exe -screen-fullscreen 0 -screen-width 1280 -screen-height 720 --sosonline-udp=27100 --sosonline-onlineshot >/dev/null 2>&1 &)
+NO_TILE=1 start_game 0 -screen-fullscreen 0 -screen-width 1280 -screen-height 720 --sosonline-udp=27100 --sosonline-onlineshot
 waitgames; mv "$O"/ui-online-*.png "$OUT/" 2>/dev/null
 }
 

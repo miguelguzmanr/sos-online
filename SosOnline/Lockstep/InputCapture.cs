@@ -9,7 +9,9 @@ internal static class InputCapture
     public static InputSnapshot Capture(Player player, InputSnapshot previous)
     {
         var s = new InputSnapshot();
-        if (player == null || !ActionTable.Ready) return s;
+        // A background test run ignores this PC's devices (BackgroundRun disables them too; this also covers a pad
+        // plugged in between its checks).
+        if (player == null || !ActionTable.Ready || BackgroundRun.On) return s;
         InputOverride.Bypass = true;
         try
         {

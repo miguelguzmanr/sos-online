@@ -29,6 +29,8 @@ namespace SosOnline;
 ///                                 least one second, counted in Unity frames)
 ///   --sosonline-reload=F          spike A: autosave at F, reload it in place at F+120 (every PC)
 ///   --sosonline-ff[=nocam]        spike C: uncapped frame rate, audio muted (and cameras off)
+///   --sosonline-background        run behind the user's work: muted, this PC's keyboard, mouse and pads ignored
+///                                 (BackgroundRun; tests/launch.sh passes it unless VISIBLE=1)
 ///   --sosonline-seed=N            fixed session seed (host)
 ///   --sosonline-stateevery=N      state snapshot interval in frames (default 30)
 ///   --sosonline-hpdiverge=F[,F2]  at lockstep frame F (the first time this PC reaches it; a replay passes it again
@@ -160,6 +162,7 @@ internal static class TestHarness
         Directory.CreateDirectory(OutDir);
         SpikeB.Init();
         FastForward.Init();
+        BackgroundRun.Init();
         BepInEx.Logging.Logger.Listeners.Add(new InstanceLog(Path.Combine(OutDir, $"log-{InstanceId}.txt")));
         _stateLog = new StreamWriter(Path.Combine(OutDir, $"state-{InstanceId}.log"), false) { AutoFlush = true };
     }
@@ -372,6 +375,7 @@ internal static class TestHarness
 
     public static void Update()
     {
+        BackgroundRun.Update();
         QuitAfterLockstep();
         if (!_xrefDone && Args.ContainsKey("xref") && Time.frameCount > 60) { _xrefDone = true; XrefProbe.Run(); Application.Quit(); }
         if (Args.ContainsKey("uitest")) UiTest();

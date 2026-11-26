@@ -2,23 +2,18 @@
 # Launches one host and its guests (loopback UDP). Usage:
 #   session.sh HOSTPORT "host flags" [ "guest flags" [delay_s] ]...
 # Each guest gets port HOSTPORT+n and joins HOSTPORT; delay_s staggers late joiners. Returns immediately.
-# Windows are tiled side by side (host on the left); set NO_TILE=1 to leave them where Unity puts them.
+# Instances run in the background on a hidden desktop, muted and deaf to this PC's devices; VISIBLE=1 tiles them side by side
+# instead (host on the left; NO_TILE=1 leaves them where Unity puts them). See launch.sh.
 . "$(dirname "$0")/game-dir.sh"
+. "$(dirname "$0")/launch.sh"
 # WIN_W/WIN_H change the window size (e.g. 1280x720 for readme-shots.sh).
 COMMON="-screen-fullscreen 0 -screen-width ${WIN_W:-640} -screen-height ${WIN_H:-360}"
-PLACE="$(cygpath -w "$(cd "$(dirname "$0")" && pwd)/place-window.ps1")" # absolute: launch() changes directory
 
-# launch INDEX ARGS...: starts an instance and moves its window to tile slot INDEX.
+# launch INDEX ARGS...: starts an instance in place INDEX.
 launch() {
   local index=$1; shift
-  cd "$GAME" || exit 1
-  ./SeaOfStars.exe $COMMON "$@" > /dev/null 2>&1 &
-  local winpid
-  winpid=$(cat /proc/$!/winpid 2>/dev/null)
-  [ "$index" = 0 ] && HOST_WINPID=$winpid
-  if [ -z "$NO_TILE" ] && [ -n "$winpid" ]; then
-    powershell -NoProfile -ExecutionPolicy Bypass -File "$PLACE" -ProcessId "$winpid" -Index "$index" < /dev/null > /dev/null 2>&1 &
-  fi
+  start_game "$index" $COMMON "$@"
+  [ "$index" = 0 ] && HOST_WINPID=$GAME_PID
 }
 
 hp=$1; hflags=$2; shift 2

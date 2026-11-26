@@ -2675,7 +2675,7 @@ internal sealed class Session
         foreach (var cam in _ffCameras) if (cam != null) cam.enabled = true;
         _ffCameras.Clear();
         Application.targetFrameRate = 60; // lockstep's cap (GameBridge.LockTime)
-        try { AkSoundEngine.SetOutputVolume(0, 1f); } catch { }
+        if (!BackgroundRun.On) try { AkSoundEngine.SetOutputVolume(0, 1f); } catch { }
         Plugin.Log.LogInfo($"[catchup] fast-forward off at f{Engine.AppliedFrame}");
     }
 

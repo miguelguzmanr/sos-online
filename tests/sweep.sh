@@ -5,7 +5,7 @@
 # and progress.txt. Close the game first: the tests start their own instances. Builds must not run meanwhile.
 cd "$(dirname "$0")/.." || exit 1
 REPO="$PWD"
-. tests/game-dir.sh; O="$GAME/BepInEx/SosOnline"
+. tests/game-dir.sh; . tests/launch.sh; O="$GAME/BepInEx/SosOnline"
 OUT="${1:-$O/sweep}"; mkdir -p "$OUT"; rm -f "$OUT"/*.txt
 SAVES="$LOCALAPPDATA/../LocalLow/Sabotage Studio/Sea of Stars"
 S="$(cygpath -m "$REPO/tests/scripts")"
@@ -91,7 +91,8 @@ for f in "$O"/shot-2710*-001900.png "$O"/shot-2710*-003200.png; do cp "$f" "$OUT
 # Title screen menus and the restart popup (hosts a real Steam lobby briefly).
 clean
 rm -f "$O"/ui-*-steam.png
-cmd //c "$(cygpath -w "$REPO/tests/uitest.cmd")" --sosonline-fakeupdate=0.1.999 > "$OUT/uitest.txt" 2>&1
+# What tests/uitest.cmd starts, through launch.sh (in the background unless VISIBLE=1).
+NO_TILE=1 start_game 0 -screen-fullscreen 0 -screen-width 960 -screen-height 540 --sosonline-uitest --sosonline-fakeupdate=0.1.999 > "$OUT/uitest.txt" 2>&1
 waitgames 240
 grep -h "\[test\]\|\[menu\] popup\|Error\|Exception" "$O/log-steam.txt" | grep -v "During invoking" >> "$OUT/uitest.txt"
 for f in "$O"/ui-*-steam.png; do cp "$f" "$OUT/"; done

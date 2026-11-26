@@ -250,14 +250,28 @@ Session flags:
 | `--sosonline-guardtest` | Logs where the test-run save guard sends a few paths (real folder, sandbox, mirrors); writes nothing. |
 | `--sosonline-nodlc` | This instance acts as a PC without any DLC, in and out of sessions. |
 | `--sosonline-name=TEXT` | A test player name; escapes like `\n` and `\u0020` for characters a command line can't carry. |
+| `--sosonline-background` | Runs behind your work: muted, this PC's keyboard, mouse and pads ignored. `tests/launch.sh` passes it unless `VISIBLE=1`. |
 
-`tests/session.sh` launches a host plus guests, staggering late joiners, and tiles their windows side by side, host on the left (`tests/place-window.ps1`; `NO_TILE=1` turns it off). It doesn't start a late joiner once the host's game has quit.
+`tests/session.sh` launches a host plus guests, staggering late joiners. It doesn't start a late joiner once the host's game has quit.
+
+**Tests run in the background** by default, so the PC stays usable during a run (sweep included). Every bash script starts its instances through `tests/launch.sh` (`start_game`):
+
+| What | How |
+|---|---|
+| No window, no focus, none of your typing | `tests/start-game.ps1` starts the game on a hidden Win32 desktop (`CreateDesktop` "SosOnlineTests", never switched to). Its windows never show on yours, it can't take the foreground there (Unity activates its window on start), and keyboard and mouse input only go to the desktop on screen. Unity renders as usual there: screenshots work. Moving the window off-screen wasn't enough: Unity shows its window centred for about 0.4 s before it can be moved, and Windows often refuses a background process handing the focus back. |
+| No console | BepInEx's console window (`Logging.Console` in `BepInEx\config\BepInEx.cfg`) would open for every instance: background runs turn it off; `tests/display-prefs.sh restore` turns it back on. |
+| No sound, no pads | The game gets `--sosonline-background` (`SosOnline/BackgroundRun.cs`): Wwise output muted, Rewired's keyboard, mouse and joysticks disabled, and lockstep input capture returns nothing (pads are read on any desktop). Scripts and bots still drive it. |
+| Full speed | `Application.runInBackground` stays on, and the launcher opts the process out of Windows 11 background throttling (EcoQoS and timer resolution). `menu-status.sh` took 94 s in the background against 102 s on screen, with the same results. |
+
+To look at a background instance, a tool that switches desktops (e.g. Sysinternals Desktops) would have to open "SosOnlineTests"; usually the screenshots are enough.
+
+`VISIBLE=1` brings back the old way: windows on screen, tiled side by side, host on the left (`tests/place-window.ps1`; `NO_TILE=1` leaves them where Unity puts them), with sound and your keyboard and pads. Use it to watch a run. The `.cmd` scripts (`solo`, `two-instance`, `uitest`) still start visible windows; `sweep.sh` starts the uitest instance through `launch.sh`.
 
 Test instances never touch your real saves:
 - Each UDP test instance plays from its own sandbox copy (`<saves>\SosOnlineTest-<port>`) and its own mirror folder.
 - Delete those folders when done.
 
-Unity stores the `-screen-*` test flags as the game's display preferences, so wrap test runs with `tests/display-prefs.sh save` and `tests/display-prefs.sh restore`.
+Unity stores the `-screen-*` test flags as the game's display preferences, so wrap test runs with `tests/display-prefs.sh save` and `tests/display-prefs.sh restore` (which also turns BepInEx's console back on).
 
 These scripts need `steam_appid.txt` (containing `1244090`) in the game folder, so the exe can start directly with the test flags.
 
@@ -271,7 +285,7 @@ The command-line flags are documented in `SosOnline/TestHarness.cs`.
 
 ### Practical notes
 
-Close the game first; builds deploy into the game folder, and a build during a test replaces the mod under it. `steam_appid.txt` must be in the game folder. Window tiling (`session.sh`) works; leave it on.
+Close the game first; builds deploy into the game folder, and a build during a test replaces the mod under it. `steam_appid.txt` must be in the game folder. Tests run in the background, on a hidden desktop; `VISIBLE=1` to watch them.
 
 | Command | Use |
 |---|---|
