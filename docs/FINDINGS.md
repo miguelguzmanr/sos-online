@@ -575,7 +575,7 @@ Reviewing the binary scan alongside `DeterministicRandom.cs`, `LockstepEngine.cs
 
 ## 16. Steam rejoin pause loop & fix (`2026-11-25`, branch `tests/three-player-save`)
 
-Inspecting the friend's logs from the `2026-11-16` Steam session (`friend-20261116-225803.zip` and `friend-20261116-230629.zip`, running `0.1.53`) showed why automatic rejoin looped in both incidents:
+Inspecting the friend's logs from the `2026-11-16` Steam session (two log zips, 22:58 and 23:06, running `0.1.53`) showed why automatic rejoin looped in both incidents:
 
 - **Timeline:** After an initial `FishingLake` divergence (`f39300`, `inv differs`), P2's Stage 3 replay opened the synced `Shop` menu (`f34867`) and aborted at `f36570` (`gold`/`inv differs`) with `PauseManager.isPaused == true` (`pause=[on]`). Every subsequent Stage 2 `ReloadInPlace` (`f39749`, `f40147`) — and later after P2 left to solo, accepted a Steam invite on World Map, and opened solo `Pause menu` right before `f162` (`22:57:08.970`) — loaded the save in place **without closing modal screens or resetting `PauseManager`**, keeping `pause=[on]` across `LevelManager.LoadLevel`. The first sync check after load release (`10–20` frames later) immediately flagged `mismatch #1: pause differs (local [on])`, restarting both reload and replay loops endlessly.
 - **Fix (`ca6db10`):** `MenuStatus.CloseOpenMenus()` pools any active modal screens in `UIManager.screensByType`, and `GameBridge.ClearMenusAndPause()` closes menus, drains `PauseManager.pauseRequests` via `ResumeIncremental()`, calls `Resume()`, and resets any leftover pause flags. Wired into both `GameBridge.ReloadInPlace` and entry into `ResyncWaiting` (`Session.RejoinFallBack` and `Session.OnLeftSession`).
