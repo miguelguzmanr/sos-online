@@ -6,7 +6,7 @@ cd "$(dirname "$0")/.."
 . tests/game-dir.sh; O="$GAME/BepInEx/SosOnline"
 S="$(cygpath -m "$PWD/tests/scripts")"
 COMMON="--sosonline-delay=3 --sosonline-quit=${QUIT:-3600} --sosonline-shots=${SHOTS:-900,2260,2420,2980} $EXTRA"
-tests/session.sh 27100 "--sosonline-start=0 --sosonline-guests=1 --sosonline-seed=777 --sosonline-script=$S/${HOSTSCRIPT:-host-menu.txt} $COMMON" \
+tests/session.sh 27100 "--sosonline-dropinanywhere --sosonline-start=0 --sosonline-guests=1 --sosonline-seed=777 --sosonline-script=$S/${HOSTSCRIPT:-host-menu.txt} $COMMON" \
   "--sosonline-script=$S/${GUESTSCRIPT:-guest-pause.txt} $COMMON" 4 \
   "$COMMON $JOINFLAGS" "${JOIN_DELAY:-30}"
 sleep 10; while tasklist | grep -qi SeaOfStars; do sleep 3; done

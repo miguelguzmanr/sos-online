@@ -2,7 +2,7 @@
 
 Current state of the project, for whoever picks it up next. Update it at the end of every working session: replace what changed, don't append a diary. Technical background is in [CLAUDE.md](CLAUDE.md); causes and fixes in detail are in [docs/FINDINGS.md](docs/FINDINGS.md), the drop-in plan and its progress in [docs/PLAN.md](docs/PLAN.md).
 
-*Last updated: 2026-11-26.*
+*Last updated: 2026-11-27.*
 
 ## State right now
 
@@ -28,6 +28,15 @@ From the playtest of 2026-11-26 (v0.1.86, three players over Steam, Mountain Tra
 
 - **Fixed: wandering NPCs split the PCs on Mountain Trail, and catch-up replays failed 12 of 12.** Game time ran during the load barrier, for a different number of frames on each PC; it now stands still while a load is held. Two hidden instances from the user's newest save: 0 of 81 snapshots differ (53 before); a replay there matches the host (57 of 57).
 - **Fixed: Join from Steam with the game closed got stuck** (findings §19): the request came in while the game started, its question was removed by the title screen's load, and the join waited for an answer forever; friends had to use **Online** → **Join**. Now it waits for the title screen and joins there. Check in the next Steam session: a friend clicks **Join Game** with their game closed.
+- **Committed 2026-11-27, not released: Rejoin and the menu rework.**
+  - **Rejoin** (Host Settings) replaces Join Mode: *Require Approval (Safest)* (default) / *Auto (Experimental)* / *Off* (title screen only). Every reload that affects everyone (new friend, reconnect, re-sync that can't replay) goes through it. Catch Up is tests only.
+  - **Fixed: the Zenith Academy soft lock** (findings §20): a drop-in reloaded a mid-room autosave, and the save doesn't keep a room's own state (the placed stone, the wall it raised). Reproduced from a recording of the user's run. Now drop-ins and rejoins by a reload happen only at the next area entry, with the game's own entry autosave; players hold still from it until the reload (`LockstepEngine.HoldPlayers`, `Msg.PlayersRelease`); joiners report when their game has started (`Msg.Booted`), so the hold lasts about 2 s instead of 15. **Return to Area Start** on the host's main pause page lets a friend in at once. Protocol 17. Test scripts that stay in one area use `--sosonline-dropinanywhere`; `tests/dropin.sh` with `DOOR=F` tests the real path (sweep: `dropin-door`).
+  - **Guests reconnect** for 60 s after a lost connection instead of going to the title screen (a guest gives up on a silent host after 10 s).
+  - **Open on Start** replaces Open to Friends; ending co-op no longer changes it. **Battle Turns** (Original / Custom), **Status Bar** (Off / On / Advanced), **Mod Settings**, Input Delay as Auto / Low / Medium / High.
+  - Pause screen: Let X In under Resume, **Players** page (Remove, Ask for Logs), **Host Settings** (Battle Turns and Input Delay locked during co-op), End/Leave Co-op last, cursor kept by label.
+  - Wording: the review's fixes; `docs/messages.csv` rows 2–306 updated with dated notes, new rows 309–327, for review.
+  - Tested hidden, in a separate copy of the game: the user's Zenith Academy recording replayed with a friend waiting: no reload mid-room (the wall stays), the friend joins at a test door with a 2 s hold, 0 of 60 snapshots differ. `dropin.sh` with `DOOR=2400` (Auto): 0 of 127 and 0 of 51. `stage1.sh`: 0 of 26 and 0 of 65. `resync.sh`: 0 of 174, 0 of 249 twice. New `tests/reconnect.sh` (in the sweep): the guest's network drops for 8 s, it notices after 10 s, reconnects on the first try and rejoins by a reload: 0 of 159 differ afterwards. Earlier in the day: Require Approval with **Let Robin In** at f2720, 0 of 156 and 0 of 68.
+  - Watch: one `resync.sh` run of four had its catch-up replay diverge (combat, f1830) and fall back to a reload; not reproduced since. Joins at area entries and reconnecting not yet tried over Steam. No full sweep yet.
 - **New: Join Mode** (Host Settings): *Reload (Ask Me)* by default, the host lets a friend in from its pause screen and everyone reloads; *Reload (Automatic, Experimental)*; *Catch Up*, the old way (test runs keep it unless `--sosonline-joinmode`). Protocol 15. Tested hidden with `tests/dropin.sh` (in a separate copy of the game): Ask Me, the joiner waited until the host chose **Let Robin in** at f2720, joined by a reload, 0 of 170 snapshots differ; Automatic, joined by a reload without asking, 0 of 202; Catch Up, joined by replay as before, 0 of 261. New strings are rows 297–308 of `docs/messages.csv`, for review. Not tested over Steam.
 - **Fixed: a joining or rejoining player listed twice** on the host's player bar: once on their slot's row and once as a waiting joiner.
 - **Fixed: the re-sync waiting screen left the session** as it showed (it read the synced Back press).

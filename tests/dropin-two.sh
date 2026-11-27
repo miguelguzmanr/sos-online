@@ -9,7 +9,7 @@ cd "$(dirname "$0")/.."
 S="$(cygpath -m "$PWD/tests/scripts")"
 Q=${QUIT:-5400}
 COMMON="--sosonline-delay=3 --sosonline-quit=$Q"
-tests/session.sh 27100 "--sosonline-start=0 --sosonline-guests=0 --sosonline-seed=777 --sosonline-script=$S/host-walk.txt $COMMON $HOSTFLAGS" \
+tests/session.sh 27100 "--sosonline-dropinanywhere --sosonline-start=0 --sosonline-guests=0 --sosonline-seed=777 --sosonline-script=$S/host-walk.txt $COMMON $HOSTFLAGS" \
   "$COMMON $JOINFLAGS $AFLAGS" "${JOIN_DELAY:-30}" \
   "$COMMON $JOINFLAGS $BFLAGS" "${JOIN2_DELAY:-20}"
 sleep 10; while tasklist | grep -qi SeaOfStars; do sleep 3; done

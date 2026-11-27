@@ -90,8 +90,10 @@ internal static class PlayerBar
         bool covered = MenuStatus.Open.Any(m => !BarMenus.Contains(m));
         // Always on outside the game's full-screen menus. It used to fade 4 s after a change in play, which players
         // took for the bar having vanished (2026-11-26).
-        bool stay = !covered;
-        LogVisibility(covered ? $"hidden: under {string.Join(" > ", MenuStatus.Open)}"
+        // Status Bar Off hides it in play only: the title screen and this PC's pause screen always show who's there.
+        bool offInPlay = Settings.StatusBar == Settings.StatusBars.Off && !GameBridge.AtTitleScreen && s.Phase == Phase.Running && !LocalPause.IsOpen;
+        bool stay = !covered && !offInPlay;
+        LogVisibility(offInPlay ? "hidden: Status Bar is off" : covered ? $"hidden: under {string.Join(" > ", MenuStatus.Open)}"
             : $"shown, {rows.Count} rows{(GameBridge.AtTitleScreen ? ", title screen" : "")}");
         _alpha = Mathf.MoveTowards(_alpha, stay ? 1 : 0, Time.unscaledDeltaTime / FadeSeconds);
         _group.alpha = _alpha;

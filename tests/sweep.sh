@@ -42,7 +42,7 @@ session() {
   local name=$1 secs=$2 hf=$3 gf=$4
   clean
   echo "### $name" > "$OUT/$name.txt"
-  bash tests/session.sh 27100 "--sosonline-play=0 --sosonline-seed=777 $hf" "$gf" 25 >> "$OUT/$name.txt" 2>&1
+  bash tests/session.sh 27100 "--sosonline-dropinanywhere --sosonline-play=0 --sosonline-seed=777 $hf" "$gf" 25 >> "$OUT/$name.txt" 2>&1
   sleep "$secs"; taskkill //F //IM SeaOfStars.exe >/dev/null 2>&1; sleep 3
   for p in 27100 27101; do
     echo "--- $p" >> "$OUT/$name.txt"
@@ -63,6 +63,8 @@ run resync env DIVERGE=1600 QUIT=9500 EXTRA="--sosonline-encounter=1500 --sosonl
 run battle-live bash tests/battle-live.sh
 run dropin-catchup bash tests/dropin.sh
 run dropin-reload env HOSTFLAGS=--sosonline-nocatchup JOINFLAGS=--sosonline-nocatchup bash tests/dropin.sh
+run reconnect bash tests/reconnect.sh
+run dropin-door env DOOR=2400 HOSTFLAGS="--sosonline-nocatchup --sosonline-joinmode=auto" JOINFLAGS=--sosonline-nocatchup bash tests/dropin.sh
 run dropin-loadatjoin env HOSTFLAGS="--sosonline-nocatchup --sosonline-loadatjoin" JOINFLAGS=--sosonline-nocatchup bash tests/dropin.sh
 run dropin-owngame env JOINFLAGS=--sosonline-play=0 bash tests/dropin.sh
 run dropin-two bash tests/dropin-two.sh

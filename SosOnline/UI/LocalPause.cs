@@ -27,14 +27,13 @@ internal static class LocalPause
     /// <summary>"Pause for everyone" chosen: the next captured input of this PC's slot carries a pause press.</summary>
     private static bool _forwardStart;
 
-    private enum Page { Main, Options, ConfirmLeave, ConfirmReturn, NoSave, Battle, Players, ConfirmRemove }
+    private enum Page { Main, Options, ConfirmLeave, ConfirmReturn, NoSave, Battle, Players, ConfirmRemove, HostSettings }
 
     /// <summary>The player <see cref="Page.ConfirmRemove"/> asks about.</summary>
     private static int _removeSlot = -1;
     private static Page _playersFrom;
 
     private static Page _page;
-    private static int _returnEntry;
     private static Page _returnFrom;
     private static int _cursor;
     private static int _start = -2, _confirm, _back, _vertical, _horizontal;
@@ -65,9 +64,12 @@ internal static class LocalPause
         Init();
 
         if (IsOpen && (s.Phase != Phase.Running || s.CatchingUp)) Close("session not running");
-        if (IsOpen && (_page == Page.NoSave || _page == Page.ConfirmReturn) && !HostNoSave(s)) Close("return to area start no longer needed");
+        if (IsOpen && ((_page == Page.NoSave && !HostNoSave(s)) || (_page == Page.ConfirmReturn && !s.CanReturnToAreaStart)))
+            Close("return to area start no longer needed");
         if (IsOpen && _page == Page.Battle && !GameBridge.InBattle) Close("the battle ended");
-        if (IsOpen && (_page == Page.ConfirmRemove || _page == Page.Players) && !RemovableSlots(s).Any()) GoTo(_playersFrom, 0);
+        if (IsOpen && _page == Page.ConfirmRemove && !RemovableSlots(s).Contains(_removeSlot)) GoTo(Page.Players);
+        if (IsOpen && _page == Page.Players && !s.Peers.Any()) GoTo(_playersFrom);
+        if (IsOpen && _page == Page.HostSettings && !s.IsHost) GoTo(Page.Main);
 
         if (!IsOpen && own && _forwardStart)
         {
@@ -100,7 +102,7 @@ internal static class LocalPause
         if (s.Phase != Phase.Running || s.CatchingUp || !s.Engine.InSessionAt(s.LocalSlot, s.Engine.AppliedFrame)) return false;
         if (MenuStatus.Paused || MenuStatus.Path.Length > 0) return false;
         // The game has no pause in battles; the host gets its moderation page there.
-        if (GameBridge.InBattle) return s.IsHost && (RemovableSlots(s).Any() || s.AwaitingApproval.Any());
+        if (GameBridge.InBattle) return s.IsHost && s.Peers.Any();
         try
         {
             if (Manager<PauseManager>.instance?.isPaused ?? false) return false;
@@ -117,7 +119,8 @@ internal static class LocalPause
     {
         IsOpen = true;
         _page = GameBridge.InBattle ? Page.Battle : HostNoSave(Session.Instance) ? Page.NoSave : Page.Main;
-        _cursor = _page == Page.NoSave ? Entries().Count - 1 : 0; // on Back: a stray press mustn't undo the area
+        _cursor = 0; // Resume: a stray press does nothing
+        _cursorLabel = "Resume";
         _held.Clear();
         Plugin.Log.LogInfo($"[localpause] f{Session.Instance.Engine.AppliedFrame} opened (input frame {frame})");
         Session.Instance.SetLocalPaused(true);
@@ -169,6 +172,10 @@ internal static class LocalPause
         public System.Func<string> Value;
         public System.Action Action;
         public System.Action<int> Change;
+        /// <summary>Shown under the list while the cursor is on it, instead of the page's hint.</summary>
+        public string Hint;
+        /// <summary>A setting fixed while co-op runs: its value shows, but it can't change.</summary>
+        public bool Locked;
     }
 
     /// <summary>
@@ -209,21 +216,22 @@ internal static class LocalPause
         {
             case Page.Battle:
                 list.Add(new Entry { Label = "Resume", Action = () => Close("resume") });
-                if (BattleTurns.CanCommand && BattleTurns.CurrentSlot != s.LocalSlot)
-                    list.Add(new Entry { Label = "Take over this turn", Action = () => { s.TurnCommand(BattleTurns.CmdTakeOver); Close("take over turn"); } });
-                if (BattleTurns.CanCommand && BattleTurns.NextSlot() is int next and >= 0 && next != BattleTurns.CurrentSlot)
-                    list.Add(new Entry { Label = $"Pass turn to P{GameBridge.PlayerNumber(next)}", Action = () => { s.TurnCommand(BattleTurns.CmdPass); Close("pass turn"); } });
-                if (RemovableSlots(s).Any())
-                    list.Add(new Entry { Label = "Remove a player", Action = () => { _playersFrom = Page.Battle; GoTo(Page.Players, 0); } });
                 AddLetIn(s, list);
+                if (BattleTurns.CanCommand && BattleTurns.CurrentSlot != s.LocalSlot)
+                    list.Add(new Entry { Label = "Take This Turn", Action = () => { s.TurnCommand(BattleTurns.CmdTakeOver); Close("take over turn"); } });
+                if (BattleTurns.CanCommand && BattleTurns.NextSlot() is int next and >= 0 && next != BattleTurns.CurrentSlot)
+                    list.Add(new Entry { Label = $"Pass Turn to P{GameBridge.PlayerNumber(next)}", Action = () => { s.TurnCommand(BattleTurns.CmdPass); Close("pass turn"); } });
+                if (s.Peers.Any())
+                    list.Add(new Entry { Label = "Players", Action = () => { _playersFrom = Page.Battle; GoTo(Page.Players); } });
                 break;
             case Page.Players:
                 foreach (int slot in RemovableSlots(s))
                 {
                     int sl = slot;
-                    list.Add(new Entry { Label = $"P{GameBridge.PlayerNumber(sl)} {s.SlotName[sl]}", Action = () => { _removeSlot = sl; GoTo(Page.ConfirmRemove, 1); } });
+                    list.Add(new Entry { Label = PlayerLabel(s, sl), Action = () => { _removeSlot = sl; GoTo(Page.ConfirmRemove, "Back"); } });
                 }
-                list.Add(new Entry { Label = "Back", Action = () => GoTo(_playersFrom, _playersFrom == Page.Battle ? Entries(Page.Battle).Count - 1 : Entries(Page.Main).Count - 1) });
+                if (s.Peers.Any()) list.Add(new Entry { Label = "Ask for Logs", Hint = "Ask friends to send you their logs", Action = () => { s.AskForLogs(); Close("ask for logs"); } });
+                list.Add(new Entry { Label = "Back", Action = () => GoTo(_playersFrom, "Players") });
                 break;
             case Page.ConfirmRemove:
                 list.Add(new Entry
@@ -231,7 +239,7 @@ internal static class LocalPause
                     Label = "Remove",
                     Action = () => { s.RemovePlayer(_removeSlot); Close("remove player"); },
                 });
-                list.Add(new Entry { Label = "Back", Action = () => GoTo(Page.Players, 0) });
+                list.Add(new Entry { Label = "Back", Action = () => GoTo(Page.Players, PlayerLabel(s, _removeSlot)) });
                 break;
             case Page.ConfirmLeave:
                 list.Add(new Entry
@@ -244,64 +252,120 @@ internal static class LocalPause
                         Close(s.IsHost ? "end session" : "leave session");
                     },
                 });
-                list.Add(new Entry { Label = "Back", Action = () => GoTo(Page.Main, 2) });
+                list.Add(new Entry { Label = "Back", Action = () => GoTo(Page.Main, LeaveLabel(s)) });
                 break;
             case Page.ConfirmReturn:
                 list.Add(new Entry { Label = "Return", Action = () => { s.ReturnToAreaStart(); Close("return to area start"); } });
-                list.Add(new Entry { Label = "Back", Action = () => GoTo(_returnFrom, _returnEntry) });
+                list.Add(new Entry { Label = "Back", Action = () => GoTo(_returnFrom, "Return to Area Start") });
                 break;
             case Page.NoSave:
                 // The host, where the game doesn't allow saving, while a friend waits to join.
-                list.Add(new Entry { Label = "Return to area start", Action = () => { _returnFrom = Page.NoSave; _returnEntry = 0; GoTo(Page.ConfirmReturn, 1); } });
+                list.Add(new Entry { Label = "Resume", Action = () => Close("resume") });
+                AddLetIn(s, list);
+                list.Add(new Entry { Label = "Return to Area Start", Action = () => { _returnFrom = Page.NoSave; GoTo(Page.ConfirmReturn, "Back"); } });
                 // The game's own pause, shared as on the main page. Not in battles: the game has no pause there and
                 // ignores Start (host and guests alike; findings §8), so the entry would do nothing.
                 if (!GameBridge.InBattle)
-                    list.Add(new Entry { Label = "Pause for everyone", Action = () => { Close("pause for everyone"); _forwardStart = true; } });
-                AddLetIn(s, list);
-                list.Add(new Entry { Label = "Back", Action = () => Close("back") });
+                    list.Add(new Entry { Label = "Pause for Everyone", Action = () => { Close("pause for everyone"); _forwardStart = true; } });
                 break;
             case Page.Options:
-                foreach (var (field, label) in LocalOptions.Rows)
+                if (LocalOptions.Available)
+                    foreach (var (field, label) in LocalOptions.Rows)
+                    {
+                        var f = field;
+                        list.Add(new Entry { Label = label, Value = () => LocalOptions.Value(f), Change = dir => LocalOptions.Change(f, dir) });
+                    }
+                list.Add(new Entry
                 {
-                    var f = field;
-                    list.Add(new Entry { Label = label, Value = () => LocalOptions.Value(f), Change = dir => LocalOptions.Change(f, dir) });
-                }
-                list.Add(new Entry { Label = "Back", Action = () => GoTo(Page.Main, 1) });
+                    Label = SettingLabels.StatusBar,
+                    Hint = SettingLabels.Help(SettingLabels.StatusBar),
+                    Value = () => Settings.StatusBar.ToString(),
+                    Change = dir => Settings.StatusBar = SettingLabels.NextStatusBar(Settings.StatusBar, dir),
+                });
+                list.Add(new Entry { Label = "Back", Action = () => GoTo(Page.Main, "Options") });
+                break;
+            case Page.HostSettings:
+                list.Add(new Entry
+                {
+                    Label = SettingLabels.OpenOnStart,
+                    Hint = SettingLabels.Help(SettingLabels.OpenOnStart),
+                    Value = () => SettingLabels.OnOff(Settings.OpenOnStart),
+                    Change = _ => Settings.OpenOnStart = !Settings.OpenOnStart,
+                });
+                list.Add(new Entry
+                {
+                    Label = SettingLabels.Rejoin,
+                    Hint = SettingLabels.Help(SettingLabels.Rejoin),
+                    Value = () => SettingLabels.RejoinValue(Settings.Rejoin),
+                    Change = dir => Settings.Rejoin = SettingLabels.NextRejoin(Settings.Rejoin, dir),
+                });
+                // Fixed for the run: shown, not changeable (every PC would have to switch on the same frame).
+                list.Add(new Entry { Label = SettingLabels.BattleTurns, Hint = SettingLabels.Locked, Locked = true, Value = () => SettingLabels.BattleTurnsValue(BattleTurns.OwnTurns) });
+                list.Add(new Entry { Label = SettingLabels.InputDelay, Hint = SettingLabels.Locked, Locked = true, Value = () => SettingLabels.DelayValue(s.Engine.Delay) });
+                list.Add(new Entry { Label = "Back", Action = () => GoTo(Page.Main, "Host Settings") });
                 break;
             default:
                 list.Add(new Entry { Label = "Resume", Action = () => Close("resume") });
-                if (LocalOptions.Available) list.Add(new Entry { Label = "Options", Action = () => GoTo(Page.Options, 0) });
+                AddLetIn(s, list);
+                // A friend joins at the next area entry; this lets them in now (the area starts over).
+                if (s.CanReturnToAreaStart)
+                    list.Add(new Entry { Label = "Return to Area Start", Action = () => { _returnFrom = Page.Main; GoTo(Page.ConfirmReturn, "Back"); } });
+                list.Add(new Entry { Label = "Options", Action = () => GoTo(Page.Options) });
                 // The game's own pause menu (Assign Players, the game's Options, return to title), shared as before:
                 // the next synced input carries a pause press that this screen lets through.
-                list.Add(new Entry { Label = "Pause for everyone", Action = () => { Close("pause for everyone"); _forwardStart = true; } });
-                list.Add(new Entry { Label = s.IsHost ? "End co-op" : "Leave co-op", Action = () => GoTo(Page.ConfirmLeave, 1) });
-                // Last, so the cursor positions above stay as they were.
-                if (!s.IsHost) list.Add(new Entry { Label = "Send logs to host", Action = () => { s.SendLogsToHost(); Close("send logs"); } });
-                else if (s.Peers.Any()) list.Add(new Entry { Label = "Ask for logs", Action = () => { s.AskForLogs(); Close("ask for logs"); } });
-                if (s.IsHost && RemovableSlots(s).Any())
-                    list.Add(new Entry { Label = "Remove a player", Action = () => { _playersFrom = Page.Main; GoTo(Page.Players, 0); } });
-                AddLetIn(s, list);
+                list.Add(new Entry { Label = "Pause for Everyone", Action = () => { Close("pause for everyone"); _forwardStart = true; } });
+                if (s.IsHost)
+                {
+                    if (s.Peers.Any()) list.Add(new Entry { Label = "Players", Action = () => { _playersFrom = Page.Main; GoTo(Page.Players); } });
+                    list.Add(new Entry { Label = "Host Settings", Action = () => GoTo(Page.HostSettings) });
+                }
+                else list.Add(new Entry { Label = "Send Logs to Host", Action = () => { s.SendLogsToHost(); Close("send logs"); } });
+                // Last: the one entry that ends something.
+                list.Add(new Entry { Label = LeaveLabel(s), Action = () => GoTo(Page.ConfirmLeave, "Back") });
                 break;
         }
         return list;
     }
 
-    /// <summary>Host: one entry per friend waiting to be let in (join mode Ask). Last, so the cursor positions above stay.</summary>
+    private static string LeaveLabel(Session s) => s.IsHost ? "End Co-op" : "Leave Co-op";
+
+    private static string PlayerLabel(Session s, int slot) =>
+        slot < 0 ? "" : $"P{GameBridge.PlayerNumber(slot)} {PlayerNames.Shorten(s.SlotName[slot] ?? "", 16)}";
+
+    /// <summary>Host: one entry per friend waiting to be let in (Rejoin: Require Approval), right under Resume.</summary>
     private static void AddLetIn(Session s, List<Entry> list)
     {
         if (!s.IsHost) return;
         foreach (var (id, _, name) in s.AwaitingApproval.ToList())
         {
             ulong who = id;
-            list.Add(new Entry { Label = $"Let {PlayerNames.Shorten(name, 16)} in", Action = () => { s.LetIn(who); Close("let in"); } });
+            list.Add(new Entry { Label = $"Let {PlayerNames.Shorten(name, 16)} In", Action = () => { s.LetIn(who); Close("let in"); } });
         }
     }
 
-    private static void GoTo(Page page, int cursor)
+    /// <summary>The label the cursor is on: kept when entries come or go above it (a friend asking to join).</summary>
+    private static string _cursorLabel;
+
+    private static void GoTo(Page page, string label = null)
     {
         if (_page == Page.Options) LocalOptions.SaveIfChanged();
         _page = page;
-        _cursor = cursor;
+        var entries = Entries(page);
+        _cursor = label == null ? 0 : System.Math.Max(0, entries.FindIndex(e => e.Label == label));
+        _cursorLabel = entries.Count > 0 ? entries[System.Math.Min(_cursor, entries.Count - 1)].Label : null;
+    }
+
+    /// <summary>Puts the cursor back on its entry after the list changed, and remembers where it is.</summary>
+    private static void KeepCursor(List<Entry> entries)
+    {
+        if (entries.Count == 0) return;
+        if (_cursorLabel != null)
+        {
+            int i = entries.FindIndex(e => e.Label == _cursorLabel);
+            if (i >= 0) _cursor = i;
+        }
+        _cursor = Mathf.Clamp(_cursor, 0, entries.Count - 1);
+        _cursorLabel = entries[_cursor].Label;
     }
 
     private static InputSnapshot _raw;
@@ -309,6 +373,7 @@ internal static class LocalPause
     private static void Navigate(InputSnapshot raw)
     {
         var entries = Entries();
+        KeepCursor(entries);
         _raw = raw;
         try
         {
@@ -316,20 +381,26 @@ internal static class LocalPause
             if (Down(raw, _back))
             {
                 if (_page == Page.Main || _page == Page.NoSave || _page == Page.Battle) Close("resume (back)");
-                else if (_page == Page.ConfirmReturn) GoTo(_returnFrom, _returnEntry);
-                else if (_page == Page.Players) GoTo(_playersFrom, Entries(_playersFrom).Count - 1);
-                else if (_page == Page.ConfirmRemove) GoTo(Page.Players, 0);
-                else GoTo(Page.Main, _page == Page.Options && LocalOptions.Available ? 1 : 0);
+                else
+                {
+                    // Back does what the page's Back entry does.
+                    var back = entries.Find(x => x.Label == "Back");
+                    if (back?.Action != null) back.Action();
+                    else GoTo(Page.Main);
+                }
                 return;
             }
             if (Down(raw, _vertical)) _cursor = (_cursor + entries.Count - 1) % entries.Count;
             if (NegDown(raw, _vertical)) _cursor = (_cursor + 1) % entries.Count;
             var e = entries[Mathf.Clamp(_cursor, 0, entries.Count - 1)];
+            _cursorLabel = e.Label;
             if (e.Change != null)
             {
                 if (Down(raw, _horizontal) || Repeat(raw, _horizontal, false)) e.Change(1);
                 else if (NegDown(raw, _horizontal) || Repeat(raw, _horizontal, true)) e.Change(-1);
             }
+            // A setting with a few values also moves on with Confirm, as on the title screen.
+            if (Down(raw, _confirm) && e.Action == null && e.Change != null && e.Hint != null && !e.Locked) e.Change(1);
             if (Down(raw, _confirm) && e.Action != null)
             {
                 Plugin.Log.LogInfo($"[localpause] f{Session.Instance.Engine.AppliedFrame} chose {e.Label}");
@@ -363,13 +434,14 @@ internal static class LocalPause
         if (!show) { _shown = null; return; }
 
         var entries = Entries();
+        KeepCursor(entries);
         string key = $"{_page}|{_cursor}|{string.Join("|", entries.ConvertAll(e => e.Label + "=" + e.Value?.Invoke()))}";
         if (key == _shown) return;
         _shown = key;
 
         var s = Session.Instance;
         _title.text = Title(s);
-        _hint.text = GameUi.Drawable(Hint(s), true);
+        _hint.text = GameUi.Drawable(EntryHint(entries) ?? Hint(s), true);
 
         while (_rows.Count < entries.Count) _rows.Add(Row(_rows.Count));
         for (int i = 0; i < _rows.Count; i++)
@@ -379,7 +451,7 @@ internal static class LocalPause
             if (!on) continue;
             _rows[i].text.text = GameUi.Drawable(entries[i].Label);
             string value = entries[i].Value?.Invoke();
-            _rows[i].value.text = string.IsNullOrEmpty(value) ? "" : GameUi.Drawable($"< {value} >");
+            _rows[i].value.text = string.IsNullOrEmpty(value) ? "" : GameUi.Drawable(entries[i].Locked ? value : $"< {value} >");
             _rows[i].cursor.gameObject.SetActive(i == _cursor);
             _rows[i].text.color = _rows[i].value.color = i == _cursor ? GameUi.TextMain : GameUi.TextSecondary;
         }
@@ -389,13 +461,17 @@ internal static class LocalPause
         _panel.sizeDelta = new Vector2(W, y + 11 + 22);
     }
 
+    private static string EntryHint(List<Entry> entries) =>
+        _cursor >= 0 && _cursor < entries.Count ? entries[_cursor].Hint : null;
+
     private static string Title(Session s) => _page switch
     {
         Page.Options => "Options",
+        Page.HostSettings => "Host Settings",
         Page.ConfirmLeave => s.IsHost ? "End co-op for everyone?" : "Leave co-op?",
         Page.ConfirmReturn => "Return to the area start?",
         Page.Battle => "Battle",
-        Page.Players => "Remove a player",
+        Page.Players => "Players",
         Page.ConfirmRemove => $"Remove P{GameBridge.PlayerNumber(_removeSlot)} {Session.Instance.SlotName[Mathf.Max(0, _removeSlot)]}?",
         _ => "Paused",
     };
@@ -407,7 +483,9 @@ internal static class LocalPause
         Page.ConfirmReturn => "Progress since entering this area will be lost.",
         Page.NoSave => "Only you are paused. The game keeps running.",
         Page.Battle => BattleTurns.CurrentSlot >= 0 && BattleTurns.Choosing ? $"Waiting for P{GameBridge.PlayerNumber(BattleTurns.CurrentSlot)} to choose." : "The battle keeps going.",
-        Page.Players or Page.ConfirmRemove => "The AI plays their character. They play solo.",
+        Page.Players => "Choose a player to remove them from co-op",
+        Page.ConfirmRemove => "The AI plays their character. They play solo.",
+        Page.HostSettings => "Only you see these. Some are set when co-op starts.",
         _ => "Only you are paused. The game keeps running.",
     };
 
@@ -455,7 +533,7 @@ internal static class LocalPause
         if (!IsOpen || GameUi.Ready) return;
         var entries = Entries();
         var s = Session.Instance;
-        var lines = new List<string> { Title(s), Hint(s) };
+        var lines = new List<string> { Title(s), EntryHint(entries) ?? Hint(s) };
         for (int i = 0; i < entries.Count; i++)
         {
             string value = entries[i].Value?.Invoke();

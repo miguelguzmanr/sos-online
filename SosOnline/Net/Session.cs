@@ -41,9 +41,11 @@ internal sealed class Session
         /// <summary>When the host accepted this peer: round trips for pings sent before don't count.</summary>
         public double JoinedAt;
         public bool Ready;
-        /// <summary>Joined while a session was running: drops in at the next moment the game allows saving.</summary>
+        /// <summary>Joined while a session was running: drops in at the next area entry.</summary>
         public bool Pending;
-        /// <summary>Host: may drop in. With <see cref="Settings.JoinModes.Ask"/> a new joiner waits until the host lets them in.</summary>
+        /// <summary>Its game has finished starting: a drop-in save can be loaded there right away.</summary>
+        public bool Booted;
+        /// <summary>Host: may drop in. With <see cref="Settings.RejoinModes.Ask"/> a new joiner waits until the host lets them in.</summary>
         public bool Approved = true;
         /// <summary>Last lockstep frame we received this guest's input for.</summary>
         public int LastInputFrame = -1;
@@ -123,7 +125,7 @@ internal sealed class Session
             if (c.Live) return ("Joining the party", 1, done, 0, c.Rate, 0);
             // The session keeps moving at 60 frames a second while this PC replays.
             double eta = c.Rate > 70 ? left / (c.Rate - 60) : -1;
-            return ("Catching up", done / (float)Math.Max(1, done + left), done, left, c.Rate, eta);
+            return ("Joining", done / (float)Math.Max(1, done + left), done, left, c.Rate, eta);
         }
     }
 
@@ -165,7 +167,7 @@ internal sealed class Session
         _peers.Values.Select(p => (p.Slot, p.Name, p.RttMs, p.Ready));
 
     public IEnumerable<string> PendingNames => _peers.Values.Where(p => p.Pending).Select(p => p.Name);
-    /// <summary>Host: joiners waiting for the host to let them in (<see cref="Settings.JoinModes.Ask"/>).</summary>
+    /// <summary>Host: joiners waiting for the host to let them in (<see cref="Settings.RejoinModes.Ask"/>).</summary>
     public IEnumerable<(ulong id, int slot, string name)> AwaitingApproval =>
         _peers.Values.Where(p => p.Pending && !p.Approved).OrderBy(p => p.Slot).Select(p => (p.Id, p.Slot, p.Name));
     public bool HasPending => _peers.Values.Any(p => p.Pending);
@@ -208,7 +210,8 @@ internal sealed class Session
         return ids;
     }
 
-    private bool HasStage2Pending => _peers.Values.Any(p => p.Pending && p.Approved && !WantsCatchUp(p) && Now >= p.HoldUntil);
+    private bool HasStage2Pending => _peers.Values.Any(Stage2Ready);
+    private bool Stage2Ready(Peer p) => p.Pending && p.Approved && p.Booted && !WantsCatchUp(p) && Now >= p.HoldUntil;
 
     /// <summary>
     /// Re-syncs allowed in <see cref="ResyncWindow"/> seconds before the next drop-in waits <see cref="ResyncHold"/>
@@ -337,8 +340,8 @@ internal sealed class Session
     public void StartFromSave(int slotIndex, bool autoSave)
     {
         if (!IsHost || Phase != Phase.Lobby) return;
-        if (!GameBridge.AtTitleScreen) { SetError("Go to the Title screen first."); return; }
-        if (!ActionTable.Ready) { SetError("Input system not ready yet."); return; }
+        if (!GameBridge.AtTitleScreen) { SetError("Go to the title screen first"); return; }
+        if (!ActionTable.Ready) { SetError("The game isn't ready yet"); return; }
         int totw = DlcGate.WatchmakerAppId();
         if (DlcGate.SaveNeedsWatchmaker(Path.Combine(SaveMirror.OwnDir, SaveMirror.SlotFile(slotIndex, autoSave)))
             && _peers.Values.Any(p => totw == 0 || !p.Dlc.Contains(totw)))
@@ -486,16 +489,15 @@ internal sealed class Session
     /// <summary>
     /// Host: "End session" means the session is over, not back to solo with the lobby open. Before, everyone stayed
     /// connected, so the host's game saw a connected friend (a guest still dropping in, or any guest) and started a
-    /// new session from its gameplay right away. The lobby closes and Open to friends turns off, like "Close session".
+    /// new session from its gameplay right away. The lobby closes; Open on Start only opens one when the game starts.
     /// </summary>
     private void CloseAfterEnd()
     {
         if (!IsHost) return;
-        Settings.OpenToFriends = false;
         _closeAt = Now + CloseDelay;
         Status = "Co-op ended.";
-        Toast.Show("Co-op ended. Open to friends is now off.");
-        Plugin.Log.LogInfo($"[session] ended by the host: closing the lobby in {CloseDelay:F1} s; open to friends off");
+        Toast.Show("Co-op ended. You may continue playing.");
+        Plugin.Log.LogInfo($"[session] ended by the host: closing the lobby in {CloseDelay:F1} s");
     }
 
     // ------------------------------------------------------------------ guest
@@ -505,7 +507,7 @@ internal sealed class Session
         if (!EnsureSteam()) return;
         ulong lobby = SteamApi.FriendLobby(friendId);
         string friend = PlayerNames.Clean(SteamApi.FriendName(friendId), "Your friend");
-        if (lobby == 0) { SetError($"{friend} is not hosting a session."); return; }
+        if (lobby == 0) { SetError($"{friend} isn't hosting right now"); return; }
         JoinLobby(lobby, friend);
     }
 
@@ -525,7 +527,7 @@ internal sealed class Session
         _pendingCall = SteamApi.JoinLobbyAsync(lobby);
         Phase = Phase.JoiningLobby;
         Status = $"Joining {label ?? "co-op"}…";
-        Toast.Show(Status);
+        if (_reconnectUntil < 0) Toast.Show(Status);
     }
 
     public void JoinUdp(ushort hostPort)
@@ -540,6 +542,7 @@ internal sealed class Session
 
     public void Leave()
     {
+        StopReconnecting(null);
         if (!InSession) return;
         foreach (var peer in _peers.Values)
         {
@@ -563,7 +566,7 @@ internal sealed class Session
     /// <summary>Guest: zip this PC's logs and send them to the host (the player's own choice).</summary>
     public void SendLogsToHost()
     {
-        if (!InSession || IsHost) { Toast.Show("Join a session first"); return; }
+        if (!InSession || IsHost) { Toast.Show("Join a friend first"); return; }
         if (!LogShare.Begin()) { Toast.Show("Your logs are already on their way"); return; }
         Toast.Show("Packing your logs…");
     }
@@ -612,6 +615,8 @@ internal sealed class Session
         if (!InSession && SaveMirror.Active && GameBridge.AtTitleScreen)
             SaveMirror.SetActiveAndReload(false);
         AutoOpen();
+        TryReconnect();
+        SendBooted();
 
         if (!InSession) return;
         PollCallResults();
@@ -717,7 +722,7 @@ internal sealed class Session
             Plugin.Log.LogInfo($"[return] area entry save loaded (transfer {_transferId})");
         }
         if (_awaitingMirrorReload && SaveMirror.ReloadDone && !GameBridge.AtTitleScreen && !_readyAnywhere)
-            Status = "Ready! Go to the Title screen to start.";
+            Status = "Ready! Go to the title screen to start.";
         if (_awaitingMirrorReload && SaveMirror.ReloadDone && GameBridge.Booted && (_readyAnywhere || GameBridge.AtTitleScreen))
         {
             _awaitingMirrorReload = false;
@@ -752,7 +757,7 @@ internal sealed class Session
             int r = SteamApi.PollLobbyCreated(_pendingCall, out ulong lobby);
             if (r == 0) return;
             _pendingCall = 0;
-            if (r < 0) { SetError("Could not create a Steam lobby."); Reset(); return; }
+            if (r < 0) { SetError("Couldn't create a Steam lobby"); Reset(); return; }
             LobbyId = lobby;
             SteamApi.SetLobbyData(lobby, "sosonline", Protocol.Version.ToString());
             SteamApi.SetRichPresence("status", "Hosting co-op");
@@ -767,12 +772,12 @@ internal sealed class Session
             int r = SteamApi.PollLobbyEntered(_pendingCall, out ulong lobby);
             if (r == 0) return;
             _pendingCall = 0;
-            if (r < 0) { SetError("Could not join the lobby (full or closed)."); Reset(); return; }
+            if (r < 0) { SetError("Couldn't join. The game is full or closed."); Reset(); return; }
             LobbyId = lobby;
             HostId = SteamApi.LobbyOwner(lobby);
             if (SteamApi.GetLobbyData(lobby, "sosonline") != Protocol.Version.ToString())
             {
-                SetError("Version mismatch. Your mod version doesn't match the mod version of the host.");
+                SetError("Your mod version doesn't match the host's");
                 SteamApi.LeaveLobby(lobby);
                 Reset();
                 return;
@@ -837,6 +842,8 @@ internal sealed class Session
                 else if (gameVersion != (Application.version ?? "")) reason = $"different Sea of Stars version.";
                 else if (ActionTable.Ready && actionHash != 0 && actionHash != ActionTable.Hash) reason = "different game setup.";
                 else if (Phase == Phase.AwaitingReady) reason = "the game is starting. Try again in a moment.";
+                else if (Settings.Rejoin == Settings.RejoinModes.Off && (Phase == Phase.Running || HostInGameplay))
+                    reason = $"{SlotName[0]} is playing. Join when they're on the title screen.";
                 else if (Phase == Phase.Running && DlcGate.RunningGameNeedsWatchmaker() && !dlc.Contains(DlcGate.WatchmakerAppId()))
                     reason = "this save needs DLC you don't have";
                 int slot = Array.FindIndex(SlotPeer, 1, id => id == 0);
@@ -873,6 +880,11 @@ internal sealed class Session
             }
             case Msg.Ping: Pong(from, r); break;
             case Msg.Pong: OnPong(peer, r); break;
+            case Msg.Booted:
+                if (peer == null || peer.Booted) break;
+                peer.Booted = true;
+                Plugin.Log.LogInfo($"[dropin] {peer.Name}'s game has started");
+                break;
             case Msg.DlcOwned:
                 if (peer == null) break;
                 peer.Dlc = ReadDlc(r);
@@ -915,7 +927,7 @@ internal sealed class Session
                 if (peer == null || !peer.Pending) return;
                 Plugin.Log.LogWarning($"[catchup] {peer.Name}: replay diverged ({r.ReadString()}); reloading in place instead");
                 peer.CatchUp = CatchUpStep.None;
-                peer.ForceStage2 = true;
+                NeedsReload(peer);
                 break;
             case Msg.Bye:
                 if (peer != null) DropPeer(from, "left");
@@ -936,7 +948,7 @@ internal sealed class Session
                 string path = LogShare.Receive(from, peer.Name, id, index, count, piece);
                 if (path == null) return;
                 Plugin.Log.LogInfo($"[logs] received {peer.Name}'s logs: {path}");
-                Toast.Show($"Received {peer.Name}'s logs (Open logs folder)");
+                Toast.Show($"{peer.Name}'s logs are in Open Logs Folder");
                 var (w, ms) = Protocol.Begin(Msg.LogReceived);
                 Send(from, ms, true);
                 break;
@@ -978,23 +990,25 @@ internal sealed class Session
                 LocalSlot = r.ReadInt32();
                 WaitingForResync = r.ReadBoolean();
                 bool asking = r.ReadBoolean();
+                _hostTakesBack = r.ReadBoolean();
+                if (_reconnectUntil >= 0) { Plugin.Log.LogInfo("[session] reconnected to the host"); StopReconnecting(null); }
                 if (!_peers.ContainsKey(HostId))
                     _peers[HostId] = new Peer { Id = HostId, Slot = 0, Name = Transport.Describe(HostId), LastHeard = Now };
                 string host = SlotName[0] ?? Transport.Describe(HostId);
                 if (Phase == Phase.Lobby && WaitingForResync)
                 {
                     // Sent again when the host lets this PC in.
-                    if (_askedToJoin && !asking) { Toast.Show($"{host} let you in. Joining soon…"); Plugin.Log.LogInfo("[session] the host let this PC in"); }
-                    Status = asking ? $"Waiting for {host} to let you in…" : $"{host} is playing. Joining soon…";
+                    if (_askedToJoin && !asking) { Toast.Show($"{host} let you in. You'll join in the next area."); Plugin.Log.LogInfo("[session] the host let this PC in"); }
+                    Status = asking ? $"Waiting for {host} to let you in…" : $"{host} is playing. You'll join in the next area.";
                 }
                 if (Phase == Phase.Connecting)
                 {
                     Phase = Phase.Lobby;
                     Status = asking ? $"Waiting for {host} to let you in…"
-                        : WaitingForResync ? $"Connected as P{LocalSlot + 1}. You'll join as soon as the game allows saving."
+                        : WaitingForResync ? $"Connected as P{LocalSlot + 1}. You'll join in the next area."
                         : $"Connected as P{LocalSlot + 1}. Waiting for the host to start…";
                     Toast.Show(asking ? $"Asked {host} to let you in"
-                        : WaitingForResync ? $"Queued in {host}'s game. You'll join as soon as their game allows saving."
+                        : WaitingForResync ? $"Waiting in {host}'s game. You'll join in the next area."
                         : $"Joined {host}'s game as P{LocalSlot + 1}");
                     Plugin.Log.LogInfo($"[session] welcomed as slot {LocalSlot}{(asking ? ", waiting for the host to let this PC in" : "")}");
                 }
@@ -1005,12 +1019,18 @@ internal sealed class Session
                 Toast.Show($"{SlotName[0] ?? "The host"} received your logs. Thanks!");
                 break;
             case Msg.LogRequest:
-                Toast.Show($"{SlotName[0] ?? "The host"} asks for your logs (check the Online menu)");
+                Toast.Show($"{SlotName[0] ?? "The host"} asks for your logs. Pause to send them.");
                 break;
             case Msg.Reject:
                 SetError("Can't join: " + r.ReadString());
                 Leave();
                 break;
+            case Msg.PlayersRelease:
+            {
+                int at = r.ReadInt32();
+                if (Engine.Running) Engine.ReleasePlayers(at);
+                break;
+            }
             case Msg.Roster:
                 for (int s = 0; s < InputOverride.SlotCount; s++)
                 {
@@ -1045,7 +1065,7 @@ internal sealed class Session
                 _expectedFiles = r.ReadInt32();
                 _readyAnywhere = r.ReadBoolean();
                 if (id != _transferId) { _transferId = id; SaveMirror.BeginReceive(); _receivedFiles = 0; }
-                if (!GameBridge.AtTitleScreen && !_readyAnywhere) Status = "The host is starting. Go to the Title screen!";
+                if (!GameBridge.AtTitleScreen && !_readyAnywhere) Status = "The host is starting. Go to the title screen!";
                 SaveMirror.SetActiveAndReload(true);
                 _awaitingMirrorReload = true;
                 Phase = Phase.AwaitingReady;
@@ -1112,7 +1132,12 @@ internal sealed class Session
             case Msg.DropInSave:
             {
                 int at = r.ReadInt32();
-                if (Engine.Running) Engine.Schedule(at, () => SaveForDropIn(at));
+                string names = r.ReadString();
+                bool atEntry = r.ReadBoolean();
+                if (!Engine.Running) break;
+                if (!atEntry) Engine.Schedule(at, () => SaveForDropIn(at));
+                Engine.HoldPlayers(at);
+                Toast.Show($"{names} is joining. Hold on…");
                 break;
             }
             case Msg.DropInReload:
@@ -1127,6 +1152,7 @@ internal sealed class Session
                 var dlc = ReadDlc(r);
                 ReadRules(r);
                 if (!Engine.Running) break;
+                Engine.ReleasePlayers(at);
                 foreach (int s in slots) Engine.AddSlot(s, at);
                 ScheduleReloadInPlace(at, saveSlot, spawn, slots, timeBase, dlc, areaReturn);
                 break;
@@ -1200,6 +1226,7 @@ internal sealed class Session
                 break;
             }
             case Msg.Removed:
+                _hostTakesBack = false; // no reconnecting to a game we were removed from
                 Plugin.Log.LogInfo("[session] the host removed this PC from co-op");
                 Toast.Show("The host removed you from co-op");
                 break;
@@ -1215,7 +1242,7 @@ internal sealed class Session
             case Msg.Bye:
                 // Right after the host ended the session: the end toast already said so.
                 if (Now - _endedAt < 10) { Plugin.Log.LogInfo("[session] the host closed the ended session"); Status = "Co-op ended."; }
-                else SetError("The host closed the session.");
+                else SetError("The host ended co-op");
                 if (Phase == Phase.Running) StopLockstep("the host left");
                 Reset();
                 break;
@@ -1228,6 +1255,7 @@ internal sealed class Session
         w.Write(peer.Slot);
         w.Write(peer.Pending);
         w.Write(peer.Pending && !peer.Approved);
+        w.Write(Settings.Rejoin != Settings.RejoinModes.Off);
         Send(peer.Id, ms, true);
     }
 
@@ -1238,20 +1266,45 @@ internal sealed class Session
     /// </summary>
     private void ApplyJoinMode(Peer peer)
     {
-        var mode = Settings.JoinMode;
-        peer.Approved = mode != Settings.JoinModes.Ask;
-        if (mode != Settings.JoinModes.CatchUp) peer.ForceStage2 = true;
-        Plugin.Log.LogInfo($"[dropin] {peer.Name} asks to join (join mode {mode}){(peer.Approved ? "" : ": waiting for the host")}");
+        var mode = Settings.Rejoin;
+        peer.Approved = mode != Settings.RejoinModes.Ask;
+        if (mode != Settings.RejoinModes.CatchUp) peer.ForceStage2 = true;
+        Plugin.Log.LogInfo($"[dropin] {peer.Name} asks to join (rejoin {mode}){(peer.Approved ? "" : ": waiting for the host")}");
     }
 
-    /// <summary>Host (pause screen): lets a waiting friend in. Everyone reloads at the next moment the game allows saving.</summary>
+    /// <summary>
+    /// Host: a re-syncing guest (or a test joiner) can't come back by replay, so everyone would reload. With Ask that
+    /// waits until the host lets them in, as for a new joiner: a reload the host didn't choose could land mid-scene.
+    /// </summary>
+    private void NeedsReload(Peer peer)
+    {
+        peer.ForceStage2 = true;
+        if (Settings.Rejoin != Settings.RejoinModes.Ask || !peer.Approved) return;
+        peer.Approved = false;
+        SendWelcome(peer);
+        Toast.Show($"{peer.Name} needs a reload to rejoin. Pause to let them in.");
+        Plugin.Log.LogInfo($"[dropin] {peer.Name} rejoins by a reload: waiting for the host");
+    }
+
+    private bool _sentBooted;
+
+    /// <summary>Guest waiting to join: tell the host once this game has started, so a drop-in doesn't wait for it.</summary>
+    private void SendBooted()
+    {
+        if (Role != Role.Guest || Phase != Phase.Lobby || _sentBooted || !GameBridge.Booted || !_peers.ContainsKey(HostId)) return;
+        _sentBooted = true;
+        var (w, ms) = Protocol.Begin(Msg.Booted);
+        Send(HostId, ms, true);
+    }
+
+    /// <summary>Host (pause screen): lets a waiting friend in. Everyone reloads at the next area entry.</summary>
     public void LetIn(ulong id)
     {
         if (!IsHost || !_peers.TryGetValue(id, out var peer) || !peer.Pending || peer.Approved) return;
         peer.Approved = true;
         SendWelcome(peer);
         Plugin.Log.LogInfo($"[dropin] f{Engine.AppliedFrame} the host let {peer.Name} in");
-        Toast.Show(GameBridge.CanDropInNow ? $"{peer.Name} is joining…" : $"{peer.Name} joins when the game allows saving");
+        Toast.Show($"{peer.Name} joins in the next area");
     }
 
     private void BroadcastRoster()
@@ -1349,9 +1402,9 @@ internal sealed class Session
         }
         else
         {
-            SetError($"Lost connection to the host ({why}).");
-            if (Phase == Phase.Running) StopLockstep("lost the host");
-            Reset();
+            if (!UsingUdp) Transport.Disconnect(id);
+            LostHost(why);
+            return;
         }
         if (!UsingUdp) Transport.Disconnect(id);
     }
@@ -1561,7 +1614,8 @@ internal sealed class Session
         if (frame == _entryFrame)
         {
             _entryFrame = -1;
-            AreaLog.SaveAtEntry(frame, IsHost, IsHost ? _area : null, Engine);
+            bool saved = AreaLog.SaveAtEntry(frame, IsHost, IsHost ? _area : null, Engine);
+            if (IsHost && _dropIn == DropInStep.Saving && frame == _dropInSaveFrame) _dropInSlot = saved ? _area.SaveSlot : -1;
         }
         if (IsHost) _area.OnFrame(frame, InputOverride.Current);
         var snap = Sync.OnFrame(frame);
@@ -1588,7 +1642,7 @@ internal sealed class Session
             if (Rejoining) { RejoinFallBack("out of sync while joining"); return; }
             StopLockstep("out of sync while joining");
             WaitingForResync = true;
-            Status = "Couldn't catch up. Reloading to join…";
+            Status = "Reloading to join…";
             return;
         }
         if (Sync.Desynced && _desyncNotifiedFrame < 0 && !(TestHarness.TryArg("noresync", out _) && !IsHost))
@@ -1607,7 +1661,7 @@ internal sealed class Session
                 Status = "Out of sync. Reloading to rejoin…";
                 Toast.Show("Your game got out of sync. Re-syncing…");
             }
-            else SetError("Desync detected: " + Sync.LastDesyncReason);
+            else SetError("Out of sync: " + Sync.LastDesyncReason);
         }
         TestHarness.OnFrame(frame);
     }
@@ -1702,6 +1756,7 @@ internal sealed class Session
             }
             _loadReports.Remove(seq);
             ScheduleLoadRelease(seq, release, timeBase);
+            BeginDropInAtEntry(release);
         }
     }
 
@@ -1796,14 +1851,81 @@ internal sealed class Session
     private double _lastUpdate;
     private double _nextAutoOpen;
 
-    /// <summary>"Open to friends": a Steam lobby is open whenever this PC plays its own game, no hosting step.</summary>
+    /// <summary>Open on Start: a lobby opens once the game has started, no hosting step. Once per game start.</summary>
+    private bool _openedOnStart;
+
     private void AutoOpen()
     {
-        if (InSession || UsingUdp || !Settings.OpenToFriends) return;
-        if (Now < _nextAutoOpen || !GameBridge.Booted || GameBridge.AtTitleScreen || GameBridge.Party?.Leader == null) return;
+        if (_openedOnStart || UsingUdp || !Settings.OpenOnStart) return;
+        if (InSession) { _openedOnStart = true; return; } // the player hosted or joined first
+        if (Now < _nextAutoOpen || !GameBridge.Booted) return;
         _nextAutoOpen = Now + 15; // Steam unavailable or a failed lobby: try again later, not every frame
-        Plugin.Log.LogInfo("[session] open to friends: opening a lobby");
+        Plugin.Log.LogInfo("[session] open on start: opening a lobby");
         Host();
+        if (InSession) _openedOnStart = true;
+    }
+
+    // ------------------------------------------------------------------ reconnecting (guest)
+
+    /// <summary>Guest: the host takes players back in a game in progress (its Rejoin setting isn't Off).</summary>
+    private bool _hostTakesBack;
+
+    /// <summary>Seconds a guest keeps trying to reconnect after losing the host.</summary>
+    private const double ReconnectS = 60;
+    private double _reconnectUntil = -1, _nextReconnect;
+    private ulong _reconnectLobby, _reconnectHost;
+    private bool _reconnectUdp;
+    private string _reconnectName;
+
+    /// <summary>
+    /// Guest: the connection to the host is gone (not a leave or an end). This PC plays on alone, and, if the host
+    /// takes players back, tries to rejoin the same lobby for a minute; the host then lets it in like any joiner, by
+    /// the same reload, so nobody has to go to the title screen to regroup.
+    /// </summary>
+    private void LostHost(string why)
+    {
+        bool retry = Role == Role.Guest && _hostTakesBack && _closeAt < 0 && Now - _endedAt > 60;
+        _reconnectUdp = UsingUdp;
+        _reconnectLobby = LobbyId;
+        _reconnectHost = HostId;
+        _reconnectName = SlotName[0];
+        Plugin.Log.LogWarning($"[session] lost the host ({why}){(retry ? $"; reconnecting for {ReconnectS:F0} s" : "")}");
+        if (Engine.Running) StopLockstep("lost the host");
+        if (!UsingUdp && LobbyId != 0) SteamApi.LeaveLobby(LobbyId);
+        Reset();
+        if (!retry) { SetError($"Lost connection to the host ({why})"); return; }
+        _reconnectUntil = Now + ReconnectS;
+        _nextReconnect = Now + 3;
+        Status = $"Lost connection to {_reconnectName ?? "the host"}. Reconnecting…";
+        Toast.Show(Status);
+    }
+
+    private void TryReconnect()
+    {
+        if (_reconnectUntil < 0) return;
+        if (InSession)
+        {
+            // An attempt the host hasn't answered (it was still dropping us, or the lobby is gone): give it up and try again.
+            if (Role != Role.Guest || Phase != Phase.Connecting || Now < _nextReconnect) return;
+            Plugin.Log.LogInfo("[session] no answer from the host yet");
+            if (!UsingUdp && LobbyId != 0) SteamApi.LeaveLobby(LobbyId);
+            Reset();
+        }
+        if (Now > _reconnectUntil) { StopReconnecting($"Couldn't reconnect to {_reconnectName ?? "the host"}"); return; }
+        if (Now < _nextReconnect || !GameBridge.Booted || GameBridge.LoadingLevel) return;
+        _nextReconnect = Now + 5;
+        Plugin.Log.LogInfo("[session] trying to reconnect to the host");
+        if (_reconnectUdp) JoinUdp((ushort)_reconnectHost);
+        else JoinLobby(_reconnectLobby, _reconnectName);
+    }
+
+    private void StopReconnecting(string toast)
+    {
+        if (_reconnectUntil < 0) return;
+        _reconnectUntil = -1;
+        if (toast == null) return;
+        Plugin.Log.LogInfo($"[session] {toast}");
+        Toast.Show(toast);
     }
 
     /// <summary>The host plays its own game (not the title screen) with no lockstep running.</summary>
@@ -1871,8 +1993,17 @@ internal sealed class Session
         // place (Stage 2) at the next moment the game allows saving. A cause that reproduces in the replay makes the
         // replay diverge (CatchUpFailed: reload); one that keeps coming back live is capped by ResyncLimit. (A "same
         // point again" rule was dropped: a guest merges well past its divergence, so it could never apply.)
+        if (Settings.Rejoin == Settings.RejoinModes.Off)
+        {
+            Plugin.Log.LogInfo($"[resync] {peer.Name} left the run at f{Engine.AppliedFrame}; rejoin is off");
+            var (w, ms) = Protocol.Begin(Msg.Reject);
+            w.Write("your game went out of sync. Regroup at the title screen.");
+            Send(peer.Id, ms, true);
+            DropPeer(peer.Id, "went out of sync");
+            return;
+        }
         bool replay = CatchUpEnabled && _area.Valid;
-        peer.ForceStage2 = !replay;
+        if (!replay) NeedsReload(peer);
         string how = replay ? $"by replay from f{_area.L}" : $"with a reload ({(CatchUpEnabled ? _area.InvalidReason : "replay off")})";
         Plugin.Log.LogInfo($"[resync] {peer.Name} left the run at f{Engine.AppliedFrame}; rejoins {how}");
     }
@@ -2079,21 +2210,20 @@ internal sealed class Session
 
     /// <summary>Silence after which the host drops a guest that holds up the simulation.</summary>
     public const int SilentPeerDropMs = 2000;
+    /// <summary>Guest: no input from the host for this long means the host is gone (it drops a silent guest after 2 s).</summary>
+    public const int HostSilentMs = 10000;
 
     /// <summary>
     /// The engine is waiting for input. Host: drop a missing guest at once if the transport reports the connection
     /// lost, otherwise after <see cref="SilentPeerDropMs"/> of silence; the others continue without them.
-    /// Guest: stop at once if the connection to the host is lost.
+    /// Guest: stop at once if the connection to the host is lost, otherwise after <see cref="HostSilentMs"/>.
     /// </summary>
     private void OnStalled(List<int> missing, long waitedMs)
     {
         if (!IsHost)
         {
-            if (Transport != null && Transport.IsLost(HostId))
-            {
-                SetError("Lost connection to the host.");
-                StopLockstep("host lost");
-            }
+            if (Transport != null && Transport.IsLost(HostId)) LostHost("connection lost");
+            else if (waitedMs >= HostSilentMs) LostHost($"no input for {waitedMs / 1000} s");
             return;
         }
         foreach (int slot in missing)
@@ -2135,46 +2265,49 @@ internal sealed class Session
         {
             case DropInStep.None:
             {
-                if (!HasStage2Pending) { _saveableFrames = 0; return; }
-                // Free gameplay where the game itself allows saving (no battle, cutscene or loading), and no battle
-                // for a few seconds (battles in rounds).
+                // Started at the next area entry (BeginDropInAtEntry), not here. Test scripts that walk inside one area
+                // keep the old trigger (--sosonline-dropinanywhere): a fresh autosave once the game allows saving.
+                if (!TestHarness.TryArg("dropinanywhere", out _) || !HasStage2Pending) { _saveableFrames = 0; return; }
                 bool settled = Engine.AppliedFrame - _lastBattleFrame >= BattleSettleFrames;
                 _saveableFrames = GameBridge.CanDropInNow && settled ? _saveableFrames + 1 : 0;
                 if (_saveableFrames < 30) return;
                 _saveableFrames = 0;
-                // A joiner catching up would miss this reload: it comes in with it instead.
-                foreach (var p in _peers.Values.Where(p => p.Pending && p.CatchUp != CatchUpStep.None)) CancelCatchUp(p, "a reload in place is starting");
+                foreach (var p in _peers.Values.Where(p => p.Pending && p.CatchUp != CatchUpStep.None).ToList()) CancelCatchUp(p, "a reload in place is starting");
                 _joiners.Clear();
-                _joiners.AddRange(_peers.Values.Where(p => p.Pending && p.Approved && Now >= p.HoldUntil).Select(p => p.Id));
-                // Guests can be up to Delay + 1 frames ahead of us; they get this before any input that takes them further.
+                _joiners.AddRange(_peers.Values.Where(Stage2Ready).Select(p => p.Id));
+                if (_joiners.Count == 0) return;
                 _dropInSaveFrame = Engine.AppliedFrame + Engine.Delay + 3;
                 _dropInSlot = -1;
-                _dropInLevel = GameBridge.CurrentLevelId;
+                string names = string.Join(", ", _joiners.Select(id => _peers[id].Name));
                 foreach (var peer in _peers.Values.Where(p => !p.Pending))
                 {
                     var (w, ms) = Protocol.Begin(Msg.DropInSave);
                     w.Write(_dropInSaveFrame);
+                    w.Write(names);
+                    w.Write(false);
                     Send(peer.Id, ms, true);
                 }
                 int at = _dropInSaveFrame;
                 Engine.Schedule(at, () => SaveForDropIn(at));
+                Engine.HoldPlayers(at);
                 _dropIn = DropInStep.Saving;
-                string names = string.Join(", ", _joiners.Select(id => _peers[id].Name));
-                Toast.Show($"Joining: {names}…");
-                Plugin.Log.LogInfo($"[dropin] {names}: autosave at f{at}");
+                Toast.Show($"{names} is joining. Hold on…");
+                Plugin.Log.LogInfo($"[dropin] {names}: autosave at f{at} (test: anywhere), players held until the reload");
                 break;
             }
 
             case DropInStep.Saving:
                 if (Engine.AppliedFrame < _dropInSaveFrame || GameBridge.Saving) return;
-                if (_joiners.Count == 0) { _dropIn = DropInStep.None; return; }
+                if (_joiners.Count == 0) { CancelDropIn("nobody is joining any more"); return; }
                 if (_dropInSlot < 0)
                 {
-                    // Every PC tried to save on the same frame and failed the same way; start over.
-                    Plugin.Log.LogWarning("[dropin] autosave failed, retrying");
-                    _dropIn = DropInStep.None;
+                    // Every PC tried to save on the same frame and failed the same way (a scene at the area entry):
+                    // the next area entry tries again.
+                    Plugin.Log.LogWarning("[dropin] no autosave at the area entry; waiting for the next one");
+                    CancelDropIn("the game didn't save at the area entry");
                     return;
                 }
+                _dropInLevel = GameBridge.CurrentLevelId;
                 int files = SendSaveFiles(_joiners.Select(id => _peers[id]), true);
                 Plugin.Log.LogInfo($"[dropin] autosave slot {_dropInSlot} done at f{Engine.AppliedFrame}; sent {files} files to {_joiners.Count} joiner(s)");
                 _dropIn = DropInStep.Sending;
@@ -2182,34 +2315,57 @@ internal sealed class Session
 
             case DropInStep.Sending:
             {
-                if (_joiners.Count == 0) { _dropIn = DropInStep.None; return; }
+                if (_joiners.Count == 0) { CancelDropIn("nobody is joining any more"); return; }
+                if (GameBridge.CurrentLevelId != _dropInLevel) { CancelDropIn("the party changed area since the autosave"); return; }
+                // Held players can't start a battle or a scene, but an enemy or a script can: let them play it out.
+                if (!GameBridge.CanDropInNow) { CancelDropIn($"{GameBridge.DropInBlocker ?? "a battle or scene"} started"); return; }
+                if (Engine.AppliedFrame - _dropInSaveFrame > HoldTimeoutFrames)
+                {
+                    // The joiners take long (a slow transfer): let everyone play; the next area entry tries again.
+                    CancelDropIn($"the joiners weren't ready after {HoldTimeoutFrames / 60} s");
+                    return;
+                }
                 if (_joiners.Any(id => !_peers[id].Ready)) return;
                 // The guests' own autosaves must be written too (spike A: 120 frames is plenty).
                 if (Engine.AppliedFrame < _dropInSaveFrame + 120) return;
-                if (GameBridge.CurrentLevelId != _dropInLevel)
-                {
-                    Plugin.Log.LogInfo("[dropin] the party changed area since the autosave; saving again");
-                    // Out of the queue: with the new area's log a joiner may now catch up instead (Stage 3).
-                    _joiners.Clear();
-                    _dropIn = DropInStep.None;
-                    return;
-                }
-                if (!GameBridge.CanDropInNow) return; // a battle or cutscene started: wait for it to end
-                if (Engine.AppliedFrame - _dropInSaveFrame > StaleDropInSaveFrames)
-                {
-                    // The joiners took long (booting, a slow transfer). Reloading this save would undo everything
-                    // since; take a fresh one, which a ready joiner applies in a moment.
-                    Plugin.Log.LogInfo($"[dropin] autosave from f{_dropInSaveFrame} is stale at f{Engine.AppliedFrame}; saving again");
-                    _joiners.Clear();
-                    _dropIn = DropInStep.None;
-                    _saveableFrames = 30;
-                    return;
-                }
                 JoinNow();
                 _dropIn = DropInStep.None;
                 break;
             }
         }
+    }
+
+    /// <summary>
+    /// Host, while scheduling a level load's release on <paramref name="release"/>: friends waiting for a reload join
+    /// with this area entry. Every PC autosaves on that frame anyway (the game's own save point for the area), and
+    /// players hold still from it until the reload, so the reload undoes nothing. A drop-in anywhere else reloaded a
+    /// save the game itself never makes, mid-room: room state the save doesn't keep (a placed stone and the wall it
+    /// raised, 2026-11-27) came back unsolved.
+    /// </summary>
+    private void BeginDropInAtEntry(int release)
+    {
+        if (!IsHost || Phase != Phase.Running || _dropIn != DropInStep.None || _return != null || !HasStage2Pending) return;
+        // A joiner catching up would miss this reload: it comes in with it instead.
+        foreach (var p in _peers.Values.Where(p => p.Pending && p.CatchUp != CatchUpStep.None).ToList()) CancelCatchUp(p, "a reload in place is starting");
+        _joiners.Clear();
+        _joiners.AddRange(_peers.Values.Where(Stage2Ready).Select(p => p.Id));
+        if (_joiners.Count == 0) return;
+        _dropInSaveFrame = release;
+        _dropInSlot = -1;
+        _dropInLevel = null;
+        string names = string.Join(", ", _joiners.Select(id => _peers[id].Name));
+        foreach (var peer in _peers.Values.Where(p => !p.Pending))
+        {
+            var (w, ms) = Protocol.Begin(Msg.DropInSave);
+            w.Write(release);
+            w.Write(names);
+            w.Write(true);
+            Send(peer.Id, ms, true);
+        }
+        Engine.HoldPlayers(release);
+        _dropIn = DropInStep.Saving;
+        Toast.Show($"{names} is joining. Hold on…");
+        Plugin.Log.LogInfo($"[dropin] {names}: join with the area entry at f{release}, players held until the reload");
     }
 
     // ------------------------------------------------------------------ return to the area start
@@ -2309,8 +2465,27 @@ internal sealed class Session
     /// <summary>Seconds to wait for every PC to have the area entry save before giving up.</summary>
     private const double ReturnTimeoutS = 60;
 
-    /// <summary>A drop-in autosave older than this (frames) when the joiners are ready is replaced by a fresh one.</summary>
-    private const int StaleDropInSaveFrames = 300;
+    /// <summary>Frames players stay held for joiners that aren't ready, before everyone plays on.</summary>
+    private const int HoldTimeoutFrames = 20 * 60;
+
+    /// <summary>
+    /// Host: the drop-in under way stops before its reload. Everyone is released a few frames ahead (every PC gets
+    /// the frame before reaching it), and the joiners wait for the next try.
+    /// </summary>
+    private void CancelDropIn(string why)
+    {
+        int at = Engine.AppliedFrame + Engine.Delay + 3;
+        Engine.ReleasePlayers(at);
+        foreach (var peer in _peers.Values.Where(p => !p.Pending))
+        {
+            var (w, ms) = Protocol.Begin(Msg.PlayersRelease);
+            w.Write(at);
+            Send(peer.Id, ms, true);
+        }
+        Plugin.Log.LogInfo($"[dropin] f{Engine.AppliedFrame} stopped before the reload ({why}); players released after f{at}");
+        _joiners.Clear();
+        _dropIn = DropInStep.None;
+    }
 
     /// <summary>Every PC in the session, on the agreed frame: autosave for the drop-in.</summary>
     private void SaveForDropIn(int frame)
@@ -2326,6 +2501,7 @@ internal sealed class Session
     private void JoinNow(PartySpawn spawnAt = null, bool areaReturn = false)
     {
         int at = Engine.AppliedFrame + Engine.Delay + 3;
+        Engine.ReleasePlayers(at);
         var spawn = spawnAt ?? GameBridge.CaptureParty();
         var slots = _joiners.Select(id => _peers[id].Slot).OrderBy(s => s).ToList();
         _area.Invalidate("a player joined");
@@ -2410,6 +2586,8 @@ internal sealed class Session
         _awaitingMirrorReload = false;
         Plugin.Log.LogInfo($"[dropin] joining at f{at}, reload slot {saveSlot}, spawn {spawn}");
         BeginLockstep(seed, delay, occupied, at, playerIndex, double.NaN, () => { DlcGate.Apply(dlc, at); ReloadInPlace(at, saveSlot, spawn, timeBase); });
+        // The others hold still up to the join frame; so does this PC on it.
+        Engine.HoldPlayers(at - 1, at);
     }
 
     /// <summary>Every PC already in the session: on the join frame, register the new slots and reload in place.</summary>
@@ -2460,7 +2638,7 @@ internal sealed class Session
             var (w, ms) = Protocol.Begin(Msg.DropInAbort);
             Send(peer.Id, ms, true);
         }
-        Toast.Show($"{string.Join(", ", _peers.Values.Where(p => slots.Contains(p.Slot)).Select(p => p.Name))} queued to join after this");
+        Toast.Show($"{string.Join(", ", _peers.Values.Where(p => slots.Contains(p.Slot)).Select(p => p.Name))} will join after this");
     }
 
     private void ReloadInPlace(int frame, int saveSlot, PartySpawn spawn, double timeBase)
@@ -2484,7 +2662,7 @@ internal sealed class Session
         _reloadSpawn = spawn;
         Plugin.Log.LogInfo($"[dropin] f{frame} reloading autosave {saveSlot} in place");
         if (!GameBridge.ReloadInPlace(saveSlot, true, spawn?.Leader, spawn?.Angle ?? -1))
-            SetError("Could not reload the autosave for joining.");
+            SetError("Couldn't load the autosave to join");
     }
 
     /// <summary>Starts the auto-join again (after an in-place reload removed the co-op players).</summary>
@@ -2576,7 +2754,7 @@ internal sealed class Session
                     }
                     if (!peer.Ready)
                     {
-                        if (now - peer.CatchUpSince > CatchUpTimeoutS) CancelCatchUp(peer, "the save transfer took too long");
+                        if (now - peer.CatchUpSince > CatchUpTimeoutS) { CancelCatchUp(peer, "the save transfer took too long"); NeedsReload(peer); }
                         break;
                     }
                     SendCatchUp(peer);
@@ -2584,7 +2762,7 @@ internal sealed class Session
                     break;
 
                 case CatchUpStep.Running:
-                    if (now - peer.CatchUpSince > CatchUpTimeoutS) CancelCatchUp(peer, "catching up took too long");
+                    if (now - peer.CatchUpSince > CatchUpTimeoutS) { CancelCatchUp(peer, "catching up took too long"); NeedsReload(peer); }
                     break;
             }
         }
@@ -2744,7 +2922,7 @@ internal sealed class Session
         // The save's load is load <seq> of the session's count; it ends on frame L, as it did for everyone.
         _loadSeq = seq - 1;
         ScheduleLoadRelease(seq, L, clockBase);
-        Status = Rejoining ? "Rejoining the party…" : "Catching up with the party…";
+        Status = Rejoining ? "Rejoining the party…" : "Joining the party…";
         if (!GameBridge.ReloadInPlace(saveSlot, true, party.Leader, party.Angle))
         {
             var (w, ms) = Protocol.Begin(Msg.CatchUpFailed);
@@ -2857,6 +3035,7 @@ internal sealed class Session
         if (_resyncing && !Engine.Running) { _resyncing = false; ReturnToSolo(); }
         _peers.Clear();
         Role = Role.None;
+        _hostTakesBack = false;
         Phase = Phase.Idle;
         LobbyId = HostId = 0;
         _pendingCall = 0;
@@ -2869,6 +3048,7 @@ internal sealed class Session
         _awaitingReturnReload = false;
         _joiners.Clear();
         _saveableFrames = 0;
+        _sentBooted = false;
         _lastBattleFrame = int.MinValue / 2;
         _reloadSpawn = null;
         _readyAnywhere = false;

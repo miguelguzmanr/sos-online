@@ -7,8 +7,10 @@ cd "$(dirname "$0")/.."
 S="$(cygpath -m "$PWD/tests/scripts")"
 Q=${QUIT:-4200}
 COMMON="--sosonline-delay=3 --sosonline-quit=$Q"
-tests/session.sh 27100 "--sosonline-start=0 --sosonline-guests=1 --sosonline-seed=777 --sosonline-script=$S/host-walk.txt $COMMON $HOSTFLAGS" \
-  "--sosonline-script=$S/guest-join-walk.txt $COMMON $HOSTFLAGS" 4 \
+# DOOR=F: the reload joins at an area entry, a synced test "door" on frame F (the real path); otherwise anywhere.
+if [ -n "$DOOR" ]; then IN="--sosonline-door=$DOOR"; else IN="--sosonline-dropinanywhere"; fi
+tests/session.sh 27100 "--sosonline-start=0 --sosonline-guests=1 --sosonline-seed=777 --sosonline-script=$S/host-walk.txt $IN $COMMON $HOSTFLAGS" \
+  "--sosonline-script=$S/guest-join-walk.txt $IN $COMMON $HOSTFLAGS" 4 \
   "$COMMON $JOINFLAGS" "${JOIN_DELAY:-30}"
 sleep 10; while tasklist | grep -qi SeaOfStars; do sleep 3; done
 grep -h -E "\[dropin\]|\[catchup\] [^f]|\[test\] (f[0-9]+ starting|playing own|joining from|own game)|postponed|\[barrier\].*(stopped|passed|holds)" "$O/log-27100.txt" "$O/log-27102.txt" | cut -c1-230

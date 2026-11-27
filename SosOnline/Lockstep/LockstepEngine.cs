@@ -77,6 +77,39 @@ internal sealed class LockstepEngine
     /// </summary>
     public bool Observer;
 
+    /// <summary>
+    /// Players held still for a drop-in: on frames after <see cref="HoldPlayersAfter"/> up to and including
+    /// <see cref="HoldPlayersUntil"/>, every player's input applies as neutral (the system channel stays). Every PC
+    /// gets both frames before it reaches them, so all apply the same input. Nothing a player does between the drop-in
+    /// autosave and the reload is lost to the reload, because nothing can be done.
+    /// </summary>
+    public int HoldPlayersAfter { get; private set; } = int.MaxValue;
+    public int HoldPlayersUntil { get; private set; } = int.MaxValue;
+
+    public void HoldPlayers(int after, int until = int.MaxValue)
+    {
+        HoldPlayersAfter = after;
+        HoldPlayersUntil = until;
+        Plugin.Log.LogInfo($"[lockstep] players held from f{after + 1}{(until == int.MaxValue ? "" : $" to f{until}")}");
+    }
+
+    /// <summary>The hold ends after frame <paramref name="at"/> (inclusive).</summary>
+    public void ReleasePlayers(int at)
+    {
+        if (HoldPlayersAfter == int.MaxValue) return;
+        HoldPlayersUntil = Math.Max(at, HoldPlayersAfter);
+        Plugin.Log.LogInfo($"[lockstep] players released after f{HoldPlayersUntil}");
+    }
+
+    public bool PlayersHeld => AppliedFrame > HoldPlayersAfter && AppliedFrame <= HoldPlayersUntil;
+
+    private InputSnapshot[] HeldFrame(InputSnapshot[] ch)
+    {
+        var held = (InputSnapshot[])ch.Clone();
+        for (int s = 0; s < InputOverride.SlotCount; s++) held[s] = InputSnapshot.Empty;
+        return held;
+    }
+
     /// <summary>Slot <paramref name="slot"/> stops sending input from <paramref name="frame"/> on (same on every peer).</summary>
     public void SetLeaveFrame(int slot, int frame)
     {
@@ -190,6 +223,7 @@ internal sealed class LockstepEngine
         Delay = Math.Max(1, delay);
         Frame = StartFrame = startFrame;
         Observer = false;
+        HoldPlayersAfter = HoldPlayersUntil = int.MaxValue;
         RngFrameOffset = 0;
         _endFrame = int.MaxValue;
         _onEnd = null;
@@ -365,7 +399,7 @@ internal sealed class LockstepEngine
         else LastStallMs = 0;
 
         // 3. Apply.
-        InputOverride.SetFrame(_frames[Frame]);
+        InputOverride.SetFrame(Frame > HoldPlayersAfter && Frame <= HoldPlayersUntil ? HeldFrame(_frames[Frame]) : _frames[Frame]);
         AppliedFrame = Frame;
         GameClock.Tick();
         _times[Frame] = UnityEngine.Time.time;

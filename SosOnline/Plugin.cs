@@ -64,21 +64,25 @@ public sealed class Plugin : BasePlugin
 /// <summary>The player's settings (BepInEx/config/sosonline.coop.cfg).</summary>
 internal static class Settings
 {
-    private static BepInEx.Configuration.ConfigEntry<bool> _openToFriends, _ownTurns, _advancedStatus;
-    private static BepInEx.Configuration.ConfigEntry<string> _joinMode;
+    private static BepInEx.Configuration.ConfigEntry<bool> _openOnStart, _ownTurns, _advancedStatus;
+    private static BepInEx.Configuration.ConfigEntry<string> _rejoin, _statusBar;
 
     public static void Bind(BepInEx.Configuration.ConfigFile config)
     {
-        _openToFriends = config.Bind("Online", "OpenToFriends", false,
-            "Keep a Steam lobby open while you play, so friends can join your game from Steam at any time.");
+        _openOnStart = config.Bind("Online", "OpenOnStart", false,
+            "Open a Steam lobby every time the game starts, so friends can join you without a hosting step.");
         _ownTurns = config.Bind("Online", "OwnCharacterTurns", true,
             "Host: in battles, each player gets the turns of their own character (off: the game picks a player at random, as in local co-op).");
-        _joinMode = config.Bind("Online", "JoinMode", nameof(JoinModes.Ask),
-            "Host: how a friend joins a game that is already running. Ask: you let them in from your pause screen, then " +
-            "everyone reloads for a moment. Auto: everyone reloads without asking (experimental). CatchUp: the friend " +
-            "replays the area on their PC while the others keep playing.");
-        _advancedStatus = config.Bind("Display", "AdvancedStatusBar", false,
-            "Show the detailed one-line status (players, ping, sync, waits) at the top of the screen during a session.");
+        _rejoin = config.Bind("Online", "Rejoin", nameof(RejoinModes.Ask),
+            "Host: how friends join or rejoin a game in progress. Ask: you let them in from your pause screen, then everyone " +
+            "holds still and reloads for a moment. Auto: the same without asking (experimental). Off: nobody joins a game " +
+            "in progress; everyone regroups at the title screen.");
+        _statusBar = config.Bind("Display", "StatusBar", nameof(StatusBars.On),
+            "The player bar at the top left during play: Off, On or Advanced (adds a detailed line with ping, sync and " +
+            "waits). It always shows on the title screen and the co-op pause screen.");
+        // Before 2026-11-27 the detailed line was a separate on/off setting.
+        _advancedStatus = config.Bind("Display", "AdvancedStatusBar", false, "Replaced by StatusBar.");
+        if (_advancedStatus.Value) { _statusBar.Value = nameof(StatusBars.Advanced); _advancedStatus.Value = false; }
     }
 
     /// <summary>Host setting: "Your character, your turn" in battles (fixed for a session when it starts).</summary>
@@ -88,36 +92,44 @@ internal static class Settings
         set { if (_ownTurns != null) _ownTurns.Value = value; }
     }
 
-    public enum JoinModes { Ask, Auto, CatchUp }
+    /// <summary>
+    /// Ask, Auto and Off are the host's choices. CatchUp is for tests only: a joiner replays the area first, a
+    /// re-syncing guest falls back to a reload without asking (what the mod did before the setting, and what every
+    /// test script expects).
+    /// </summary>
+    public enum RejoinModes { Ask, Auto, Off, CatchUp }
 
     /// <summary>
-    /// Host setting: how a friend joins a running session. Ask and Auto reload everyone in place (Stage 2), Ask only
-    /// once the host lets them in; CatchUp replays the area on the joiner's PC first (Stage 3), with the reload as its
-    /// fallback. Test runs keep CatchUp, what every test script expects, unless --sosonline-joinmode says otherwise.
+    /// Host setting: how friends join or rejoin a session in progress, new joiners, reconnects and re-syncs alike.
+    /// Ask and Auto reload everyone in place (Stage 2), Ask only once the host lets them in; a re-syncing guest
+    /// first tries to replay the area on its own PC, which disturbs nobody. Off: nobody joins a game in progress.
+    /// Test runs keep CatchUp unless --sosonline-joinmode says otherwise.
     /// </summary>
-    public static JoinModes JoinMode
+    public static RejoinModes Rejoin
     {
         get
         {
-            if (TestHarness.TryArg("joinmode", out var t) && Enum.TryParse<JoinModes>(t, true, out var tm)) return tm;
-            if (SessionLogs.IsTestRun) return JoinModes.CatchUp;
-            return Enum.TryParse<JoinModes>(_joinMode?.Value, true, out var m) ? m : JoinModes.Ask;
+            if (TestHarness.TryArg("joinmode", out var t) && Enum.TryParse<RejoinModes>(t, true, out var tm)) return tm;
+            if (SessionLogs.IsTestRun) return RejoinModes.CatchUp;
+            return Enum.TryParse<RejoinModes>(_rejoin?.Value, true, out var m) && m != RejoinModes.CatchUp ? m : RejoinModes.Ask;
         }
-        set { if (_joinMode != null) _joinMode.Value = value.ToString(); }
+        set { if (_rejoin != null) _rejoin.Value = value.ToString(); }
     }
 
-    /// <summary>This PC: the detailed one-line status at the top during a session.</summary>
-    public static bool AdvancedStatus
+    public enum StatusBars { Off, On, Advanced }
+
+    /// <summary>This PC: the player bar in play (Off hides it there), Advanced adds the detailed line at the top.</summary>
+    public static StatusBars StatusBar
     {
-        get => _advancedStatus?.Value ?? false;
-        set { if (_advancedStatus != null) _advancedStatus.Value = value; }
+        get => Enum.TryParse<StatusBars>(_statusBar?.Value, true, out var v) ? v : StatusBars.On;
+        set { if (_statusBar != null) _statusBar.Value = value.ToString(); }
     }
 
-    /// <summary>A Steam lobby is open whenever this PC plays its own game; friends join from Steam, no hosting step.</summary>
-    public static bool OpenToFriends
+    /// <summary>A Steam lobby opens once each time the game starts (the host still opens or closes it by hand).</summary>
+    public static bool OpenOnStart
     {
-        get => _openToFriends?.Value ?? false;
-        set { if (_openToFriends != null) _openToFriends.Value = value; }
+        get => _openOnStart?.Value ?? false;
+        set { if (_openOnStart != null) _openOnStart.Value = value; }
     }
 }
 

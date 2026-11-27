@@ -85,7 +85,7 @@ internal static class Overlay
         Styles();
         var s = Session.Instance;
         CatchUpScreen.OnGUI();
-        if (s.Phase == Phase.Running && !s.CatchingUp && Settings.AdvancedStatus) DrawHud(s);
+        if (s.Phase == Phase.Running && !s.CatchingUp && Settings.StatusBar == Settings.StatusBars.Advanced) DrawHud(s);
         MenuStatus.OnGUI();
         LocalPause.OnGUI();
         if (!Open)
@@ -180,7 +180,7 @@ internal static class Overlay
         }
         else if (!GameBridge.AtTitleScreen)
         {
-            Label("Go to the Title screen to start.", _label);
+            Label("Go to the title screen to start", _label);
         }
         else
         {
@@ -199,7 +199,7 @@ internal static class Overlay
         Label($"Frame {e.Frame} · input delay {e.Delay} · worst stall {e.MaxStallMs:F0} ms", _small);
         Label($"Sync checks {s.Sync.Checks} · corrections {s.Sync.Corrections}{(s.Sync.Desynced ? " · DESYNC: " + s.Sync.LastDesyncReason : "")}", _small);
         _y += 6;
-        if (s.IsHost) { if (Button("End co-op")) s.EndSession(); }
+        if (s.IsHost) { if (Button("End Co-op")) s.EndSession(); }
         else if (Button("Leave co-op")) s.Leave();
     }
 

@@ -94,7 +94,7 @@ internal static class CatchUpScreen
         if (string.IsNullOrEmpty(host)) host = "the host";
         _title.text = $"Rejoining {host}'s game";
         _step.text = "Your game got out of sync" + new string('.', 1 + (int)(now * 2) % 3);
-        _detail.text = $"You'll rejoin as soon as {host}'s game allows saving.";
+        _detail.text = $"You'll rejoin when {host}'s party enters a new area.";
         _footer.text = GameUi.Drawable("Esc: Leave co-op");
     }
 

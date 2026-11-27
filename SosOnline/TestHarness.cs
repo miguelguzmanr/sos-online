@@ -71,6 +71,8 @@ namespace SosOnline;
 ///   --sosonline-swapat=F          host: at frame F, check every guest's character as if it had just begun playing, with
 ///                                 the last party member as the one it played before (a swap while a joiner catches up)
 ///   --sosonline-joinafter=S       with --sosonline-play: join S seconds after its own game is playable (default 10)
+///   --sosonline-netdrop=F:S       this PC sends and receives nothing for S seconds from frame F, once (UDP; a lost connection)
+///   --sosonline-door=F,…          every PC: load the current area again on frame F (a synced door, for drop-ins)
 ///   --sosonline-loadatjoin        every PC in the session: start a level load the frame before the first join frame
 ///   --sosonline-nocatchup         host: joiners always drop in by a reload in place (Stage 2), never by catching up
 ///   --sosonline-tracecalls=C[.M],...  log calls to those game classes (or methods) with the lockstep frame
@@ -223,7 +225,7 @@ internal static class TestHarness
         if (now < _ucAt) return;
         if (_ucStep == 1) { ShowTitleChoices(GameBridge.FindTitleScreen()); _ucAt = now + 2; }
         else if (_ucStep == 2) { UI.NativeMenus.OpenTitleMenu(); _ucAt = now + 2; }
-        else if (_ucStep == 3) { UI.NativeMenus.ClickEntry("Mod Options"); _ucAt = now + 1; _ucStep = 30; return; }
+        else if (_ucStep == 3) { UI.NativeMenus.ClickEntry("Mod Settings"); _ucAt = now + 1; _ucStep = 30; return; }
         else if (_ucStep == 30) { Plugin.Log.LogInfo("[test] choosing Check for Updates"); UI.NativeMenus.ClickEntry("Check for Updates"); _ucAt = now + 15; _ucStep = 4; return; }
         // With --sosonline-popupanswer the popup is answered by now: the Online page must have its cursor back.
         else if (_ucStep == 4) { Plugin.Log.LogInfo($"[test] after the update popup: {UI.NativeMenus.TitleMenuState()}"); Shot("ui-after-update-popup"); UI.NativeMenus.TestPressBack(); _ucAt = now + 1; }
@@ -337,13 +339,13 @@ internal static class TestHarness
             case 5: Plugin.Log.LogInfo($"[test] hosting: {State()}"); Shot("ui-online-hosting"); _vsAt = now + 1; break;
             case 6: UI.NativeMenus.ClickEntry("Host Settings"); _vsAt = now + 2; break;
             case 7: Plugin.Log.LogInfo($"[test] options: {State()}"); Shot("ui-online-options"); _vsAt = now + 1; break;
-            case 8: UI.NativeMenus.SelectEntryForTest("Open to Friends"); _vsAt = now + 1; break;
-            case 9: Plugin.Log.LogInfo($"[test] options, Open to Friends: {State()}"); Shot("ui-online-options-help"); _vsAt = now + 1; break;
-            case 10: UI.NativeMenus.SelectEntryForTest("Battle System"); _vsAt = now + 1; break;
-            case 11: Plugin.Log.LogInfo($"[test] options, Battle System: {State()}"); Shot("ui-online-options-turns"); _vsAt = now + 1; break;
+            case 8: UI.NativeMenus.SelectEntryForTest("Rejoin"); _vsAt = now + 1; break;
+            case 9: Plugin.Log.LogInfo($"[test] options, Rejoin: {State()}"); Shot("ui-online-options-help"); _vsAt = now + 1; break;
+            case 10: UI.NativeMenus.SelectEntryForTest("Battle Turns"); _vsAt = now + 1; break;
+            case 11: Plugin.Log.LogInfo($"[test] options, Battle Turns: {State()}"); Shot("ui-online-options-turns"); _vsAt = now + 1; break;
             case 12: UI.NativeMenus.ClickEntry("Back"); _vsAt = now + 1; break;
-            case 13: UI.NativeMenus.ClickEntry("Mod Options"); _vsAt = now + 2; break;
-            case 14: UI.NativeMenus.SelectEntryForTest("Advanced Status Bar"); _vsAt = now + 1; break;
+            case 13: UI.NativeMenus.ClickEntry("Mod Settings"); _vsAt = now + 2; break;
+            case 14: UI.NativeMenus.SelectEntryForTest("Status Bar"); _vsAt = now + 1; break;
             case 15: Plugin.Log.LogInfo($"[test] mod options: {State()}"); Shot("ui-online-modoptions"); _vsAt = now + 1; break;
             case 16: UI.NativeMenus.ClickEntry("Back"); _vsAt = now + 1; break;
             case 17: Plugin.Log.LogInfo($"[test] back: {State()}"); UI.NativeMenus.ClickEntry("Load Game"); _vsAt = now + 2; break;
@@ -369,6 +371,7 @@ internal static class TestHarness
 
     private static bool _sawLockstep;
     private static int _quitAtUnityFrame = -1;
+    private static bool _netDropped;
     private static int _runsEnded;
     private static bool _runEndCounted;
 
@@ -969,6 +972,23 @@ internal static class TestHarness
         if (Args.ContainsKey("assignprobe")) Diagnostics.AssignProbe(frame);
         if (Args.TryGetValue("encounter", out var ef) && int.TryParse(ef, out int encounterFrame) && frame == encounterFrame)
             StartNearestEncounter();
+        // Once per start: a rejoined run counts frames from 0 again.
+        if (Args.TryGetValue("netdrop", out var nd) && nd.Split(':') is [var ndf, var nds] && int.TryParse(ndf, out int ndFrame) && ndFrame == frame && !_netDropped)
+        {
+            _netDropped = true;
+            Net.UdpTransport.BlackoutUntil = DateTime.UtcNow.AddSeconds(double.Parse(nds, System.Globalization.CultureInfo.InvariantCulture));
+            Plugin.Log.LogInfo($"[test] f{frame} network blackout for {nds} s");
+        }
+        if (AtList("door", frame))
+        {
+            // A synced "door": every PC loads the area it is in again (pass the same frame to every instance).
+            try
+            {
+                GameBridge.Levels.LoadLevel(new LevelLoading { levelToLoad = new LevelReference(GameBridge.CurrentLevelId), showTransition = true, removeTransitionWhenDone = true, initializerParams = new GameplayLevelInitializerParams() });
+                Plugin.Log.LogInfo($"[test] f{frame} door: loading this area again");
+            }
+            catch (Exception e) { Plugin.Log.LogWarning($"[test] door: {e.Message}"); }
+        }
         if (Args.TryGetValue("level", out var lvSpec))
         {
             int colon = lvSpec.IndexOf(':');

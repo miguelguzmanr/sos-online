@@ -42,7 +42,7 @@ You need Sea of Stars on Steam (Windows) and `SosOnline-<version>.zip` from the 
 
 The bottom-left corner of the title screen shows the mod's version, e.g. *sos-online 0.73*, and shows *(\<version\> available)* when there's a newer release. Nothing is downloaded until you ask:
 
-1. Title screen → **Online** → **Mod Options** → **Check for Updates** → **Install**. The update is installed only if its signature matches.
+1. Title screen → **Online** → **Mod Settings** → **Check for Updates** → **Install**. The update is installed only if its signature matches.
 2. **Restart** (through Steam), or **Later**: it runs from the next start.
 
 At start the mod makes one request to GitHub to see whether there's a newer release; nothing personal is sent.
@@ -60,18 +60,21 @@ At start the mod makes one request to GitHub to see whether there's a newer rele
 ## Playing
 
 **Start from your own game.**
-1. **Host:** pause → **Online** → **Open**, then **Invite friends**.
+1. **Host:** pause → **Online** → **Open**, then **Invite**.
 2. **Friend:** accept the invite, or use **Join Game** in the Steam friends list.
-3. The friend drops in at the next moment the game allows saving (not in a battle, cutscene or loading), then takes a party member automatically.
+3. **Host:** pause → **Let Robin In**. When the party next enters an area, everyone holds still for a moment and reloads, and the friend takes a party member. **Return to Area Start** (same pause screen) lets them in at once; the area starts over.
+
+The host's **Online** → **Host Settings** → **Rejoin** decides how friends join: **Require Approval (Safest)**, the default, as above; **Auto (Experimental)**, the same without asking; **Off** only while the host is on the title screen. **Open on Start** opens your game to friends every time it starts.
 
 **Or start together:** title screen → **Online** → **Host**; friends join, then **Load Game** and pick a save.
 
 **During a session:**
-- **Pause** (Start / Esc) pauses only your screen; the game keeps running for everyone. **Pause for everyone** opens the game's own pause menu on every PC, e.g. for **Assign Players** (choose who plays whom).
-- **Battles:** each player takes the turns of their own character, and a notice on the right says whose turn it is. The host can switch back to the game's own random turns in **Online** → **Host Settings** → **Battle System** → **Classic (Random Characters)**.
-- The players and their connection show in the top-left corner when something changes. **Online** → **Mod Options** → **Advanced Status Bar** adds a detailed line.
-- **Leave co-op** (pause screen): your character goes back to the party AI and the others keep playing. The host's **End co-op** ends it for everyone.
-- **Host:** the pause screen can remove a player. In a battle, Start opens a host page to take over a stuck turn or pass it to the next player.
+- **Pause** (Start / Esc) pauses only your screen; the game keeps running for everyone. **Pause for Everyone** opens the game's own pause menu on every PC, e.g. for **Assign Players** (choose who plays whom).
+- **Battles:** each player takes the turns of their own character, and a notice on the right says whose turn it is. The host can switch back to the game's own random turns in **Online** → **Host Settings** → **Battle Turns** → **Original**.
+- The players and their connection show in the top-left corner. **Status Bar** (pause → **Options**, or **Online** → **Mod Settings**) hides it during play (**Off**) or adds a detailed line (**Advanced**).
+- **Leave Co-op** (pause screen): your character goes back to the party AI and the others keep playing. The host's **End Co-op** ends it for everyone.
+- If a friend loses the connection, their game reconnects by itself for a minute and rejoins like above.
+- **Host:** pause → **Players** removes a player. In a battle, Start opens a host page to take a stuck turn (**Take This Turn**) or pass it to the next player.
 - Use a gamepad or keyboard; the mouse is not synchronized.
 - Saves made during co-op are the host's. Options (volume, display) stay each PC's own.
 
@@ -84,16 +87,16 @@ To go back to one, quit the game and copy the file over the one in the save fold
 
 ## Known limitations
 
-- A friend joining mid-session waits for a moment the game allows saving; sometimes everyone sees a short fade and about 2 seconds of progress is undone.
+- A friend joining mid-session waits until the party enters a new area (or the host returns to the area start); then everyone holds still for a moment and sees a short fade.
 - If the host leaves, the session ends.
 - If one PC can't keep 60 fps, everyone slows down with it.
 - Tested mostly on one PC with several game instances; real sessions over Steam are still being shaken out. Reports are welcome.
 
 ## Something went wrong?
 
-**Friends:** choose **Send logs to host** (pause screen, or title screen → **Online** → **Mod Options**). Your game sends your recent logs, a copy of the session's save, and a crash dump if the game crashed, to the host only.
+**Friends:** choose **Send Logs to Host** (pause screen, or title screen → **Online** → **Mod Settings**). Your game sends your recent logs, a copy of the session's save, and a crash dump if the game crashed, to the host only.
 
-**Host:** press **F8** → **Open logs folder** (or title screen → **Online** → **Mod Options** → **Open Logs Folder**), and attach the newest `sosonline-*.log` and `state-*.log` to an [issue](https://github.com/miguelguzmanr/sos-online/issues), with roughly what happened and when. The logs contain the Steam names of the players in the session; nothing else personal.
+**Host:** press **F8** → **Open logs folder** (or title screen → **Online** → **Mod Settings** → **Open Logs Folder**), and attach the newest `sosonline-*.log` and `state-*.log` to an [issue](https://github.com/miguelguzmanr/sos-online/issues), with roughly what happened and when. The logs contain the Steam names of the players in the session; nothing else personal.
 
 ## Credits
 

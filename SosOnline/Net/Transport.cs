@@ -182,6 +182,8 @@ internal sealed class UdpTransport : ITransport
     // clock only breaks over the internet. Each outgoing packet waits lag + random jitter (and, for a share of them,
     // a 150-300 ms spike like a real connection's), in order per peer.
     public static int LagMs, JitterMs, SpikePercent;
+    /// <summary>Test (--sosonline-netdrop): until then this PC sends and receives nothing, like a dropped connection.</summary>
+    public static DateTime BlackoutUntil;
     private readonly Random _rng = new(Environment.TickCount);
     private readonly List<(DateTime due, ulong peer, byte[] packet)> _delayed = new();
     private readonly Dictionary<ulong, DateTime> _lastDue = new();
@@ -203,6 +205,7 @@ internal sealed class UdpTransport : ITransport
 
     private void RawNow(ulong peer, byte[] packet)
     {
+        if (DateTime.UtcNow < BlackoutUntil) return;
         try { _socket.Send(packet, packet.Length, new IPEndPoint(IPAddress.Loopback, (int)peer)); }
         catch (SocketException e) { Plugin.Log.LogWarning($"[udp] send {packet.Length} B to {peer} failed: {e.SocketErrorCode}"); }
     }
@@ -246,7 +249,7 @@ internal sealed class UdpTransport : ITransport
             IPEndPoint from = null;
             byte[] packet;
             try { packet = _socket.Receive(ref from); } catch (SocketException) { break; }
-            if (packet.Length < 5) continue;
+            if (packet.Length < 5 || DateTime.UtcNow < BlackoutUntil) continue;
             ulong peer = (ulong)from.Port;
             uint seq = BitConverter.ToUInt32(packet, 1);
             var p = Peer(peer);

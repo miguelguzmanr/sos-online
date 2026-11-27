@@ -646,3 +646,15 @@ Friends said **Join** from Steam "doesn't work" and that they had to open the On
 - `NativeMenus` checks every frame for a popup that closed unanswered, not only on Back.
 
 **Tested** (hidden, in a separate copy of the game): a cold start with `+connect_lobby` and a made-up lobby id logged *waiting for the title screen*, no popup, and the join at the title screen 16 s in (refused, as the lobby doesn't exist). Not tested: a real Steam Join with the game closed, and a join request while in one's own game (that path is unchanged apart from the leader check).
+
+## 20. A drop-in mid-room undid the room's puzzle (`2026-11-27`)
+
+**Report** (playtest of 2026-11-26): in the Zenith Academy dungeon's first room the party placed the ornate stone on the pedestal and beat the enemies it calls; a climbable wall appeared. A friend rejoined then; after everyone's reload the wall was gone and the stone used up: soft lock.
+
+**Cause:** the save doesn't hold a room's own state. The game autosaves only on entering an area, so loading one of its saves always starts a room fresh. A drop-in autosaved wherever the game allowed saving and reloaded that, mid-room: what the room had built since the area entry (the placed stone, the wall) came back unsolved, while the save already had the stone spent. The save's `gpiStateSaveDatas` held one entry in that room.
+
+**Reproduced** from a recording of the user's run (`--sosonline-record`, then `--sosonline-replay` hidden with a friend joining after the wall appeared): before the reload the party climbs the wall; after it the wall is gone and the pedestal empty.
+
+**Fix:** drop-ins and rejoins by a reload happen only at an area entry. When the host schedules a level load's release and a friend waits (approved, game started), the drop-in rides along: every PC autosaves on that frame anyway, players hold still from it (`LockstepEngine.HoldPlayers`) until the reload, and the reload loads that entry save, the same point the game itself saves at. The host's pause screen offers **Return to Area Start** to let a friend in at once (the area starts over, from the game's own entry save). Joiners report when their game has started (`Msg.Booted`), so the hold doesn't wait for a game still booting (15 s before, 2 s after).
+
+**Tested** (hidden, separate copy of the game): the same replay with the friend asking after the wall appeared: no reload in the room (the wall stays); at a test door (`--sosonline-door`, the area loaded again) the friend joined with a 2 s hold, 0 of 60 snapshots differ. Test scripts that join inside one area use `--sosonline-dropinanywhere` (the old trigger); `tests/dropin.sh` with `DOOR=F` tests the real path. Not tested: a real door over Steam.

@@ -7,7 +7,7 @@ cd "$(dirname "$0")/.."
 . tests/game-dir.sh; O="$GAME/BepInEx/SosOnline"
 S="$(cygpath -m "$PWD/tests/scripts")"
 COMMON="--sosonline-delay=3 --sosonline-quit=${QUIT:-3600} $EXTRA"
-tests/session.sh 27100 "--sosonline-start=0 --sosonline-guests=1 --sosonline-seed=777 --sosonline-script=$S/host-walk.txt $COMMON" \
+tests/session.sh 27100 "--sosonline-dropinanywhere --sosonline-start=0 --sosonline-guests=1 --sosonline-seed=777 --sosonline-script=$S/host-walk.txt $COMMON" \
   "--sosonline-script=$S/guest-join-walk.txt --sosonline-hpdiverge=${DIVERGE:-1500} $COMMON" 4
 sleep 10; while tasklist | grep -qi SeaOfStars; do sleep 3; done
 for p in 27100 27101; do echo "--- $p"; grep -h -E "\[resync\]|hpdiverge|mismatch|\[dropin\] .*(join at|joining at)|\[catchup\] (merging|start|.*replay diverged)|stopped at frame" "$O/log-$p.txt" | cut -c1-170; done

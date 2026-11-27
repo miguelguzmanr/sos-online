@@ -12,7 +12,7 @@ COMMON="--sosonline-delay=3 --sosonline-quit=${QUIT:-3600} $*"
 rm -f "$O/log-27100.txt" "$O/log-27101.txt" "$O/state-27100.log" "$O/state-27101.log"
 bash tests/display-prefs.sh save > /dev/null 2>&1
 tests/session.sh 27100 \
-  "--sosonline-start=0 --sosonline-guests=1 --sosonline-seed=777 --sosonline-sandboxfile=$F1,$F2 --sosonline-script=$S/host-walk.txt $COMMON" \
+  "--sosonline-dropinanywhere --sosonline-start=0 --sosonline-guests=1 --sosonline-seed=777 --sosonline-sandboxfile=$F1,$F2 --sosonline-script=$S/host-walk.txt $COMMON" \
   "--sosonline-script=$S/guest-join-walk.txt --sosonline-nocatchup --sosonline-localpause=1480 --sosonline-hpdiverge=1500 $COMMON" 4
 sleep 10; while tasklist | grep -qi SeaOfStars; do sleep 3; done
 bash tests/display-prefs.sh restore > /dev/null 2>&1

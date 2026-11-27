@@ -45,11 +45,13 @@ internal enum Msg : byte
     TurnCommand = 39, // host → all: frame, command (the host takes over or passes the current battle turn)
     Removed = 40,     // host → guest: the host removed you from co-op (a SlotLeft for your slot follows)
     DlcOwned = 38,    // guest → host: the DLC this PC owns, again (the game reads Steam's answer a while after its start)
+    PlayersRelease = 41, // host → guests playing: frame (a drop-in stopped before its reload; players move again after it)
+    Booted = 42,      // guest → host: this PC's game has finished starting (it can load a drop-in save at once)
 }
 
 internal static class Protocol
 {
-    public const int Version = 15; // 15: Welcome says whether the host still has to let the joiner in; 14: the session's battle-turn rule; 9: snapshots carry each character's facing; 10: and the game's pause flag; 11: log sharing; 12: character changes in the catch-up, area files; 13: DLC owned and the session's DLC
+    public const int Version = 17; // 17: drop-ins at the next area entry (Booted, DropInSave at the entry); 16: players held still during a drop-in (DropInSave names, PlayersRelease), Welcome says whether the host takes players back; 15: Welcome says whether the host still has to let the joiner in; 14: the session's battle-turn rule; 9: snapshots carry each character's facing; 10: and the game's pause flag; 11: log sharing; 12: character changes in the catch-up, area files; 13: DLC owned and the session's DLC
 
     public static (BinaryWriter w, MemoryStream ms) Begin(Msg type)
     {
