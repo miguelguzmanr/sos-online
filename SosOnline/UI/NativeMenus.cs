@@ -810,9 +810,25 @@ internal static class NativeMenus
         // Fixed for a session when it starts: changeable while no lockstep runs.
         if (!s.InSession || (s.IsHost && s.Phase != Phase.Running))
             yield return ($"Battle System: {(Settings.OwnTurns ? "Custom (Fixed Characters)" : "Classic (Random Characters)")}", () => { Settings.OwnTurns = !Settings.OwnTurns; ShowPage(HostOptionsPage, "Battle System"); });
+        if (!s.InSession || s.IsHost)
+            yield return ($"Join Mode: {JoinModeLabel(Settings.JoinMode)}", () => { Settings.JoinMode = NextJoinMode(Settings.JoinMode); ShowPage(HostOptionsPage, "Join Mode"); });
         if (s.IsHost && s.Peers.Any()) yield return ("Ask for Logs", () => s.AskForLogs());
         yield return ("Back", () => ShowPage(MainPage, "Host Settings"));
     }
+
+    private static string JoinModeLabel(Settings.JoinModes mode) => mode switch
+    {
+        Settings.JoinModes.Auto => "Reload (Automatic, Experimental)",
+        Settings.JoinModes.CatchUp => "Catch Up",
+        _ => "Reload (Ask Me)",
+    };
+
+    private static Settings.JoinModes NextJoinMode(Settings.JoinModes mode) => mode switch
+    {
+        Settings.JoinModes.Ask => Settings.JoinModes.Auto,
+        Settings.JoinModes.Auto => Settings.JoinModes.CatchUp,
+        _ => Settings.JoinModes.Ask,
+    };
 
     private static List<(ulong id, string name, ulong lobby)> _friendsCache = new();
 
@@ -961,6 +977,7 @@ internal static class NativeMenus
         ["Input Delay"] = "Frames each press waits so every PC stays in step.\nAuto adapts it to the ping.",
         ["Open to Friends"] = "Keep a Steam lobby open while you play,\nso friends can drop into your game",
         ["Battle System"] = "Classic: a random player picks each turn's character.\nCustom: each player plays their own character.",
+        ["Join Mode"] = "Reload: everyone reloads briefly when a friend joins.\nCatch Up: only the friend waits, replaying the area.",
         ["Advanced Status Bar"] = "A detailed line at the top during co-op:\nplayers, ping, sync and waits",
         ["Check for Updates"] = "Look for a newer version of the mod",
         ["Checking for Updates…"] = "Look for a newer version of the mod",

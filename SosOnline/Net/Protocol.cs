@@ -49,7 +49,7 @@ internal enum Msg : byte
 
 internal static class Protocol
 {
-    public const int Version = 14; // 14: the session's battle-turn rule; 9: snapshots carry each character's facing; 10: and the game's pause flag; 11: log sharing; 12: character changes in the catch-up, area files; 13: DLC owned and the session's DLC
+    public const int Version = 15; // 15: Welcome says whether the host still has to let the joiner in; 14: the session's battle-turn rule; 9: snapshots carry each character's facing; 10: and the game's pause flag; 11: log sharing; 12: character changes in the catch-up, area files; 13: DLC owned and the session's DLC
 
     public static (BinaryWriter w, MemoryStream ms) Begin(Msg type)
     {

@@ -43,6 +43,8 @@ internal sealed class Session
         public bool Ready;
         /// <summary>Joined while a session was running: drops in at the next moment the game allows saving.</summary>
         public bool Pending;
+        /// <summary>Host: may drop in. With <see cref="Settings.JoinModes.Ask"/> a new joiner waits until the host lets them in.</summary>
+        public bool Approved = true;
         /// <summary>Last lockstep frame we received this guest's input for.</summary>
         public int LastInputFrame = -1;
         /// <summary>Leaving at this frame (deterministic leave); removed once the session is past it.</summary>
@@ -163,6 +165,9 @@ internal sealed class Session
         _peers.Values.Select(p => (p.Slot, p.Name, p.RttMs, p.Ready));
 
     public IEnumerable<string> PendingNames => _peers.Values.Where(p => p.Pending).Select(p => p.Name);
+    /// <summary>Host: joiners waiting for the host to let them in (<see cref="Settings.JoinModes.Ask"/>).</summary>
+    public IEnumerable<(ulong id, int slot, string name)> AwaitingApproval =>
+        _peers.Values.Where(p => p.Pending && !p.Approved).OrderBy(p => p.Slot).Select(p => (p.Id, p.Slot, p.Name));
     public bool HasPending => _peers.Values.Any(p => p.Pending);
 
     /// <summary>Host: a pending joiner that drops in by catching up (Stage 3) rather than by a reload.</summary>
@@ -203,7 +208,7 @@ internal sealed class Session
         return ids;
     }
 
-    private bool HasStage2Pending => _peers.Values.Any(p => p.Pending && !WantsCatchUp(p) && Now >= p.HoldUntil);
+    private bool HasStage2Pending => _peers.Values.Any(p => p.Pending && p.Approved && !WantsCatchUp(p) && Now >= p.HoldUntil);
 
     /// <summary>
     /// Re-syncs allowed in <see cref="ResyncWindow"/> seconds before the next drop-in waits <see cref="ResyncHold"/>
@@ -215,6 +220,8 @@ internal sealed class Session
 
     /// <summary>Guest only: we were admitted mid-session and wait to drop in.</summary>
     public bool WaitingForResync { get; private set; }
+    /// <summary>Guest: the host hasn't let this PC in yet (its join mode is Ask).</summary>
+    private bool _askedToJoin;
 
     /// <summary>
     /// Guest: this PC left the run to re-sync and waits to drop in again. Its own copy of the game is out of step (in a
@@ -847,12 +854,14 @@ internal sealed class Session
                 _peers[from] = peer;
                 SlotPeer[slot] = from;
                 SlotName[slot] = name;
+                if (peer.Pending) ApplyJoinMode(peer);
                 SendWelcome(peer);
                 BroadcastRoster();
                 for (int s = 0; s < InputOverride.SlotCount; s++)
                     if (SlotPaused[s]) SendPauseStatus(peer.Id, s, true);
-                Status = peer.Pending ? $"{name} is joining as P{slot + 1}…" : $"{name} joined as P{slot + 1}.";
-                Toast.Show(Status);
+                Status = !peer.Approved ? $"{name} wants to join as P{slot + 1}."
+                    : peer.Pending ? $"{name} is joining as P{slot + 1}…" : $"{name} joined as P{slot + 1}.";
+                Toast.Show(!peer.Approved ? $"{name} wants to join. Pause to let them in." : Status);
                 Plugin.Log.LogInfo($"[session] {name} joined as slot {slot} (mod {modVersion}, DLC {DlcGate.Describe(dlc)})");
                 if (modVersion != SessionLogs.Build)
                 {
@@ -965,24 +974,33 @@ internal sealed class Session
         switch (type)
         {
             case Msg.Welcome:
+            {
                 LocalSlot = r.ReadInt32();
                 WaitingForResync = r.ReadBoolean();
+                bool asking = r.ReadBoolean();
                 if (!_peers.ContainsKey(HostId))
                     _peers[HostId] = new Peer { Id = HostId, Slot = 0, Name = Transport.Describe(HostId), LastHeard = Now };
+                string host = SlotName[0] ?? Transport.Describe(HostId);
                 if (Phase == Phase.Lobby && WaitingForResync)
-                    Status = $"{SlotName[0] ?? "The host"} is playing. Joining soon…";
+                {
+                    // Sent again when the host lets this PC in.
+                    if (_askedToJoin && !asking) { Toast.Show($"{host} let you in. Joining soon…"); Plugin.Log.LogInfo("[session] the host let this PC in"); }
+                    Status = asking ? $"Waiting for {host} to let you in…" : $"{host} is playing. Joining soon…";
+                }
                 if (Phase == Phase.Connecting)
                 {
                     Phase = Phase.Lobby;
-                    Status = WaitingForResync
-                        ? $"Connected as P{LocalSlot + 1}. You'll join as soon as the game allows saving."
+                    Status = asking ? $"Waiting for {host} to let you in…"
+                        : WaitingForResync ? $"Connected as P{LocalSlot + 1}. You'll join as soon as the game allows saving."
                         : $"Connected as P{LocalSlot + 1}. Waiting for the host to start…";
-                    Toast.Show(WaitingForResync
-                        ? $"Queued in {SlotName[0] ?? Transport.Describe(HostId)}'s game. You'll join as soon as their game allows saving."
-                        : $"Joined {SlotName[0] ?? Transport.Describe(HostId)}'s game as P{LocalSlot + 1}");
-                    Plugin.Log.LogInfo($"[session] welcomed as slot {LocalSlot}");
+                    Toast.Show(asking ? $"Asked {host} to let you in"
+                        : WaitingForResync ? $"Queued in {host}'s game. You'll join as soon as their game allows saving."
+                        : $"Joined {host}'s game as P{LocalSlot + 1}");
+                    Plugin.Log.LogInfo($"[session] welcomed as slot {LocalSlot}{(asking ? ", waiting for the host to let this PC in" : "")}");
                 }
+                _askedToJoin = asking;
                 break;
+            }
             case Msg.LogReceived:
                 Toast.Show($"{SlotName[0] ?? "The host"} received your logs. Thanks!");
                 break;
@@ -1209,7 +1227,31 @@ internal sealed class Session
         var (w, ms) = Protocol.Begin(Msg.Welcome);
         w.Write(peer.Slot);
         w.Write(peer.Pending);
+        w.Write(peer.Pending && !peer.Approved);
         Send(peer.Id, ms, true);
+    }
+
+    /// <summary>
+    /// Host: a friend asks to join a running session. With Ask or Auto they join by a reload in place for everyone
+    /// (Stage 2), with Ask only once the host lets them in from its pause screen; with CatchUp they replay the area
+    /// first (Stage 3). Re-syncing guests don't come through here: they rejoin as before.
+    /// </summary>
+    private void ApplyJoinMode(Peer peer)
+    {
+        var mode = Settings.JoinMode;
+        peer.Approved = mode != Settings.JoinModes.Ask;
+        if (mode != Settings.JoinModes.CatchUp) peer.ForceStage2 = true;
+        Plugin.Log.LogInfo($"[dropin] {peer.Name} asks to join (join mode {mode}){(peer.Approved ? "" : ": waiting for the host")}");
+    }
+
+    /// <summary>Host (pause screen): lets a waiting friend in. Everyone reloads at the next moment the game allows saving.</summary>
+    public void LetIn(ulong id)
+    {
+        if (!IsHost || !_peers.TryGetValue(id, out var peer) || !peer.Pending || peer.Approved) return;
+        peer.Approved = true;
+        SendWelcome(peer);
+        Plugin.Log.LogInfo($"[dropin] f{Engine.AppliedFrame} the host let {peer.Name} in");
+        Toast.Show(GameBridge.CanDropInNow ? $"{peer.Name} is joining…" : $"{peer.Name} joins when the game allows saving");
     }
 
     private void BroadcastRoster()
@@ -1798,10 +1840,12 @@ internal sealed class Session
         {
             peer.Pending = true;
             peer.Ready = false;
+            ApplyJoinMode(peer);
             SendWelcome(peer);
         }
         BroadcastRoster();
-        Toast.Show($"{names} is joining");
+        var asking = _peers.Values.Where(p => !p.Approved).Select(p => p.Name).ToList();
+        Toast.Show(asking.Count > 0 ? $"{string.Join(", ", asking)} wants to join. Pause to let them in." : $"{names} is joining");
     }
 
     private void BackToSolo()
@@ -1819,6 +1863,7 @@ internal sealed class Session
         peer.Resyncing = false;
         peer.LeavingAt = -1;
         peer.Pending = true;
+        peer.Approved = true;
         peer.Ready = false;
         peer.CatchUp = CatchUpStep.None;
         peer.LastInputFrame = -1;
@@ -2100,7 +2145,7 @@ internal sealed class Session
                 // A joiner catching up would miss this reload: it comes in with it instead.
                 foreach (var p in _peers.Values.Where(p => p.Pending && p.CatchUp != CatchUpStep.None)) CancelCatchUp(p, "a reload in place is starting");
                 _joiners.Clear();
-                _joiners.AddRange(_peers.Values.Where(p => p.Pending && Now >= p.HoldUntil).Select(p => p.Id));
+                _joiners.AddRange(_peers.Values.Where(p => p.Pending && p.Approved && Now >= p.HoldUntil).Select(p => p.Id));
                 // Guests can be up to Delay + 1 frames ahead of us; they get this before any input that takes them further.
                 _dropInSaveFrame = Engine.AppliedFrame + Engine.Delay + 3;
                 _dropInSlot = -1;
@@ -2207,7 +2252,8 @@ internal sealed class Session
         foreach (var p in _peers.Values.Where(p => p.Pending && p.CatchUp != CatchUpStep.None).ToList()) CancelCatchUp(p, "returning to the area start");
         _joiners.Clear();
         _joiners.AddRange(_peers.Values.Where(p => p.Pending).Select(p => p.Id));
-        foreach (var id in _joiners) _peers[id].HoldUntil = 0;
+        // Choosing the return lets everyone who waits in.
+        foreach (var id in _joiners) { _peers[id].HoldUntil = 0; _peers[id].Approved = true; }
 
         // This PC: the files go where the game reads its saves, then the game reads them again.
         foreach (var (name, data) in files)
@@ -2510,7 +2556,7 @@ internal sealed class Session
             switch (peer.CatchUp)
             {
                 case CatchUpStep.None:
-                    if (!WantsCatchUp(peer) || _dropIn != DropInStep.None || _joiners.Contains(peer.Id) || now < peer.HoldUntil) break;
+                    if (!peer.Approved || !WantsCatchUp(peer) || _dropIn != DropInStep.None || _joiners.Contains(peer.Id) || now < peer.HoldUntil) break;
                     peer.CatchUp = CatchUpStep.Files;
                     peer.CatchUpL = _area.L;
                     peer.CatchUpSince = now;

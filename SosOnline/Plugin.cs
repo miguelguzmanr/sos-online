@@ -65,6 +65,7 @@ public sealed class Plugin : BasePlugin
 internal static class Settings
 {
     private static BepInEx.Configuration.ConfigEntry<bool> _openToFriends, _ownTurns, _advancedStatus;
+    private static BepInEx.Configuration.ConfigEntry<string> _joinMode;
 
     public static void Bind(BepInEx.Configuration.ConfigFile config)
     {
@@ -72,6 +73,10 @@ internal static class Settings
             "Keep a Steam lobby open while you play, so friends can join your game from Steam at any time.");
         _ownTurns = config.Bind("Online", "OwnCharacterTurns", true,
             "Host: in battles, each player gets the turns of their own character (off: the game picks a player at random, as in local co-op).");
+        _joinMode = config.Bind("Online", "JoinMode", nameof(JoinModes.Ask),
+            "Host: how a friend joins a game that is already running. Ask: you let them in from your pause screen, then " +
+            "everyone reloads for a moment. Auto: everyone reloads without asking (experimental). CatchUp: the friend " +
+            "replays the area on their PC while the others keep playing.");
         _advancedStatus = config.Bind("Display", "AdvancedStatusBar", false,
             "Show the detailed one-line status (players, ping, sync, waits) at the top of the screen during a session.");
     }
@@ -81,6 +86,24 @@ internal static class Settings
     {
         get => TestHarness.TryArg("ownturns", out var v) ? v != "0" : _ownTurns?.Value ?? true;
         set { if (_ownTurns != null) _ownTurns.Value = value; }
+    }
+
+    public enum JoinModes { Ask, Auto, CatchUp }
+
+    /// <summary>
+    /// Host setting: how a friend joins a running session. Ask and Auto reload everyone in place (Stage 2), Ask only
+    /// once the host lets them in; CatchUp replays the area on the joiner's PC first (Stage 3), with the reload as its
+    /// fallback. Test runs keep CatchUp, what every test script expects, unless --sosonline-joinmode says otherwise.
+    /// </summary>
+    public static JoinModes JoinMode
+    {
+        get
+        {
+            if (TestHarness.TryArg("joinmode", out var t) && Enum.TryParse<JoinModes>(t, true, out var tm)) return tm;
+            if (SessionLogs.IsTestRun) return JoinModes.CatchUp;
+            return Enum.TryParse<JoinModes>(_joinMode?.Value, true, out var m) ? m : JoinModes.Ask;
+        }
+        set { if (_joinMode != null) _joinMode.Value = value.ToString(); }
     }
 
     /// <summary>This PC: the detailed one-line status at the top during a session.</summary>

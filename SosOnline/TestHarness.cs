@@ -50,6 +50,8 @@ namespace SosOnline;
 ///   --sosonline-guardtest         log where the test-run save guard sends a few paths (writes nothing)
 ///   --sosonline-nodlc             act as a PC without any DLC (in and out of sessions)
 ///   --sosonline-botblock=N        the bot blocks N frames after this PC sees the block window open
+///   --sosonline-joinmode=M        the host's Join Mode: ask, auto or catchup (test runs default to catchup)
+///   --sosonline-pauseopen=F,...   open this PC's own pause screen on frame F and log its entries
 ///   --sosonline-titlebarshot      title screen: the Online page; once another player is in the session, the player
 ///                                 bar's state in the log and screenshots (ui-titlebar, then Load Game: ui-titlebar-saves
 ///                                 on the host), then leave and quit. Never opens a save.
@@ -912,6 +914,8 @@ internal static class TestHarness
         if (At("campstart", frame)) CampForce(frame, true);
         if (At("campstop", frame)) CampForce(frame, false);
         if ((Args.ContainsKey("campstart") || Args.ContainsKey("campat")) && frame % 30 == 0) CampState(frame);
+        // --sosonline-pauseopen=F: the host's or guest's own pause screen opens on frame F, as if Start was pressed.
+        if (AtList("pauseopen", frame)) Plugin.Log.LogInfo($"[test] f{frame} pause screen: {UI.LocalPause.OpenForTest()}");
         if (Args.TryGetValue("pausechoose", out var pc))
             foreach (var item in pc.Split(',', StringSplitOptions.RemoveEmptyEntries))
             {

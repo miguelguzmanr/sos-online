@@ -101,7 +101,13 @@ tools/new-signing-key.ps1   create the release signing key (once)
 - Only the host ending co-op ends it for everyone. The host then leaves the Steam lobby 1.5 s after the end frame (guests stop on that frame first) and turns **Open to friends** off, so a friend who was still joining can't start a new session.
 - **Back to solo.** Whenever lockstep stops on a PC (a leave, the end, a lost connection), that PC moves its keyboard and pads to the game's P1, who controls the leader, and makes every other co-op player leave, so the party AI takes their character. If the game refuses a leave (a battle, a cutscene) it retries every second. A guest that is re-syncing is left alone: it drops in again.
 
-**Drop-in.** Lockstep syncs inputs, not world state, so a newcomer can't be streamed into a running game. It rebuilds the game instead, by replay if it can, by a short reload for everyone if not.
+**Drop-in.** Lockstep syncs inputs, not world state, so a newcomer can't be streamed into a running game. It rebuilds the game instead: by a short reload for everyone, or by a replay on the joiner's PC.
+
+*Join mode* (host setting, **Host Settings** → **Join Mode**; `Settings.JoinMode`, `JoinMode` in `sosonline.coop.cfg`):
+- **Reload (Ask Me)**, the default: a friend who asks to join waits until the host lets them in. The host gets a toast (*Robin wants to join. Pause to let them in.*), a held *[P3] Wants to join* notice and, on its own pause screen (also its battle and Return to area start pages), **Let Robin in** (`Session.LetIn`). Then everyone reloads in place (below) at the next moment the game allows saving. The friend sees *Waiting for Alex to let you in…*, then *Alex let you in. Joining soon…* (`Msg.Welcome` is sent again; protocol 15).
+- **Reload (Automatic, Experimental)**: the same reload without asking.
+- **Catch Up**: the replay first (below), the reload as its fallback. What the mod did before the setting; test runs keep it unless `--sosonline-joinmode` says otherwise.
+- Re-syncing guests (a desync) rejoin as before in every mode: by replay if they can, else by a reload, without asking. Choosing **Return to area start** lets everyone who waits in.
 
 *Catching up (only the joiner waits).*
 - On every level load's last frame (the area entry), every PC autosaves. The host keeps a copy of that save, the inputs of every frame since, and its state snapshots (`Net/AreaLog.cs`).
@@ -109,7 +115,7 @@ tools/new-signing-key.ps1   create the release signing key (once)
 - Once it is level with the session, the host picks a merge frame: every PC adds the player there and the joiner takes a party member. The players already in never stop.
 - If a player joined or left since the area entry, the replay would be over 5 minutes, it disagrees with a host snapshot, or it takes over 2 minutes, the joiner drops in by a reload instead (below).
 
-*Reload in place (fallback).* Everyone reloads a fresh autosave in place, behind the game's own fade, without leaving gameplay:
+*Reload in place.* Everyone reloads a fresh autosave in place, behind the game's own fade, without leaving gameplay:
 - A friend who joins mid-session is admitted as *waiting*. Once the game itself has allowed saving for half a second (no battle, cutscene or loading), every PC in the session autosaves on an agreed frame. Lockstep keeps running.
 - The host sends its saves to the joiner, who loads them into its mirror folder wherever it is (title screen or its own game, once the game has finished booting) and reports ready. If that took more than 5 s, the host saves again first, so little progress is undone.
 - The host picks a join frame a few frames ahead and sends it, with where every party member stands, to everyone. The joiner starts lockstep on that frame with the inputs the host has buffered for it.
@@ -265,6 +271,8 @@ Session flags:
 | `--sosonline-nodlc` | This instance acts as a PC without any DLC, in and out of sessions. |
 | `--sosonline-name=TEXT` | A test player name; escapes like `\n` and `\u0020` for characters a command line can't carry. |
 | `--sosonline-ownturns=0\|1` | Overrides the host's **Battle System** setting (1: Custom, 0: Classic). |
+| `--sosonline-joinmode=ask\|auto\|catchup` | The host's **Join Mode** (test runs default to `catchup`). |
+| `--sosonline-pauseopen=F,…` | Opens this PC's own pause screen on frame F, as Start would, and logs its entries. With `--sosonline-pausechoose`, e.g. `2700` and `2720:Let_Robin_in`. |
 | `--sosonline-turncmd=F:1\|2,…` | The host takes over (1) or passes (2) the current battle turn on frame F. |
 | `--sosonline-removeat=F:SLOT` | The host removes that slot's player on frame F. |
 | `--sosonline-spritedump=F,…` | Logs every loaded sprite's name, texture and size (once per name) on those frames. |

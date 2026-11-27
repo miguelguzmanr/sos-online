@@ -100,7 +100,7 @@ internal static class LocalPause
         if (s.Phase != Phase.Running || s.CatchingUp || !s.Engine.InSessionAt(s.LocalSlot, s.Engine.AppliedFrame)) return false;
         if (MenuStatus.Paused || MenuStatus.Path.Length > 0) return false;
         // The game has no pause in battles; the host gets its moderation page there.
-        if (GameBridge.InBattle) return s.IsHost && RemovableSlots(s).Any();
+        if (GameBridge.InBattle) return s.IsHost && (RemovableSlots(s).Any() || s.AwaitingApproval.Any());
         try
         {
             if (Manager<PauseManager>.instance?.isPaused ?? false) return false;
@@ -175,6 +175,16 @@ internal static class LocalPause
     /// Test harness (--sosonline-pausechoose): choose the entry with this label on the open page, as a press would.
     /// Chosen by label so a test doesn't break when entries are added or reordered.
     /// </summary>
+    internal static string OpenForTest()
+    {
+        if (!IsOpen)
+        {
+            if (!CanOpen()) return "can't open here";
+            Open(Session.Instance.Engine.AppliedFrame);
+        }
+        return $"{_page}: {string.Join(" | ", Entries().Select(e => e.Label))}";
+    }
+
     internal static bool ChooseForTest(string label)
     {
         if (!IsOpen) return false;
@@ -203,7 +213,9 @@ internal static class LocalPause
                     list.Add(new Entry { Label = "Take over this turn", Action = () => { s.TurnCommand(BattleTurns.CmdTakeOver); Close("take over turn"); } });
                 if (BattleTurns.CanCommand && BattleTurns.NextSlot() is int next and >= 0 && next != BattleTurns.CurrentSlot)
                     list.Add(new Entry { Label = $"Pass turn to P{GameBridge.PlayerNumber(next)}", Action = () => { s.TurnCommand(BattleTurns.CmdPass); Close("pass turn"); } });
-                list.Add(new Entry { Label = "Remove a player", Action = () => { _playersFrom = Page.Battle; GoTo(Page.Players, 0); } });
+                if (RemovableSlots(s).Any())
+                    list.Add(new Entry { Label = "Remove a player", Action = () => { _playersFrom = Page.Battle; GoTo(Page.Players, 0); } });
+                AddLetIn(s, list);
                 break;
             case Page.Players:
                 foreach (int slot in RemovableSlots(s))
@@ -245,6 +257,7 @@ internal static class LocalPause
                 // ignores Start (host and guests alike; findings §8), so the entry would do nothing.
                 if (!GameBridge.InBattle)
                     list.Add(new Entry { Label = "Pause for everyone", Action = () => { Close("pause for everyone"); _forwardStart = true; } });
+                AddLetIn(s, list);
                 list.Add(new Entry { Label = "Back", Action = () => Close("back") });
                 break;
             case Page.Options:
@@ -267,9 +280,21 @@ internal static class LocalPause
                 else if (s.Peers.Any()) list.Add(new Entry { Label = "Ask for logs", Action = () => { s.AskForLogs(); Close("ask for logs"); } });
                 if (s.IsHost && RemovableSlots(s).Any())
                     list.Add(new Entry { Label = "Remove a player", Action = () => { _playersFrom = Page.Main; GoTo(Page.Players, 0); } });
+                AddLetIn(s, list);
                 break;
         }
         return list;
+    }
+
+    /// <summary>Host: one entry per friend waiting to be let in (join mode Ask). Last, so the cursor positions above stay.</summary>
+    private static void AddLetIn(Session s, List<Entry> list)
+    {
+        if (!s.IsHost) return;
+        foreach (var (id, _, name) in s.AwaitingApproval.ToList())
+        {
+            ulong who = id;
+            list.Add(new Entry { Label = $"Let {PlayerNames.Shorten(name, 16)} in", Action = () => { s.LetIn(who); Close("let in"); } });
+        }
     }
 
     private static void GoTo(Page page, int cursor)

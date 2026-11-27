@@ -131,6 +131,7 @@ internal static class PlayerBar
         if (!s.InSession || s.Phase is Phase.Idle or Phase.CreatingLobby or Phase.JoiningLobby or Phase.Connecting) return rows;
         var peers = s.Peers.ToList();
         bool running = s.Phase == Phase.Running && s.Engine.Running;
+        var asking = s.IsHost ? s.AwaitingApproval.Select(a => a.slot).ToHashSet() : new HashSet<int>();
         for (int slot = 0; slot < InputOverride.SlotCount; slot++)
         {
             string name = s.SlotName[slot];
@@ -140,20 +141,15 @@ internal static class PlayerBar
             float ping = s.IsHost
                 ? peers.Where(p => p.slot == slot).Select(p => p.rtt).DefaultIfEmpty(0).First()
                 : slot == 0 ? peers.Select(p => p.rtt).DefaultIfEmpty(0).First() : 0;
-            if (running && !inRun && slot != s.LocalSlot) Set(row, "menu-icn-clock", "Joining", false);
+            // A joiner has its slot (and this row) from the moment the host admits it; the host also sees who still
+            // waits to be let in. (A second row per pending joiner listed them twice.)
+            if (running && !inRun && slot != s.LocalSlot) Set(row, "menu-icn-clock", asking.Contains(slot) ? "Wants to join" : "Joining", false);
             else if (s.SlotPaused[slot]) Set(row, "menu-icn-clock-pause", "Paused", false);
             else if (running && slot == s.LocalSlot && s.Sync.Desynced) Set(row, "icn-option-warning", "Re-syncing", true);
             else if (running && slot != s.LocalSlot && Now - s.Engine.WaitedAt[slot] < 1.5f) Set(row, "menu-icn-clock", "Waiting", true);
             else if (ping > HighPingMs) Set(row, "icn-option-warning", $"{ping:F0} ms", true);
             rows.Add(row);
         }
-        if (s.IsHost)
-            foreach (string joining in s.PendingNames)
-            {
-                var row = new Row { Slot = -1, Name = joining };
-                Set(row, "menu-icn-clock", "Joining", false);
-                rows.Add(row);
-            }
         return rows;
     }
 
@@ -187,6 +183,11 @@ internal static class PlayerBar
 
         if (MenuStatus.Menu.Length > 0 && MenuStatus.Slot >= 0)
             PlayerNotice.Hold("menu", GameBridge.PlayerNumber(MenuStatus.Slot), MenuStatus.Menu);
+
+        // Host: a friend waits to be let in (join mode Ask), until the host does it from its pause screen.
+        if (s.IsHost)
+            foreach (var (_, slot, _) in s.AwaitingApproval)
+                PlayerNotice.Hold("ask" + slot, GameBridge.PlayerNumber(slot), "Wants to join");
     }
 
     // ---------------------------------------------------------------- drawing
