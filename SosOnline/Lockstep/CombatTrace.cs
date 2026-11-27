@@ -80,7 +80,9 @@ internal static class CombatTrace
         if (TestHarness.TryArg("callprobe", out var only) && only.Length > 0)
         {
             var names = only.Split(',');
-            types = typeof(SaveManager).Assembly.GetTypes().Where(t => names.Contains(t.Name)).ToArray();
+            types = AppDomain.CurrentDomain.GetAssemblies()
+                .SelectMany(a => { try { return a.GetTypes(); } catch (ReflectionTypeLoadException e) { return e.Types.Where(t => t != null); } catch { return Type.EmptyTypes; } })
+                .Where(t => names.Contains(t.Name)).ToArray();
             Plugin.Log.LogInfo($"[combat] call probe limited to {string.Join(",", types.Select(t => t.Name))}");
         }
         foreach (var type in types)

@@ -61,6 +61,7 @@ namespace SosOnline;
 ///   --sosonline-npcprobe          log every frame the active NPCs and each NPC's first inactive ancestor change
 ///   --sosonline-summonprobe[=N]   log each summon's slot list, reservations and assignments; N > 0 draws N extra
 ///                                 random values before each (to show whether the pick reads the shared generator)
+///   --sosonline-npcmove=TEXT      every frame, NPCs whose name contains TEXT: exact position, animator state, visibility
 ///   --sosonline-noresync          guest: report differences but never ask to re-sync (to see later ones, e.g. spawns)
 ///   --sosonline-hpnudge=F         at lockstep frame F, lower the first party member's HP by 1 on this PC only, without
 ///                                 the mark: the guest's state check corrects it in place
@@ -860,6 +861,35 @@ internal static class TestHarness
         }
     }
 
+    /// <summary>
+    /// --sosonline-npcmove=TEXT: every frame, each active NPC whose name contains TEXT: exact position, its animator's
+    /// state and time, and whether any of its renderers is visible. Diff two PCs' [npc] lines to find the first frame
+    /// an NPC moves differently.
+    /// </summary>
+    private static void NpcMoveProbe(int frame)
+    {
+        if (!Args.TryGetValue("npcmove", out var match) || match.Length == 0) return;
+        try
+        {
+            foreach (var n in UnityEngine.Object.FindObjectsOfType<NPCController>())
+            {
+                if (n == null || !n.isActiveAndEnabled || !n.gameObject.name.Contains(match)) continue;
+                var p = n.transform.position;
+                string anim = "-";
+                var an = n.GetComponentInChildren<Animator>();
+                if (an != null)
+                {
+                    var st = an.GetCurrentAnimatorStateInfo(0);
+                    anim = $"{st.shortNameHash}:{st.normalizedTime:R} en={an.enabled} cull={an.cullingMode}";
+                }
+                bool visible = false;
+                foreach (var r in n.GetComponentsInChildren<Renderer>()) if (r != null && r.isVisible) { visible = true; break; }
+                Plugin.Log.LogInfo($"[npc] f{frame} {n.gameObject.name} ({p.x:R},{p.y:R},{p.z:R}) {anim} vis={visible} dt={Time.deltaTime:R} scale={Time.timeScale:R}");
+            }
+        }
+        catch (Exception e) { Plugin.Log.LogWarning($"[npc] probe failed: {e.Message}"); }
+    }
+
     public static void OnFrame(int frame)
     {
         var session = Session.Instance;
@@ -894,6 +924,7 @@ internal static class TestHarness
             }
             catch (Exception e) { Plugin.Log.LogWarning($"[test] save screen failed: {e.Message}"); }
         }
+        NpcMoveProbe(frame);
         ReloadSpike(frame);
         SpikeB.OnFrame(frame);
         FastForward.OnFrame(frame);

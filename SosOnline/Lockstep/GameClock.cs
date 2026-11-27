@@ -248,6 +248,7 @@ internal static class GameClock
         if (!Enabled || _timeD == null || _fixedD == null) return;
         try
         {
+            ReleaseScale(); // the release's stretched frame is the first to move game time again
             double dt = UnityEngine.Time.fixedDeltaTime;
             float scale = UnityEngine.Time.timeScale;
             if (dt <= 0 || scale <= 0) { Plugin.Log.LogWarning($"[clock] physics phase not aligned (time scale {scale})"); return; }
@@ -263,21 +264,44 @@ internal static class GameClock
 
     private static double Mod(double x, double m) => ((x % m) + m) % m;
 
-    /// <summary>Game time per frame while a level load is held at the barrier: next to nothing, but not 0 (0 turns the fixed step off).</summary>
+    /// <summary>
+    /// Frame step while a level load is held: next to nothing, but not 0 (a capture step of 0 turns the fixed step
+    /// off). Scaled game time stands fully still on top of it (<see cref="HoldForLoad"/>).
+    /// </summary>
     private const float HoldStep = 0.0001f;
-    private static bool _holding;
+    private static bool _holding, _scaleHeld;
+    private static float _heldScale = 1f;
 
     /// <summary>
-    /// A level load reached its end on this PC and waits for the release frame: game time almost stands still until
-    /// then. The level's objects already run, and each PC waits a different number of frames (the slowest loader
-    /// decides): NPC patrols timed in game time walked 14 frames longer on one PC than the other, which split every NPC
-    /// on Mountain Trail (2026-11-26). A replaying joiner waits far longer than the live PCs did.
+    /// A level's scenes loaded on this PC (<see cref="LoadBarrier.Install"/>), or its load reached its end, and the
+    /// load waits for the release frame: game time stands still until the frame before it. The level's objects
+    /// already run, and each PC holds a different number of frames (its own loading speed, and the slowest loader
+    /// decides the release): NPC patrols walked 14 frames longer on one PC than the other, which split every NPC on
+    /// Mountain Trail (2026-11-26). A replaying joiner holds far longer than the live PCs did.
+    /// The time scale is 0 meanwhile, so scaled time doesn't move at all: with only the small step, the boulder goats'
+    /// animators still ended the hold 0.001 of a cycle apart (9 frames x 0.0001 s, 2026-11-27).
     /// </summary>
-    public static void HoldForLoad()
+    /// <returns>True if time was running and is held from now on.</returns>
+    public static bool HoldForLoad()
     {
-        if (!Enabled || _holding) return;
-        try { UnityEngine.Time.captureDeltaTime = HoldStep; _holding = true; }
-        catch (Exception e) { Plugin.Log.LogWarning($"[clock] time not held: {e.Message}"); }
+        if (!Enabled || _holding) return false;
+        try
+        {
+            UnityEngine.Time.captureDeltaTime = HoldStep;
+            _holding = true;
+            _heldScale = UnityEngine.Time.timeScale;
+            if (_heldScale > 0) { UnityEngine.Time.timeScale = 0f; _scaleHeld = true; }
+            return true;
+        }
+        catch (Exception e) { Plugin.Log.LogWarning($"[clock] time not held: {e.Message}"); return false; }
+    }
+
+    /// <summary>Game time runs again at the time scale it had before the hold (the frame before a release, or the end).</summary>
+    private static void ReleaseScale()
+    {
+        if (!_scaleHeld) return;
+        _scaleHeld = false;
+        try { if (UnityEngine.Time.timeScale == 0f) UnityEngine.Time.timeScale = _heldScale; } catch { }
     }
 
     /// <summary>The held load was released (or dropped): frames take their usual step again.</summary>
@@ -285,6 +309,7 @@ internal static class GameClock
     {
         if (!_holding) return;
         _holding = false;
+        ReleaseScale();
         if (_aligning) return; // the stretched step is already set; SetBase restores Step
         try { UnityEngine.Time.captureDeltaTime = Step; } catch { }
     }

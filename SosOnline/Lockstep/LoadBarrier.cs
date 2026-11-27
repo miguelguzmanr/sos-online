@@ -1,3 +1,4 @@
+using System;
 using HarmonyLib;
 using SosOnline.Game;
 using SosOnline.Net;
@@ -20,6 +21,31 @@ internal static class LoadBarrier
         _releasing = true;
         try { GameBridge.Levels?.EndCurrentLevelLoading(); }
         finally { _releasing = false; }
+    }
+
+    /// <summary>
+    /// Game time stands nearly still from the moment a level's scenes load, not only once the load reaches its end.
+    /// The scenes' objects run from the frame they appear, and each PC loads them on its own frame (asynchronous I/O)
+    /// and reaches the end on another: the boulder goats' animators on Mountain Trail ran 20 frames at full speed on
+    /// one PC and 16 on the other before the hold, so at the release their animations were a fraction of a cycle
+    /// apart and the goats later walked off on different frames (3 of 4 battle runs split, 2026-11-27).
+    /// </summary>
+    public static void Install()
+    {
+        UnityEngine.SceneManagement.SceneManager.sceneLoaded +=
+            (UnityEngine.Events.UnityAction<UnityEngine.SceneManagement.Scene, UnityEngine.SceneManagement.LoadSceneMode>)
+            (Action<UnityEngine.SceneManagement.Scene, UnityEngine.SceneManagement.LoadSceneMode>)OnSceneLoaded;
+    }
+
+    private static void OnSceneLoaded(UnityEngine.SceneManagement.Scene scene, UnityEngine.SceneManagement.LoadSceneMode mode)
+    {
+        try
+        {
+            if (!InputOverride.Active || !Session.Instance.Engine.Running || !GameBridge.LoadingLevel) return;
+            if (GameClock.HoldForLoad())
+                Plugin.Log.LogInfo($"[barrier] scene {scene.name} loaded at f{Session.Instance.Engine.AppliedFrame}: game time held until the release");
+        }
+        catch (Exception e) { Plugin.Log.LogWarning($"[barrier] scene load hold: {e.Message}"); }
     }
 
     /// <summary>
