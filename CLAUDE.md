@@ -191,6 +191,42 @@ The menus use the game's own widgets, so they look, sound and navigate like the 
 - **Status Bar** (Mod Settings, or the pause screen's Options; this PC only): **On** (default) shows the player bar; **Off** hides it in play but not on the title screen or the mod's pause screen; **Advanced** also shows the old one-line status (players, ping, sync, waits) at the top right. The old `AdvancedStatusBar` setting is migrated to Advanced.
 - **F8** opens a small debug panel.
 
+### Writing player-facing text
+
+Every string a player sees (toasts, errors, status lines, popups and their choices, menu and pause entries, settings and their help, notices, loading screens) should read like Sea of Stars' own UI: as short as it can be, with only what helps the player decide or understand what happened.
+
+**Workflow:**
+1. **Look the string up first**, in the code and in `docs/messages.csv`. A string that already exists gets its own row updated (same `id`, `current_text` as the code shows it now, `text` the proposal), never a duplicate row. Rows marked *Removed* in `review_notes` were taken out on purpose; say why before bringing one back.
+2. **Match the neighbours:** read the rows of the same `kind` and `where`. Where the user's edits (their `review_notes`) differ from these notes, the edits win.
+3. **Measure** with placeholders filled at their longest: player names are up to 24 characters (12 on Assign Players tags). A `{names}` list must read for one name and for several ("Robin, Sam wants to join" doesn't), and a fallback like "the host" must read too.
+4. **Write the CSV rows before the code**, with `review_notes` saying what changed and the date, and list them for review. The file is UTF-8 with a byte order mark.
+
+| Kind | Limit |
+|---|---|
+| Toast, or an error shown as one | 80 characters filled (`Toast.MaxChars`); aim for 30–50 |
+| Popup choice | about 25 characters (`NativeMenus.MaxChoiceWidth`) |
+| Menu and pause entries, settings | 1–3 words, like the game's own entries |
+| Status line under the Online list | one line |
+
+**Wording:**
+- **Players' words, not ours:** "co-op", not "session"; "join", not "drop in"; "out of sync", not "desync"; "rejoin", not "re-sync". No lockstep, catch-up, peer, slot, mirror, snapshot, frame or protocol.
+- **Only what changes the decision.** Keep consequences that matter ("Any progress since your last save will be lost."), and drop trailing explanations.
+- **Buttons lean on the question:** "End co-op for everyone?" → **End** / **Back**.
+- **Name players** ("Robin joined"), use "you" for the reader and "they" for a player, and use game terms as the game writes them (*Title screen*, *party*, *area*, *[P2]*).
+- **A little warmth when things go right** ("You're in!", "Welcome back!"), and none in errors: say what happened and what to do.
+- **Contractions as in speech:** "can't", never "cannot". No noun-verb contractions: "Robin is joining", not "Robin's joining".
+
+**Punctuation and capitals:**
+- **Toasts, errors and status lines:**
+  - one sentence has no final period ("Join a friend first");
+  - two or more sentences get periods ("Co-op ended. You may continue playing.");
+  - "!" stays;
+  - anything in progress ends with `…` ("Joining…").
+- **Popup text and pause hints** are ordinary sentences with periods.
+- **Entries, choices, titles and notices** have no final punctuation, except "?" on a confirming title ("Remove P2 Robin?").
+- **No em dashes** in UI text; use a colon or a second short sentence.
+- **Title Case** for menu and pause entries, popup choices, page titles and setting names (**Let Robin In**, **Return to Area Start**). **Sentence case** for sentences and for option rows that mirror the game's (*Master volume*). "Co-op" is capitalized only at the start of a sentence or in a Title Case label.
+
 ## Build and install
 
 **Game folder.** Every tool, test script and the build find Sea of Stars through `tools/game-dir.ps1`: `-GameDir`, else the `SOS_GAME_DIR` environment variable, else `game-dir.txt` in the repository root, else Steam's library folders. The folder it finds is written to `game-dir.txt`, which is gitignored: never put a PC's own path in a committed file. Test scripts get it as `$GAME` from `tests/game-dir.sh` (the `.cmd` scripts call the resolver directly).
@@ -340,7 +376,7 @@ Notes:
 - Tests run from the user's newest save (`--sosonline-start=0a`, `--sosonline-play=0`), so what they reach changes when the user plays. STATUS.md notes where that save currently is (area, encounter frame, nearest campfire).
 - Run hygiene: display preferences come back by themselves (above); delete `SosOnlineTest-*` and `SosOnlineSession-<port>` in `%USERPROFILE%\AppData\LocalLow\Sabotage Studio\Sea of Stars` afterwards, never `SosOnlineSession` or `SosOnlineBackup`.
 - Choose local pause entries by label (`--sosonline-pausechoose=1760:Leave_Co-op,1800:Leave`), not by cursor moves: the entry list changes.
-- Message wording: `docs/messages.csv` lists every player-facing string; the user reviews it there. Keep toasts at most 80 characters and popup choices at most about 25.
+- Message wording: `docs/messages.csv` lists every player-facing string; the user reviews it there. See *Writing player-facing text* above.
 
 ## Investigation techniques that worked
 
