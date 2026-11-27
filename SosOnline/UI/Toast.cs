@@ -93,7 +93,7 @@ internal static class Toast
         _group = _canvas.gameObject.AddComponent<CanvasGroup>();
         _group.interactable = false;
         _group.blocksRaycasts = false;
-        _panel = GameUi.Panel(_canvas.transform, "Panel");
+        _panel = GameUi.Panel(GameUi.Area(_canvas), "Panel");
         _panel.anchorMin = _panel.anchorMax = _panel.pivot = new Vector2(0.5f, 1f);
         _panel.anchoredPosition = new Vector2(0, -Top);
         _text = GameUi.Text(_panel, "Text", false, TMPro.TextAlignmentOptions.Center);

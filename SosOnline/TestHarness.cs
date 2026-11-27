@@ -50,6 +50,9 @@ namespace SosOnline;
 ///   --sosonline-guardtest         log where the test-run save guard sends a few paths (writes nothing)
 ///   --sosonline-nodlc             act as a PC without any DLC (in and out of sessions)
 ///   --sosonline-botblock=N        the bot blocks N frames after this PC sees the block window open
+///   --sosonline-titlebarshot      title screen: the Online page; once another player is in the session, the player
+///                                 bar's state in the log and screenshots (ui-titlebar, then Load Game: ui-titlebar-saves
+///                                 on the host), then leave and quit. Never opens a save.
 ///   --sosonline-onlineshot        title screen: Online page (ui-online-page), Host (ui-online-hosting), Options
 ///                                 (ui-online-options), Back, Load Game (ui-online-saves), Back, stop hosting, quit. Use with --sosonline-udp=PORT.
 ///   --sosonline-popupanswer=L,... answer the mod's popups that offer one of these labels ("_" for a space)
@@ -287,6 +290,34 @@ internal static class TestHarness
         _vsStep++;
     }
 
+    private static int _tbStep;
+    private static double _tbAt;
+
+    /// <summary>
+    /// --sosonline-titlebarshot: the title's Online page; once another player is in the session, the player bar's state
+    /// and a screenshot (ui-titlebar), then Load Game (ui-titlebar-saves, host only), then leave and quit.
+    /// </summary>
+    private static void TitleBarShotTest()
+    {
+        double now = Time.realtimeSinceStartupAsDouble;
+        if (_tbStep == 0) { if (!GameBridge.AtTitleScreen) return; _tbStep = 1; _tbAt = now + 5; return; }
+        if (now < _tbAt) return;
+        bool host = Session.Instance.IsHost;
+        string Bar() => $"[test] player bar: {UI.PlayerBar.Describe()}";
+        switch (_tbStep)
+        {
+            case 1: ShowTitleChoices(GameBridge.FindTitleScreen()); _tbAt = now + 2; break;
+            case 2: UI.NativeMenus.OpenTitleMenu(); _tbAt = now + 1; break;
+            case 3: if (Session.Instance.Peers.Count() == 0) { if (now > 240) Application.Quit(); return; } _tbAt = now + 6; break;
+            case 4: Plugin.Log.LogInfo(Bar()); Shot("ui-titlebar"); _tbAt = now + 1; break;
+            case 5: if (host) UI.NativeMenus.ClickEntry("Load Game"); _tbAt = now + 2; break;
+            case 6: if (host) { Plugin.Log.LogInfo(Bar()); Shot("ui-titlebar-saves"); } _tbAt = now + (host ? 8 : 1); break;
+            case 7: Plugin.Log.LogInfo("[test] title bar shot done"); Session.Instance.Leave(); _tbAt = now + 2; break;
+            default: Application.Quit(); _tbStep = 99; return;
+        }
+        _tbStep++;
+    }
+
     /// <summary>--sosonline-onlineshot: the title's Online page (not hosting), a screenshot (ui-online-page), quit.</summary>
     private static void OnlineShotTest()
     {
@@ -390,6 +421,7 @@ internal static class TestHarness
         if (Args.ContainsKey("updatecheck")) UpdateCheckTest();
         if (Args.ContainsKey("versionshot")) VersionShotTest();
         if (Args.ContainsKey("onlineshot")) OnlineShotTest();
+        if (Args.ContainsKey("titlebarshot")) TitleBarShotTest();
         if (!_logsSent && Args.TryGetValue("sendlogs", out var sl) && Session.Instance.Phase == Phase.Running
             && Session.Instance.Engine.AppliedFrame >= int.Parse(sl))
         {
@@ -742,6 +774,8 @@ internal static class TestHarness
     private static string _lastCampState;
 
     /// <summary>The camping state, logged on change, to compare the PCs frame by frame.</summary>
+    private static string _lastPlaying;
+
     private static void CampState(int frame)
     {
         string state;
@@ -923,8 +957,10 @@ internal static class TestHarness
         }
         if (frame % 300 == 0 && session.Engine.Running)
         {
-            var playing = Enumerable.Range(0, InputOverride.SlotCount).Where(GameBridge.IsPlaying).Select(i => $"P{i + 1}");
-            Plugin.Log.LogInfo($"[test] f{frame} playing: {string.Join(",", playing)}");
+            // Only when it changes: in a real session this was a line every 5 s.
+            string playing = string.Join(",", Enumerable.Range(0, InputOverride.SlotCount).Where(GameBridge.IsPlaying).Select(i => $"P{i + 1}"));
+            if (playing != _lastPlaying) Plugin.Log.LogInfo($"[test] f{frame} playing: {playing}");
+            _lastPlaying = playing;
         }
         if (Args.ContainsKey("assignprobe")) Diagnostics.AssignProbe(frame);
         if (Args.TryGetValue("encounter", out var ef) && int.TryParse(ef, out int encounterFrame) && frame == encounterFrame)

@@ -31,7 +31,7 @@ internal static class RumbleLog
 
     private static void Prefix(InputManager __instance, Player __0)
     {
-        if (!InputOverride.Active || !NativeCode.Is<InputManager>(__instance)) return;
+        if (!InputOverride.Active || !TestHarness.HasArgs || !NativeCode.Is<InputManager>(__instance)) return;
         int slot = GameBridge.SlotOf(__0);
         Plugin.Log.LogInfo($"[rumble] f{Session.Instance.Engine.AppliedFrame} for player {__0?.id} (slot {slot}, this PC's slot {Session.Instance.LocalSlot}, joysticks {__0?.controllers.joystickCount})");
     }

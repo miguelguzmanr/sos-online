@@ -22,6 +22,22 @@ internal static class LoadBarrier
         finally { _releasing = false; }
     }
 
+    /// <summary>
+    /// Idle animation timers (<see cref="IdleBreakHandler"/>) stand still until a level load is released. They start
+    /// counting as soon as a level's objects exist, before the barrier, and the barrier holds each PC for a different
+    /// number of frames: on Mountain Trail one PC counted 14 frames more than the other, and a boulder goat stopped to
+    /// graze on that PC only (f572, 2026-11-26), which split every NPC after it.
+    /// </summary>
+    [HarmonyPatch(typeof(IdleBreakHandler), "LateUpdate")]
+    private static class IdleBreakFreezePatch
+    {
+        private static bool Prefix(IdleBreakHandler __instance)
+        {
+            if (!InputOverride.Active || !NativeCode.Is<IdleBreakHandler>(__instance)) return true;
+            return !GameBridge.LoadingLevel;
+        }
+    }
+
     [HarmonyPatch(typeof(LevelManager), nameof(LevelManager.EndCurrentLevelLoading))]
     private static class EndLoadingPatch
     {

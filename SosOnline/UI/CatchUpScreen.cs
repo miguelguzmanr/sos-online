@@ -41,7 +41,11 @@ internal static class CatchUpScreen
         bool show = (s.CatchingUp || resync) && GameUi.Ready;
         if (show && _canvas == null) Build();
         if (_canvas != null && _canvas.gameObject.activeSelf != show) _canvas.gameObject.SetActive(show);
-        if ((resync && show) != _wasResync) Plugin.Log.LogInfo($"[resync] waiting screen {(resync && show ? "shown" : "hidden")}");
+        if ((resync && show) != _wasResync)
+        {
+            Plugin.Log.LogInfo($"[resync] waiting screen {(resync && show ? "shown" : "hidden")}");
+            if (resync && show) _resyncShownAt = Time.realtimeSinceStartup;
+        }
         _wasResync = resync && show;
         _shown = show;
         PulseCamera(show && s.CatchUpFastForwarding);
@@ -94,17 +98,29 @@ internal static class CatchUpScreen
         _footer.text = GameUi.Drawable("Esc: Leave co-op");
     }
 
-    /// <summary>Esc / Back / Start on any player, read from the devices (no lockstep while waiting).</summary>
+    private static float _resyncShownAt;
+
+    /// <summary>
+    /// Esc / Back / Start on any player, read from the devices themselves. Rewired's getters go through the synced-input
+    /// override, which still answers from the last applied frame right after lockstep stops: a Back or Start pressed in
+    /// that frame (closing a shop, 2026-11-26) left the session 4 ms after the screen showed. Presses in the first
+    /// half second are ignored too, so a press meant for the game doesn't count.
+    /// </summary>
     private static bool EscPressed()
     {
+        if (Time.realtimeSinceStartup - _resyncShownAt < 0.5f) return false;
+        bool old = SosOnline.Lockstep.InputOverride.Bypass;
+        SosOnline.Lockstep.InputOverride.Bypass = true;
         try
         {
+            if (BackgroundRun.On) return false;
             if (Input.GetKeyDown(KeyCode.Escape)) return true;
             if (!Rewired.ReInput.isReady) return false;
             foreach (var p in Rewired.ReInput.players.AllPlayers.ToList())
                 if (p != null && (p.GetButtonDown("UI_Back") || p.GetButtonDown("UI_Start"))) return true;
         }
         catch { }
+        finally { SosOnline.Lockstep.InputOverride.Bypass = old; }
         return false;
     }
 

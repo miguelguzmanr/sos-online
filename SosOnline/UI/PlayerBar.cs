@@ -12,8 +12,7 @@ namespace SosOnline.UI;
 /// <summary>
 /// The players of the session in a small column at the top left, in the frame of the game's co-op notices: each
 /// player's P1/P2/P3 icon (the game's <c>icn-player-square-N</c>) and, only when it matters, a status icon (paused,
-/// joining, waited for, a high ping, re-syncing). In play it shows icons only, for a few seconds when something changes
-/// and while a problem lasts; on the title screen, the pause screens, Assign Players and the save screen it stays and
+/// joining, waited for, a high ping, re-syncing). In play it shows icons only; on the title screen, the pause screens, Assign Players and the save screen it stays and
 /// adds names and status words. Over the game's other menus (main menu, shops, map), which have a panel there, it hides.
 /// Rows never move: the status icon has its own column.
 ///
@@ -23,7 +22,7 @@ namespace SosOnline.UI;
 /// </summary>
 internal static class PlayerBar
 {
-    private const float ShowSeconds = 4f, FadeSeconds = 0.4f, TurnSeconds = 2.5f;
+    private const float FadeSeconds = 0.4f, TurnSeconds = 2.5f;
     // Same insets as the game's notice: the icon 3 pixels in, text 5 pixels after it and 2 lower.
     private const float Left = 8, TopY = 8, Pad = 3, Icon = 15, RowGap = 3, StatusIcon = 11, TextGap = 5, TextH = 11;
     /// <summary>A ping above this shows on the player (the game itself feels it from about here).</summary>
@@ -37,7 +36,7 @@ internal static class PlayerBar
     private static readonly List<Chip> _chips = new();
 
     private static string _shownKey, _stateKey;
-    private static float _changedAt = -99, _alpha;
+    private static float _alpha;
     private static int _turnFrame = -1;
 
     private sealed class Chip
@@ -75,6 +74,8 @@ internal static class PlayerBar
         bool wanted = rows.Count > 1 && !s.CatchingUp && !s.ResyncWaiting && GameUi.Ready;
         if (!wanted)
         {
+            LogVisibility(rows.Count < 2 ? $"hidden: {rows.Count} player(s)" : s.CatchingUp ? "hidden: catching up"
+                : s.ResyncWaiting ? "hidden: re-sync screen" : "hidden: game UI art not loaded yet");
             if (_canvas != null && _canvas.gameObject.activeSelf) _canvas.gameObject.SetActive(false);
             _stateKey = null;
             return;
@@ -84,14 +85,42 @@ internal static class PlayerBar
 
         bool names = GameBridge.AtTitleScreen || s.Phase != Phase.Running || LocalPause.IsOpen || MenuStatus.Paused || MenuStatus.Menu.Length > 0;
         string state = string.Join("|", rows.Select(r => $"{r.Slot}{GameBridge.PlayerNumber(r.Slot)}{r.Name}{r.Status}"));
-        if (state != _stateKey) { _stateKey = state; _changedAt = Now; }
+        _stateKey = state;
 
         bool covered = MenuStatus.Open.Any(m => !BarMenus.Contains(m));
-        bool stay = !covered && (names || rows.Any(r => r.Problem) || Now - _changedAt < ShowSeconds);
+        // Always on outside the game's full-screen menus. It used to fade 4 s after a change in play, which players
+        // took for the bar having vanished (2026-11-26).
+        bool stay = !covered;
+        LogVisibility(covered ? $"hidden: under {string.Join(" > ", MenuStatus.Open)}"
+            : $"shown, {rows.Count} rows{(GameBridge.AtTitleScreen ? ", title screen" : "")}");
         _alpha = Mathf.MoveTowards(_alpha, stay ? 1 : 0, Time.unscaledDeltaTime / FadeSeconds);
         _group.alpha = _alpha;
-        string key = state + names + (_alpha > 0);
+        // The player icons load with the game's co-op HUD, so on the title screen they may come later than the rows:
+        // lay out again once they do, or the bar keeps its "P1" text stand-ins.
+        string icons = string.Concat(rows.Where(r => r.Slot >= 0)
+            .Select(r => GameUi.Find($"icn-player-square-{GameBridge.PlayerNumber(r.Slot)}") != null ? '1' : '0'));
+        string key = state + names + (_alpha > 0) + icons;
         if (_alpha > 0 && key != _shownKey) { _shownKey = key; Layout(rows, names); }
+    }
+
+    private static string _loggedVisibility = "";
+
+    /// <summary>Logs when the bar shows or hides and why, so a player's log tells why it wasn't there.</summary>
+    private static void LogVisibility(string what)
+    {
+        if (what == _loggedVisibility) return;
+        _loggedVisibility = what;
+        Plugin.Log.LogInfo($"[bar] {what}");
+    }
+
+    /// <summary>The bar's state, for test logs.</summary>
+    public static string Describe()
+    {
+        var s = Session.Instance;
+        var rows = Rows(s);
+        string panel = _panel == null ? "none" : $"{_panel.anchoredPosition} {_panel.sizeDelta}";
+        return $"phase {s.Phase}, rows {rows.Count}, gameui {GameUi.Ready}, canvas {(_canvas == null ? "none" : _canvas.gameObject.activeSelf.ToString())}, "
+            + $"alpha {_alpha:F2}, menus [{string.Join(", ", MenuStatus.Open)}], panel {panel}, title {GameBridge.AtTitleScreen}";
     }
 
     // ---------------------------------------------------------------- what to show
@@ -170,7 +199,7 @@ internal static class PlayerBar
         _group.interactable = false;
         _group.blocksRaycasts = false;
         _group.alpha = _alpha = 0;
-        _panel = GameUi.NoticePanel(_canvas.transform, "Panel");
+        _panel = GameUi.NoticePanel(GameUi.Area(_canvas), "Panel");
         GameUi.Place(_panel, Left, TopY, 21, 21);
         _chips.Clear();
         _shownKey = null;

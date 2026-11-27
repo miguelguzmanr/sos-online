@@ -294,9 +294,15 @@ internal static class CombatTrace
         try { Plugin.Log.LogInfo($"[combat] f{Frame} current player: {(__0 == null ? "none" : $"P{__0.Index + 1}, {Who(__0.Player)}")}"); } catch { }
     }
 
+    private static string _lastSelected, _lastAnswers;
+
     private static void SelectedActor(CombatActor __0)
     {
         if (!Active) return;
+        // The game selects twice in a row on a turn's first frame; one line is enough.
+        string key = $"{Frame} {Name(__0)}";
+        if (key == _lastSelected) return;
+        _lastSelected = key;
         Plugin.Log.LogInfo($"[combat] f{Frame} selected: {Name(__0)}; {Clocks()}");
     }
 
@@ -327,6 +333,9 @@ internal static class CombatTrace
     private static void ActorPlayer(PlayerCombatActor __instance, Rewired.Player __0)
     {
         if (!Active) return;
-        Plugin.Log.LogInfo($"[combat] f{Frame} {Name(__instance)} answers to {Who(__0)}");
+        string line = $"f{Frame} {Name(__instance)} answers to {Who(__0)}";
+        if (line == _lastAnswers) return;
+        _lastAnswers = line;
+        Plugin.Log.LogInfo("[combat] " + line);
     }
 }

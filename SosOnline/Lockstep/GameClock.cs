@@ -263,6 +263,32 @@ internal static class GameClock
 
     private static double Mod(double x, double m) => ((x % m) + m) % m;
 
+    /// <summary>Game time per frame while a level load is held at the barrier: next to nothing, but not 0 (0 turns the fixed step off).</summary>
+    private const float HoldStep = 0.0001f;
+    private static bool _holding;
+
+    /// <summary>
+    /// A level load reached its end on this PC and waits for the release frame: game time almost stands still until
+    /// then. The level's objects already run, and each PC waits a different number of frames (the slowest loader
+    /// decides): NPC patrols timed in game time walked 14 frames longer on one PC than the other, which split every NPC
+    /// on Mountain Trail (2026-11-26). A replaying joiner waits far longer than the live PCs did.
+    /// </summary>
+    public static void HoldForLoad()
+    {
+        if (!Enabled || _holding) return;
+        try { UnityEngine.Time.captureDeltaTime = HoldStep; _holding = true; }
+        catch (Exception e) { Plugin.Log.LogWarning($"[clock] time not held: {e.Message}"); }
+    }
+
+    /// <summary>The held load was released (or dropped): frames take their usual step again.</summary>
+    public static void EndLoadHold()
+    {
+        if (!_holding) return;
+        _holding = false;
+        if (_aligning) return; // the stretched step is already set; SetBase restores Step
+        try { UnityEngine.Time.captureDeltaTime = Step; } catch { }
+    }
+
     /// <summary>Lockstep applied a frame (every PC, once per frame).</summary>
     public static void Tick()
     {

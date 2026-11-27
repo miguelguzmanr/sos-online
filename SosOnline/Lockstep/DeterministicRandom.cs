@@ -24,6 +24,9 @@ internal static class DeterministicRandom
 {
     private static readonly (Type type, string method)[] Targets =
     {
+        // Idle animations (an NPC stops its patrol to graze or look around): when, and which.
+        (typeof(IdleBreakHandler), nameof(IdleBreakHandler.GetNextIdleBreakerDelay)),
+        (typeof(IdleBreakHandler), nameof(IdleBreakHandler.GetPlayableIdleBreaker)),
         (typeof(PlayerAttackDamage), nameof(PlayerAttackDamage.GetRandomDamageModifier)),
         (typeof(EnemyCombatActor), nameof(EnemyCombatActor.GetRandomAvailableMove)),
         (typeof(EnemyCombatMovesConfig), nameof(EnemyCombatMovesConfig.GetRandomCombatMove)),
@@ -313,6 +316,74 @@ internal static class DeterministicRandom
             if (hits == 0) Plugin.Log.LogWarning($"[random] {outer.Name}+{prefix} coroutine not found");
         }
         Plugin.Log.LogInfo($"[random] {patched} gameplay random roll(s) made deterministic");
+        if (!TestHarness.TryArg("novisualrng", out _)) InstallVisual(harmony);
+    }
+
+    /// <summary>
+    /// Visual effects that draw from <c>UnityEngine.Random</c> a number of times that differs between PCs (how often
+    /// they update depends on what is on screen). They run on a generator of their own, so the shared one, which every
+    /// roll not listed above still reads, advances the same way on every PC. On Mountain Trail the camera shake drew
+    /// 159 times on one PC and 147 on the other in 700 frames (2026-11-26). That wasn't what split the boulder goats
+    /// there (game time running during the load barrier was, see <see cref="GameClock.HoldForLoad"/>), but any roll
+    /// left on the shared generator after them would have come out differently. --sosonline-novisualrng leaves them
+    /// on the shared generator.
+    /// </summary>
+    private static readonly (string type, string method)[] VisualTargets =
+    {
+        ("RandomShake", "GenerateNextPos"),
+        ("AnimateLightProperties", "GenerateNextValues"),
+        ("TextWave", "Update"),
+    };
+
+    private static int _visualDepth;
+    private static UnityEngine.Random.State _visualState, _visualSaved;
+    private static bool _visualStateSet;
+
+    private static void InstallVisual(Harmony harmony)
+    {
+        var enter = new HarmonyMethod(typeof(DeterministicRandom).GetMethod(nameof(VisualEnter), BindingFlags.Static | BindingFlags.NonPublic));
+        var exit = new HarmonyMethod(typeof(DeterministicRandom).GetMethod(nameof(VisualExit), BindingFlags.Static | BindingFlags.NonPublic));
+        var types = typeof(PlayerAttackDamage).Assembly.GetTypes();
+        int patched = 0;
+        foreach (var (typeName, name) in VisualTargets)
+        {
+            int hits = 0;
+            foreach (var type in types.Where(t => t.Name == typeName))
+                foreach (var m in type.GetMethods(BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly).Where(m => m.Name == name))
+                {
+                    hits++;
+                    if (NativeCode.IsFolded(m)) { Plugin.Log.LogWarning($"[random] {typeName}.{name} is folded with other methods; left alone"); continue; }
+                    try { harmony.Patch(m, prefix: enter, finalizer: exit); patched++; }
+                    catch (Exception e) { Plugin.Log.LogWarning($"[random] {typeName}.{name} not patched: {e.Message}"); }
+                }
+            if (hits == 0) Plugin.Log.LogWarning($"[random] {typeName}.{name} not found");
+        }
+        Plugin.Log.LogInfo($"[random] {patched} visual effect(s) on a generator of their own");
+    }
+
+    private static void VisualEnter()
+    {
+        if (_visualDepth++ > 0) return;
+        try
+        {
+            _visualSaved = UnityEngine.Random.state;
+            if (_visualStateSet) UnityEngine.Random.state = _visualState;
+        }
+        catch { }
+    }
+
+    private static Exception VisualExit(Exception __exception)
+    {
+        if (--_visualDepth > 0) return __exception;
+        _visualDepth = 0;
+        try
+        {
+            _visualState = UnityEngine.Random.state;
+            _visualStateSet = true;
+            UnityEngine.Random.state = _visualSaved;
+        }
+        catch { }
+        return __exception;
     }
 
     private static bool MatchesCoroutine(string typeName, string prefix)

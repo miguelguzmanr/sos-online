@@ -108,6 +108,18 @@ public sealed class OnlineBehaviour : MonoBehaviour
 
     private void FixedUpdate() => FixedSteps++;
 
+    /// <summary>A closing line, so a log that ends without it means the game crashed or was killed.</summary>
+    private void OnApplicationQuit()
+    {
+        try
+        {
+            var s = Session.Instance;
+            Plugin.Log.LogInfo($"[quit] the game is closing after {Time.realtimeSinceStartup / 60:F1} min" +
+                (s.Engine.Running ? $", in a session at frame {s.Engine.AppliedFrame}" : ", not in a session"));
+        }
+        catch { }
+    }
+
     private void Update()
     {
         try
@@ -119,6 +131,7 @@ public sealed class OnlineBehaviour : MonoBehaviour
             Toast.Update();
             SessionLogs.Update();
             Overlay.Update();
+            SosOnline.UI.GameUi.UpdateAreas();
             PlayerBar.Update();
             NativeMenus.Update();
             VersionLabel.Update();

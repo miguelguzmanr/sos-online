@@ -166,8 +166,9 @@ internal sealed class AreaLog
         _frames.Add(Serialize(channels));
     }
 
-    /// <summary>A replay longer than this (frames) would take a joiner too long to catch up (about a minute).</summary>
-    public const int MaxFrames = 60 * 900;
+    /// <summary>A replay longer than this (frames, 5 minutes) would keep a joiner waiting too long: a slower PC replays
+    /// only a few hundred frames a second, and 51,000 frames (2026-11-26) never finished. A reload in place is quicker.</summary>
+    public const int MaxFrames = 60 * 300;
 
     private void KeepSave(int frame)
     {

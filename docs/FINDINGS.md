@@ -614,3 +614,24 @@ Three players over Steam, two sessions (22:19–22:45 and 22:47–23:31). The se
 **Other things seen.**
 - Session 1, f26740: Assign Players opened on the host while the pause menu closed on the guests (same pause item lists on all PCs). Cause not found; possibly the DLC difference above. Watch for it in the next session.
 - An in-game save in session 1 (22:42:46) wrote the host's slot 0, replacing a save from 2026-11-16. The old file is in `SosOnlineBackup\Saves\SOS_SaveSlot0\`.
+
+## 18. Playtest of 2026-11-26: game time ran during the load barrier (`2026-11-26`)
+
+Three players over Steam on v0.1.86, Mountain Trail and Forbidden Cavern. Both guests split on `npcs differs` by f720–780 even when all three PCs loaded the same save on frame 0, and 12 of 12 catch-up replays failed.
+
+**Cause.** The load barrier (`LoadBarrier.cs`) holds `LevelManager.EndCurrentLevelLoading` on every PC until the host's release frame, but the level's objects already exist and run during the hold. Each PC reaches the end of the load on a different frame, so each holds for a different number of frames; with game time advancing at 1/60 s per frame, NPC patrols and idle-break timers (`IdleBreakHandler`) ran 14 frames longer on one PC. A boulder goat stopped to graze on that PC only (f572) and every NPC after it split. A replaying joiner holds much longer than the players already in, so replays always split.
+
+**Fix.** While a load is held, the frame step (`Time.captureDeltaTime`) is 0.0001 s instead of 1/60 (`GameClock.HoldForLoad` / `EndLoadHold`, called from `Session.HoldLevelLoadEnd`, the release, the end of lockstep and a barrier reset). Idle-break timers also stand still until the release (`IdleBreakFreezePatch`), and the idle-break rolls are seeded per frame.
+
+**Ruled out on the way.** The camera shake, light flicker and wavy text drew `UnityEngine.Random` a different number of times per PC (159 against 147 in 700 frames). They now run on their own generator (`DeterministicRandom.VisualTargets`), which is right regardless, but it didn't fix the split.
+
+**Test.** Hidden, two instances from the user's newest save on Mountain Trail with walk scripts and `--sosonline-noresync`: 53 snapshot mismatches before, 0 of 81 after. `tests/resync.sh` there: the replay of 1,220 frames took 3.6 s, 57 snapshots, 0 differ.
+
+**Other fixes from the same session.**
+- The re-sync waiting screen left the session 4 ms after it showed: its Esc check read Rewired through the synced-input override, which still reported the last frame's Back. It now reads the hardware and ignores the first 0.5 s.
+- Auto input delay stuck at 15 frames: one 723 ms ping sample right after the join set it. Pongs for pings sent before the join are dropped, and the delay waits until ping has settled (9 samples, or the last 3 within 30 % / 40 ms).
+- The player bar faded 4 s after a change in play, which players took for it having vanished; it now stays.
+- On ultrawide the game draws a centred 16:9 picture; the mod's overlays sat across the whole screen, behind its black bars. Bar, notices, toasts and the pause screen now sit in the picture area (`GameUi.Area`).
+- Replays longer than 5 minutes (was 15) fall back to a reload: a 51,000-frame replay never finished on a friend's PC.
+
+**Not yet seen again live:** the shop opening on the host only (f5759, `pause differs`), the Bosslug battle split and the pause state differing in replays. All three followed a level load, so likely the same cause.

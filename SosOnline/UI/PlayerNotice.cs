@@ -100,7 +100,7 @@ internal static class PlayerNotice
 
     private static void Build(Entry e)
     {
-        e.Root = GameUi.NoticePanel(_canvas.transform, "Notice");
+        e.Root = GameUi.NoticePanel(GameUi.Area(_canvas), "Notice");
         e.Root.anchorMin = e.Root.anchorMax = e.Root.pivot = new Vector2(1, 0);
         e.Group = e.Root.gameObject.AddComponent<CanvasGroup>();
         e.Group.interactable = false;

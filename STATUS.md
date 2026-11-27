@@ -18,11 +18,24 @@ Current state of the project, for whoever picks it up next. Update it at the end
   - **Tested:** the full sweep on 2026-11-26 (hidden): every session test 0 differ or 0 mismatches, no errors in any log. The camp test found no campfire near the user's newest save (Mooncradle), so camping itself wasn't exercised. Also three players with ownership turns, a pass, a take over and a removal over a lagged link (170/170 and 137/137 snapshots), and screenshot runs of every notice and bar status. Not yet: Steam, the Classic setting in a battle.
 - **Tests run hidden** (merged 2026-11-26): every bash test script starts the game on a hidden desktop, muted and deaf to this PC's keyboard, mouse and pads (`tests/launch.sh`, `--sosonline-background`); `VISIBLE=1` shows them. The `.cmd` scripts still start visible.
 - **Latest release on `main`:** `v0.1.86`, 2026-11-26. The repository's history was rewritten and the GitHub repository recreated as `sosonline` and renamed to `sos-online`, so the old name redirects again (v0.1.63 and older look up releases there).
-- **Installed on the user's PC:** a local build of the v0.1.86 code (0.85-modified); the game offers the published v0.1.86 at its next start.
+- **Installed on the user's PC:** v0.1.86 (played over Steam with two friends on 2026-11-26).
 - **Updates are manual from v0.1.60 on.** v0.1.56 and older download v0.1.60 at their next start; after that, *sos-online \<version\> (\<update\> available)* on the title screen and *Check for Updates* under **Mod Options**.
 - **Test saves:** existing single/2-player scripts run from the user's newest save (`--sosonline-start=0a`), while `tests/three-player-*.sh` and `tests/rejoin-paused.sh` use the sandboxed fixtures in `tests/saves/` (`midgame-necromancer/`, `endgame-worldmap/`).
 
 ## Open items, by priority
+
+From the playtest of 2026-11-26 (v0.1.86, three players over Steam, Mountain Trail and Forbidden Cavern; host logs and seven friends' log zips). Fixed in the working copy, not released (findings §18):
+
+- **Fixed: wandering NPCs split the PCs on Mountain Trail, and catch-up replays failed 12 of 12.** Game time ran during the load barrier, for a different number of frames on each PC; it now stands still while a load is held. Two hidden instances from the user's newest save: 0 of 81 snapshots differ (53 before); a replay there matches the host (57 of 57).
+- **Fixed: the re-sync waiting screen left the session** as it showed (it read the synced Back press).
+- **Fixed: auto input delay stuck at 15 frames** from one 723 ms ping sample at the join.
+- **Fixed: the player bar** no longer fades in play (players took it for gone after a cutscene).
+- **Fixed: ultrawide.** The mod's UI sits in the game's 16:9 picture, not behind its black bars (checked at 1680x720).
+- **Changed: replays longer than 5 minutes** (was 15) reload instead; a 51,000-frame replay never finished.
+- **Logs:** duplicate combat lines and the 5-second `[test] playing` line only when they change, `[rumble]` only in test runs, and a closing `[quit]` line, so a crash can be told from a quit.
+- **Watch in the next session:** the shop opening on the host only (f5759, `pause differs`), the Bosslug battle split and the pause state differing in replays. All followed a level load, so likely the same cause; not reproduced.
+- **Player bar on the title screen: not reproduced.** The user never saw it on the title screen during the Steam session, though friends sat in the lobby there for 30–40 s twice. On UDP it shows on the title, on the Online page and on Load Game, for host and guest, at 1280x720 and fullscreen 1920x1080, on both v0.1.86 and the working copy (`--sosonline-titlebarshot`). Now the log says when the bar shows or hides and why (`[bar] shown, 2 rows, title screen` / `[bar] hidden: …`): check the host's log after the next Steam session. Also fixed: the player icons, which load with the game's co-op HUD, replace their "P1" text stand-ins when they turn up later.
+- **Not done:** a tolerance for the NPC check. It compares a hash of positions to 0.1 m; with the cause fixed it should no longer fire, and a tolerance would need the positions sent.
 
 From the playtest of 2026-11-25 (v0.1.77, three players over Steam):
 

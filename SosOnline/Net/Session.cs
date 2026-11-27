@@ -38,6 +38,8 @@ internal sealed class Session
         public float RttMs;
         public readonly List<float> RttSamples = new();
         public double LastHeard;
+        /// <summary>When the host accepted this peer: round trips for pings sent before don't count.</summary>
+        public double JoinedAt;
         public bool Ready;
         /// <summary>Joined while a session was running: drops in at the next moment the game allows saving.</summary>
         public bool Pending;
@@ -841,7 +843,7 @@ internal sealed class Session
                     Plugin.Log.LogInfo($"[session] rejected {name}: {reason}");
                     return;
                 }
-                peer = new Peer { Id = from, Slot = slot, Name = name, LastHeard = Now, Pending = Phase == Phase.Running, Dlc = dlc };
+                peer = new Peer { Id = from, Slot = slot, Name = name, LastHeard = Now, JoinedAt = Now, Pending = Phase == Phase.Running, Dlc = dlc };
                 _peers[from] = peer;
                 SlotPeer[slot] = from;
                 SlotName[slot] = name;
@@ -1235,6 +1237,9 @@ internal sealed class Session
     {
         if (peer == null) return;
         double sent = r.ReadDouble();
+        // Pings sent while the connection was still being set up come back late all at once (723 ms and 1064 ms on
+        // 2026-11-26, against 50 ms later): not the ping the input delay should be picked from.
+        if (sent < peer.JoinedAt) return;
         float rtt = (float)((Now - sent) * 1000.0);
         peer.RttSamples.Add(rtt);
         if (peer.RttSamples.Count > RttKeep) peer.RttSamples.RemoveAt(0);
@@ -1245,6 +1250,22 @@ internal sealed class Session
     private const int RttKeep = 9;
     /// <summary>Round trips needed before the input delay is picked from a peer's ping.</summary>
     private const int RttForDelay = 3;
+
+    /// <summary>
+    /// The peer's ping is good enough to pick the input delay from: its last <see cref="RttForDelay"/> round trips
+    /// agree, or <see cref="RttKeep"/> have come in. Over Steam the first replies after connecting can take far longer
+    /// than later ones: on 2026-11-26 three of them gave 723 ms, the delay became 15 frames (250 ms) for the whole
+    /// session, and the ping was 50 ms a few seconds later.
+    /// </summary>
+    private static bool PingSettled(Peer p)
+    {
+        var s = p.RttSamples;
+        if (s.Count >= RttKeep) return true;
+        if (s.Count < RttForDelay) return false;
+        float lo = float.MaxValue, hi = 0;
+        for (int i = s.Count - RttForDelay; i < s.Count; i++) { lo = Math.Min(lo, s[i]); hi = Math.Max(hi, s[i]); }
+        return hi - lo <= Math.Max(40f, lo * 0.3f);
+    }
 
     private void DropPeer(ulong id, string why)
     {
@@ -1396,6 +1417,7 @@ internal sealed class Session
             _heldSeq = -1;
             LoadBarrier.Release();
         }
+        GameClock.EndLoadHold();
         GameBridge.UnlockTime();
         DlcGate.Clear();
         BattleTurns.SetRule(false);
@@ -1566,6 +1588,7 @@ internal sealed class Session
         _loadSeq = 0;
         _heldSeq = -1;
         _loadReports.Clear();
+        GameClock.EndLoadHold();
     }
 
     /// <summary>
@@ -1580,6 +1603,7 @@ internal sealed class Session
         _heldSeq = seq;
         _heldSince = frame;
         Plugin.Log.LogInfo($"[barrier] load {seq} reached its end at f{frame}, held");
+        GameClock.HoldForLoad();
         if (_catchUp != null)
         {
             // Catching up: the session released this load long ago; its release frame is already scheduled here.
@@ -1676,6 +1700,7 @@ internal sealed class Session
             _releaseFrames.Remove(frame);
             Plugin.Log.LogInfo($"[barrier] load {seq} released at f{frame} (held {frame - _heldSince} frames)");
             GameClock.SetBase(timeBase, frame + Engine.RngFrameOffset);
+            GameClock.EndLoadHold();
             SpawnTrace.Reset();
             LoadBarrier.Release();
             // Every PC autosaves at the end of this frame: a later joiner can catch up from here (Stage 3).
@@ -1753,7 +1778,7 @@ internal sealed class Session
         if (!IsHost || _closeAt >= 0) return; // ended: closing, not starting again
         // Wait for a few round trips: the first reply after connecting can be very slow (1630 ms on 2026-11-15), and
         // the input delay picked from it stays for the whole session.
-        if (HostInGameplay && _peers.Count > 0 && ActionTable.Ready && _peers.Values.All(p => p.RttSamples.Count >= RttForDelay))
+        if (HostInGameplay && _peers.Count > 0 && ActionTable.Ready && _peers.Values.All(PingSettled))
             StartFromGameplay();
         if (Phase != Phase.Running) { _hadGuests = false; return; }
         if (_peers.Count > 0) _hadGuests = true;

@@ -76,6 +76,59 @@ internal static class GameUi
         if (_searched) Plugin.Log.LogInfo($"[gameui] game UI art found ({Sprites.Count} sprites, fonts {_copyFont?.name}, {_smallFont?.name})");
     }
 
+    private static readonly List<RectTransform> _areas = new();
+    private static Rect _area = new(0, 0, 1, 1);
+    private static string _areaLogged;
+    private static float _nextAreaCheck;
+
+    /// <summary>
+    /// The part of <paramref name="canvas"/> the game draws its picture in, for content placed against the screen's
+    /// edges. On a screen wider than 16:9 the game keeps 16:9 with black bars at the sides, and the mod's UI placed
+    /// against the window's edges sat on the bars (2026-11-26, 3440x1440).
+    /// </summary>
+    public static RectTransform Area(Canvas canvas)
+    {
+        var t = canvas.transform.Find("Area")?.GetComponent<RectTransform>();
+        if (t != null) return t;
+        var go = new GameObject("Area");
+        go.layer = 5;
+        t = go.AddComponent<RectTransform>();
+        t.SetParent(canvas.transform, false);
+        t.pivot = new Vector2(0.5f, 0.5f);
+        t.offsetMin = t.offsetMax = Vector2.zero;
+        t.anchorMin = _area.min;
+        t.anchorMax = _area.max;
+        _areas.Add(t);
+        return t;
+    }
+
+    /// <summary>Every frame: follows the game's picture area (window resizes, resolution changes).</summary>
+    public static void UpdateAreas()
+    {
+        if (Time.realtimeSinceStartup < _nextAreaCheck) return;
+        _nextAreaCheck = Time.realtimeSinceStartup + 0.5f;
+        var area = GamePictureArea();
+        if (area == _area) return;
+        _area = area;
+        string log = $"{Screen.width}x{Screen.height}: {area.xMin:F3}-{area.xMax:F3} x {area.yMin:F3}-{area.yMax:F3}";
+        if (log != _areaLogged) { _areaLogged = log; Plugin.Log.LogInfo($"[gameui] picture area on {log}"); }
+        _areas.RemoveAll(a => a == null);
+        foreach (var a in _areas) { a.anchorMin = area.min; a.anchorMax = area.max; }
+    }
+
+    /// <summary>
+    /// The game's picture as a fraction of the window: on a window wider than 16:9, the centred 16:9 part (the game's
+    /// cameras render there, measured at 1680x720: 0.119-0.881). Computed rather than read from <c>Camera.main</c>,
+    /// which flips between the game's cameras (some full-width) during loads.
+    /// </summary>
+    private static Rect GamePictureArea()
+    {
+        float w = Screen.width, h = Screen.height;
+        if (w <= 0 || h <= 0 || w / h <= 16f / 9f + 0.01f) return new Rect(0, 0, 1, 1);
+        float part = h * 16f / 9f / w;
+        return new Rect((1 - part) / 2, 0, part, 1);
+    }
+
     /// <summary>A screen-space overlay canvas scaled like the game's (640×360 reference), above the game's UI.</summary>
     public static Canvas CreateCanvas(string name, int sortingOrder)
     {

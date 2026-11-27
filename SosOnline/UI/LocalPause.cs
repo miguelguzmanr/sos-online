@@ -407,7 +407,7 @@ internal static class LocalPause
     {
         // Above the game's menus, HUD and the menu banner; below the catch-up screen.
         _canvas = GameUi.CreateCanvas("SosOnline_LocalPause", 29500);
-        _panel = GameUi.Panel(_canvas.transform, "Panel");
+        _panel = GameUi.Panel(GameUi.Area(_canvas), "Panel");
         _panel.anchorMin = _panel.anchorMax = _panel.pivot = new Vector2(0.5f, 0.5f);
         _panel.anchoredPosition = new Vector2(0, 10);
         _panel.sizeDelta = new Vector2(W, 100);
