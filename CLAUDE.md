@@ -276,7 +276,7 @@ Session flags:
 | What | How |
 |---|---|
 | No window, no focus, none of your typing | `tests/start-game.ps1` starts the game on a hidden Win32 desktop (`CreateDesktop` "SosOnlineTests", never switched to). Its windows never show on yours, it can't take the foreground there (Unity activates its window on start), and keyboard and mouse input only go to the desktop on screen. Unity renders as usual there: screenshots work. Moving the window off-screen wasn't enough: Unity shows its window centred for about 0.4 s before it can be moved, and Windows often refuses a background process handing the focus back. |
-| No console | BepInEx's console window (`Logging.Console` in `BepInEx\config\BepInEx.cfg`) would open for every instance: background runs turn it off; `tests/display-prefs.sh restore` turns it back on. |
+| No console | BepInEx's console window (`Logging.Console` in `BepInEx\config\BepInEx.cfg`) would open for every instance: background runs turn it off; it comes back on with the display preferences (below). |
 | No sound, no pads | The game gets `--sosonline-background` (`SosOnline/BackgroundRun.cs`): Wwise output muted, Rewired's keyboard, mouse and joysticks disabled, and lockstep input capture returns nothing (pads are read on any desktop). Scripts and bots still drive it. |
 | Full speed | `Application.runInBackground` stays on, and the launcher opts the process out of Windows 11 background throttling (EcoQoS and timer resolution). `menu-status.sh` took 94 s in the background against 102 s on screen, with the same results. |
 
@@ -288,7 +288,7 @@ Test instances never touch your real saves:
 - Each UDP test instance plays from its own sandbox copy (`<saves>\SosOnlineTest-<port>`) and its own mirror folder.
 - Delete those folders when done.
 
-Unity stores the `-screen-*` test flags as the game's display preferences, so wrap test runs with `tests/display-prefs.sh save` and `tests/display-prefs.sh restore` (which also turns BepInEx's console back on).
+Unity stores the `-screen-*` test flags as the game's display preferences (resolution, window mode) when an instance quits. Every test instance, from `launch.sh` and the `.cmd` scripts, first runs `tests/display-prefs.sh ensure`: it backs up the game's registry key unless a backup already exists (so a later save never takes test values) and starts a watcher. Once no instance started with `--sosonline-*` flags has run for a few seconds, the watcher puts the key back, deletes the backup and turns BepInEx's console back on. That covers interrupted runs and scripts that never restore; the player's own game is never waited for. `save` and `restore` still work by hand (`restore` waits while test instances run).
 
 These scripts need `steam_appid.txt` (containing `1244090`) in the game folder, so the exe can start directly with the test flags.
 
@@ -316,7 +316,7 @@ Notes:
 - Battle bugs need `--sosonline-lag`/`--sosonline-jitter`: loopback hides real-time dependence.
 - **Save slot numbers count from 0.** `--sosonline-start=SLOT[a]` and `--sosonline-play=SLOT` take the file number, not the number the game shows: the game's "Slot 1" is `0` (`SOS_SaveSlot0.sos`; with `a`, `Autosave_SOS_SaveSlot0.sos`), "Slot 2" is `1`, and so on. A slot with no file fails with `Save slot N (auto=…) not found` and the test starts nothing. When the user names a slot, subtract one, and check the file exists in `%USERPROFILE%\AppData\LocalLow\Sabotage Studio\Sea of Stars` first.
 - Tests run from the user's newest save (`--sosonline-start=0a`, `--sosonline-play=0`), so what they reach changes when the user plays. STATUS.md notes where that save currently is (area, encounter frame, nearest campfire).
-- Run hygiene: `tests/display-prefs.sh save`/`restore` around tests; delete `SosOnlineTest-*` and `SosOnlineSession-<port>` in `%USERPROFILE%\AppData\LocalLow\Sabotage Studio\Sea of Stars` afterwards, never `SosOnlineSession` or `SosOnlineBackup`.
+- Run hygiene: display preferences come back by themselves (above); delete `SosOnlineTest-*` and `SosOnlineSession-<port>` in `%USERPROFILE%\AppData\LocalLow\Sabotage Studio\Sea of Stars` afterwards, never `SosOnlineSession` or `SosOnlineBackup`.
 - Choose local pause entries by label (`--sosonline-pausechoose=1760:Leave_co-op,1800:Leave`), not by cursor moves: the entry list changes.
 - Message wording: `docs/messages.csv` lists every player-facing string; the user reviews it there. Keep toasts at most 80 characters and popup choices at most about 25.
 

@@ -4,6 +4,8 @@
 # Background (the default): tests run behind your work. start-game.ps1 starts the game on a hidden desktop, where its
 # windows never show and can't take the focus; the game gets --sosonline-background (muted, pads ignored). BepInEx's console window is turned off
 # (it would take the focus); tests/display-prefs.sh restore turns it back on.
+# Every instance first makes sure the game's display preferences are backed up and come back once the last test
+# instance has quit (display-prefs.sh ensure): the -screen-* flags would otherwise stay as the player's resolution.
 # VISIBLE=1: windows on screen, tiled side by side on the primary screen, host on the left (NO_TILE=1 leaves them
 # where Unity puts them), with sound; the PC's keyboard and pads reach them.
 
@@ -21,6 +23,7 @@ console_off() {
 start_game() {
   local index=$1; shift
   GAME_PID=
+  bash "$LAUNCH_TESTS/display-prefs.sh" ensure
   if [ -n "$VISIBLE" ]; then
     local here=$PWD
     cd "$GAME" || return 1

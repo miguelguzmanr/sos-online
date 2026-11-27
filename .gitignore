@@ -4,6 +4,7 @@ obj/
 .vs/
 tests/.display-prefs.reg
 tests/.console-was-on
+tests/.display-prefs.watch
 dist/
 # Never commit a release signing key (it lives in %APPDATA%\SosOnline).
 release-signing-key*.txt

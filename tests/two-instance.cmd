@@ -11,6 +11,8 @@ set SH=
 if not "%SCRIPT_HOST%"=="" set SH=--sosonline-script=%SCRIPT_HOST%
 set SG=
 if not "%SCRIPT_GUEST%"=="" set SG=--sosonline-script=%SCRIPT_GUEST%
+rem Keep the player's resolution: back up the display preferences, restore them once the test instances quit.
+if exist "%ProgramFiles%\Git\bin\bash.exe" "%ProgramFiles%\Git\bin\bash.exe" "%~dp0display-prefs.sh" ensure
 start "" /D "%GAME%" "%GAME%\SeaOfStars.exe" %COMMON% --sosonline-udp=27100 --sosonline-host --sosonline-guests=1 --sosonline-start=0 --sosonline-shots=%SHOTS% %SH%
 timeout /t 3 /nobreak >nul
 start "" /D "%GAME%" "%GAME%\SeaOfStars.exe" %COMMON% --sosonline-udp=27101 --sosonline-join=27100 --sosonline-shots=%SHOTS% %SG%
