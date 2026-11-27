@@ -17,11 +17,56 @@ Play **Sea of Stars: Sunset Edition** co-op online with your Steam friends. The 
 
 ## Screenshots
 
+Taken from test sessions with three copies of the game on one PC, at 1280x720, with the test names Alex (the host), Sam and Robin. The game's own art and UI are untouched; the player bar, the notices on the right and the menus marked here are the mod's. Where two images sit side by side, they are the same moment on two players' PCs.
+
+### Online menu
+
+The title screen's **Online** entry: host, join a friend, pick the save, and settings with a line of help for each.
+
 | | |
 |---|---|
 | ![The Online page on the title screen](docs/screenshots/online-menu.png) | ![Host Settings, with help text](docs/screenshots/online-options.png) |
-| ![Assign Players, online](docs/screenshots/assign-players.png) | ![A battle with two players](docs/screenshots/battle.png) |
-| ![Three players in one game](docs/screenshots/three-players.png) | ![Two players exploring, in sync](docs/screenshots/two-players.png) |
+
+### Player bar
+
+Who is playing, top left. In play it shows only each player's icon, plus a status when one matters; on pause screens and menus it adds names and words. **Joining** and **Wants to join** while a friend comes in, **Paused** while a player has their own pause screen open, **Waiting** when your game is waiting for that player's input (a slow connection).
+
+| In play | On a pause screen | On a slow connection |
+|---|---|---|
+| ![Player bar in play: icons, Robin joining](docs/screenshots/bar-play.png) | ![Player bar with names: Alex paused, Robin wants to join](docs/screenshots/bar-names.png) | ![Player bar: Sam waiting](docs/screenshots/bar-waiting.png) |
+
+### A pause screen of your own
+
+Start opens a pause screen on your PC only; the game keeps running for everyone else, who see *[P1] Paused* on the right. The host's has **Let Robin In** while a friend waits, and Options, Players, Host Settings and End Co-op. **Pause for Everyone** opens the game's own pause menu on every PC, as in local co-op.
+
+| Alex (host), paused | Sam, the same moment |
+|---|---|
+| ![The host's own pause screen, with Let Robin In](docs/screenshots/pause-host.png) | ![The game keeps running for Sam, with a Paused notice for P1](docs/screenshots/pause-friend.png) |
+
+### Your character, your turn
+
+In battles each player gets the turns of their own character, and the cursor stays on characters they control. A notice says whose turn it is. (Host Settings → **Battle Turns**: **Original** is the game's own way, a random player each turn.) The host can take over a turn or pass it to another player from their battle pause page, for example when a friend is away.
+
+| Alex: *Your turn* | Sam, the same moment: *[P1]'s turn* |
+|---|---|
+| ![Alex's turn, on Alex's PC](docs/screenshots/turn-host.png) | ![Alex's turn, on Sam's PC](docs/screenshots/turn-friend.png) |
+| **Alex's battle pause page** | **Sam: *[P2] Your turn*** |
+| ![The host's battle pause page: Take This Turn, Pass Turn](docs/screenshots/battle-menu-host.png) | ![Sam's turn, on Sam's PC](docs/screenshots/battle-menu-friend.png) |
+
+### Joining a game in progress
+
+A friend can join while you play. Once the host lets them in, they join at the next area entry: everyone holds still for a moment while their game loads, then they take a party member.
+
+| Everyone holds while Robin joins | Robin is in |
+|---|---|
+| ![Robin is joining. Hold on…](docs/screenshots/join-hold.png) | ![Robin plays, on Robin's PC](docs/screenshots/join-joined.png) |
+
+### Playing together
+
+| | |
+|---|---|
+| ![Assign Players, online: each player picks a character](docs/screenshots/assign-players.png) | ![Two players exploring, in sync](docs/screenshots/two-players.png) |
+| ![Three players in one game](docs/screenshots/three-players.png) | |
 
 ## Installation
 
