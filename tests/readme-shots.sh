@@ -15,8 +15,8 @@ waitgames() { sleep 10; while tasklist | grep -qi SeaOfStars; do sleep 3; done; 
 keep() { for f in "$O"/shot-*.png; do [ -f "$f" ] && mv "$f" "$OUT/$1-$(basename "$f")"; done; clean; }
 names=("--sosonline-name=Alex" "--sosonline-name=Sam" "--sosonline-name=Robin")
 
-online() { # The title screen's Online page, hosting (UDP, no Steam lobby), Options, the version line.
-NO_TILE=1 start_game 0 -screen-fullscreen 0 -screen-width 1280 -screen-height 720 --sosonline-udp=27100 --sosonline-onlineshot
+online() { # The title screen's Online page, hosting (UDP, no Steam lobby), Host Settings with the players' default Rejoin, the version line.
+NO_TILE=1 start_game 0 -screen-fullscreen 0 -screen-width 1280 -screen-height 720 --sosonline-udp=27100 --sosonline-joinmode=ask --sosonline-onlineshot
 waitgames; mv "$O"/ui-online-*.png "$OUT/" 2>/dev/null
 }
 

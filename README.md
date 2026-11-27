@@ -19,7 +19,7 @@ Play **Sea of Stars: Sunset Edition** co-op online with your Steam friends. The 
 
 | | |
 |---|---|
-| ![The Online page on the title screen](docs/screenshots/online-menu.png) | ![Online options, with help text](docs/screenshots/online-options.png) |
+| ![The Online page on the title screen](docs/screenshots/online-menu.png) | ![Host Settings, with help text](docs/screenshots/online-options.png) |
 | ![Assign Players, online](docs/screenshots/assign-players.png) | ![A battle with two players](docs/screenshots/battle.png) |
 | ![Three players in one game](docs/screenshots/three-players.png) | ![Two players exploring, in sync](docs/screenshots/two-players.png) |
 
