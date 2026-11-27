@@ -27,6 +27,7 @@ Current state of the project, for whoever picks it up next. Update it at the end
 From the playtest of 2026-11-26 (v0.1.86, three players over Steam, Mountain Trail and Forbidden Cavern; host logs and seven friends' log zips). Fixed in the working copy, not released (findings §18):
 
 - **Fixed: wandering NPCs split the PCs on Mountain Trail, and catch-up replays failed 12 of 12.** Game time ran during the load barrier, for a different number of frames on each PC; it now stands still while a load is held. Two hidden instances from the user's newest save: 0 of 81 snapshots differ (53 before); a replay there matches the host (57 of 57).
+- **Fixed: Join from Steam with the game closed got stuck** (findings §19): the request came in while the game started, its question was removed by the title screen's load, and the join waited for an answer forever; friends had to use **Online** → **Join**. Now it waits for the title screen and joins there. Check in the next Steam session: a friend clicks **Join Game** with their game closed.
 - **Fixed: the re-sync waiting screen left the session** as it showed (it read the synced Back press).
 - **Fixed: auto input delay stuck at 15 frames** from one 723 ms ping sample at the join.
 - **Fixed: the player bar** no longer fades in play (players took it for gone after a cutscene).

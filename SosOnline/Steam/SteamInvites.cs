@@ -16,7 +16,9 @@ namespace SosOnline.Steam;
 ///  - Game running: Steam posts GameLobbyJoinRequested_t (overlay invite) or GameRichPresenceJoinRequested_t
 ///    ("Join Game" in the friends list). Facepunch runs Steam in manual-dispatch mode and drops callbacks nobody
 ///    registered for, so we observe them on their way through Facepunch's dispatcher.
-/// The actual join waits until the game reaches the title screen.
+/// From the title screen the join starts at once; from the player's own game after one question. While the game is
+/// still starting (Join from Steam with the game closed) it waits for the title screen: a question asked then was
+/// removed unanswered by the title screen's load, and the join waited for that answer forever (2026-11-26).
 /// </summary>
 internal static class SteamInvites
 {
@@ -39,11 +41,23 @@ internal static class SteamInvites
     /// <summary>Called every frame; joins a pending invite once it is safe to.</summary>
     public static void Update()
     {
-        if (_pendingLobby == 0 || _asking) return;
+        if (_pendingLobby == 0) return;
+        if (_asking)
+        {
+            if (UI.NativeMenus.PopupWaiting(_askToken)) return;
+            // The question went away unanswered (a level load removes popups): decide again.
+            _asking = false;
+            Plugin.Log.LogInfo("[invite] the question closed without an answer; deciding again");
+        }
         // From the title screen at once; from gameplay once the player confirmed (Stage 1: join from anywhere).
         if (!GameBridge.AtTitleScreen && !_confirmed)
         {
-            if (!GameBridge.Booted) return;
+            // Still starting (intro, the title screen loading) or between levels: wait.
+            if (!GameBridge.Booted || GameBridge.LoadingLevel || GameBridge.Party?.Leader == null)
+            {
+                Waiting("the title screen");
+                return;
+            }
             if (Session.Instance.Phase == Phase.Running)
             {
                 // A popup is a game view: opened on this PC only, it would put this PC out of step with the session.
@@ -54,7 +68,8 @@ internal static class SteamInvites
             Ask();
             return;
         }
-        if (!SteamApi.TryInit()) return;
+        if (!SteamApi.TryInit()) { Waiting($"Steam ({SteamApi.InitError})"); return; }
+        _waitingFor = null;
         if (Session.Instance.InSession) Session.Instance.Leave();
         ulong lobby = _pendingLobby;
         _pendingLobby = 0;
@@ -62,7 +77,17 @@ internal static class SteamInvites
         Session.Instance.JoinLobby(lobby, "your friend's game");
     }
 
+    private static string _waitingFor;
+
+    private static void Waiting(string what)
+    {
+        if (_waitingFor == what) return;
+        _waitingFor = what;
+        Plugin.Log.LogInfo($"[invite] waiting for {what} before joining");
+    }
+
     private static bool _asking, _confirmed;
+    private static int _askToken;
 
     /// <summary>One confirmation, then the mod leaves this game for the player: the drop-in replaces it in place.</summary>
     private static void Ask()
@@ -78,6 +103,7 @@ internal static class SteamInvites
                 if (i == 0) { _confirmed = true; Plugin.Log.LogInfo("[invite] confirmed: joining from gameplay"); }
                 else { _pendingLobby = 0; Plugin.Log.LogInfo("[invite] declined"); }
             }); // not opened (another popup is up): asked again next frame
+        if (_asking) _askToken = UI.NativeMenus.PopupToken;
     }
 
     private static void OnLobbyRequest(ulong lobby)

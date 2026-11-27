@@ -103,10 +103,11 @@ internal static class NativeMenus
     private static void PopupBackTick()
     {
         if (!_popupOpen || _openPopup == null || Time.frameCount - _popupOpenedFrame < 2) return;
-        if (!BackPressed() && Time.frameCount != _fakeBackFrame) return;
         var screen = _openPopup;
         try
         {
+            // Checked every frame, not only on Back: a level load (the title screen coming up while the game starts)
+            // removes the popup unanswered, and it then blocked every later popup (2026-11-26).
             if (!Alive(screen) || !screen.gameObject.activeInHierarchy)
             {
                 // Closed without an answer: don't keep blocking the next popup.
@@ -117,6 +118,7 @@ internal static class NativeMenus
                 _restorePending = true;
                 return;
             }
+            if (!BackPressed() && Time.frameCount != _fakeBackFrame) return;
             int last = screen.buttons.Count - 1;
             if (last < 0) return;
             Plugin.Log.LogInfo("[menu] popup: Back pressed, choosing the last choice");
@@ -133,6 +135,15 @@ internal static class NativeMenus
     /// The game's generic popup: a message, up to two choices; onAnswer(index), -1 for cancel. False when it can't
     /// open now (another one is open, or the UI isn't up).
     /// </summary>
+    /// <summary>
+    /// Whether the popup the last successful <see cref="Popup"/> opened (identified by <paramref name="token"/>, from
+    /// <see cref="PopupToken"/> right after it) is still waiting for an answer.
+    /// </summary>
+    public static bool PopupWaiting(int token) => _popupOpen && _popupToken == token;
+
+    /// <summary>Identifies the popup the last <see cref="Popup"/> call opened.</summary>
+    public static int PopupToken => _popupToken;
+
     public static bool Popup(string message, string yes, string no, Action<int> onAnswer)
     {
         var ui = Manager<UIManager>.instance;

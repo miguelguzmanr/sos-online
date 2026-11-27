@@ -635,3 +635,14 @@ Three players over Steam on v0.1.86, Mountain Trail and Forbidden Cavern. Both g
 - Replays longer than 5 minutes (was 15) fall back to a reload: a 51,000-frame replay never finished on a friend's PC.
 
 **Not yet seen again live:** the shop opening on the host only (f5759, `pause differs`), the Bosslug battle split and the pause state differing in replays. All three followed a level load, so likely the same cause.
+
+## 19. Join from Steam with the game closed got stuck (`2026-11-26`)
+
+Friends said **Join** from Steam "doesn't work" and that they had to open the Online menu first. Their logs: when the game was already on the title screen or in their own game, every join went through in 1–3 s. When the click started the game (or arrived while it was starting), the request came in before the title screen. `GameBridge.Booted` is already true then (a level is loaded), so `SteamInvites` took it for gameplay and asked *Join your friend's game?*. The title screen's load removed that popup unanswered; `SteamInvites` waited for its answer forever, and `NativeMenus` counted the popup as open (it only noticed a vanished popup when Back was pressed), so the friend had to join by hand from **Online** → **Join**.
+
+**Fix:**
+- A pending join asks only in the player's own game (the party has a leader, no level loading); otherwise it waits for the title screen and joins from there. `[invite] waiting for … before joining` says what it waits for.
+- If the question goes away unanswered, the join decides again (`NativeMenus.PopupWaiting`).
+- `NativeMenus` checks every frame for a popup that closed unanswered, not only on Back.
+
+**Tested** (hidden, in a separate copy of the game): a cold start with `+connect_lobby` and a made-up lobby id logged *waiting for the title screen*, no popup, and the join at the title screen 16 s in (refused, as the lobby doesn't exist). Not tested: a real Steam Join with the game closed, and a join request while in one's own game (that path is unchanged apart from the leader check).
