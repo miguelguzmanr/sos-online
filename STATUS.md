@@ -24,7 +24,7 @@ Current state of the project, for whoever picks it up next. Update it at the end
 
 ## Open items, by priority
 
-From the playtest of 2026-11-26 (v0.1.86, three players over Steam, Mountain Trail and Forbidden Cavern; host logs and seven friends' log zips). Fixed in the working copy, not released (findings §18):
+From the playtest of 2026-11-26 (v0.1.86, three players over Steam, Mountain Trail and Forbidden Cavern; host logs and seven friends' log zips). Committed on `main`, not released (findings §18, §19):
 
 - **Fixed: wandering NPCs split the PCs on Mountain Trail, and catch-up replays failed 12 of 12.** Game time ran during the load barrier, for a different number of frames on each PC; it now stands still while a load is held. Two hidden instances from the user's newest save: 0 of 81 snapshots differ (53 before); a replay there matches the host (57 of 57).
 - **Fixed: Join from Steam with the game closed got stuck** (findings §19): the request came in while the game started, its question was removed by the title screen's load, and the join waited for an answer forever; friends had to use **Online** → **Join**. Now it waits for the title screen and joins there. Check in the next Steam session: a friend clicks **Join Game** with their game closed.
@@ -57,8 +57,7 @@ From the first session on v0.1.53 (user's report, 2026-11-16 late): the Bosslug 
 7. **Party AI after a leave mid-battle replays differently now and then.** A second re-sync in the same area replays the guest's first leave; once, the AI's Valere moved 3.3 m differently right after it (f1680). Falls back to the reload. Next: call-probe the party AI between the leave and the next turn.
 8. **Logic clipping** (`LogicClippingManager`): off-screen NPC logic is paused by camera frustum. A replay sees the Bosslug a snapshot early (f390, never two in a row). Turning clipping off broke replays. Might also differ live between PCs with different window sizes.
 9. **Return to area start in a cutscene** (with *Pause for everyone*) is untested: camping in the test save still allows saving.
-10. **Test scripts should always save and restore display prefs** (`tests/display-prefs.sh`); single test runs left the game at 960x540 windowed.
-11. Older, not touched: guest crash after a re-sync in a battle (no repro; the log zip now includes the crash dump); `Session.MinAutoDelay` 4 (consider 2 after a stable Steam session); folded methods not covered by the deterministic-random wrappers (`CombatActor.OnPlayerPartyTurnDone`, `OnAnyCharacterTurnDone`, `OnPlayerCharacterTurnDone`, `OnEnemyCharacterTurnDone`); probes (turn, damage, clock lines) stay until battles are confirmed over Steam.
+10. Older, not touched: guest crash after a re-sync in a battle (no repro; the log zip now includes the crash dump); `Session.MinAutoDelay` 4 (consider 2 after a stable Steam session); folded methods not covered by the deterministic-random wrappers (`CombatActor.OnPlayerPartyTurnDone`, `OnAnyCharacterTurnDone`, `OnPlayerCharacterTurnDone`, `OnEnemyCharacterTurnDone`); probes (turn, damage, clock lines) stay until battles are confirmed over Steam.
 
 ## Recently done
 
