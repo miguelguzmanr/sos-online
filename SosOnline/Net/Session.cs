@@ -873,7 +873,7 @@ internal sealed partial class Session
                     if (s != slot && SlotDevice[s] != 255) SendDevice(peer.Id, s, SlotDevice[s]);
                 }
                 Status = !peer.Approved ? $"{name} wants to join as P{slot + 1}."
-                    : peer.Pending ? $"{name} is joining as P{slot + 1}…" : $"{name} joined as P{slot + 1}.";
+                    : peer.Pending ? $"{name} is joining as P{slot + 1}…" : $"{name} joined as P{slot + 1}";
                 Toast.Show(!peer.Approved ? $"{name} wants to join. Pause to let them in." : Status);
                 Plugin.Log.LogInfo($"[session] {name} joined as slot {slot} (mod {modVersion}, DLC {DlcGate.Describe(dlc)})");
                 if (modVersion != SessionLogs.Build)
