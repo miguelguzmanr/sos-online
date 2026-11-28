@@ -32,7 +32,7 @@ start_game() {
     cd "$here"
     if [ -z "$NO_TILE" ] && [ -n "$GAME_PID" ]; then
       powershell -NoProfile -ExecutionPolicy Bypass -File "$(cygpath -w "$LAUNCH_TESTS/place-window.ps1")" \
-        -ProcessId "$GAME_PID" < /dev/null > /dev/null 2>&1 &
+        -ProcessId "$GAME_PID" -Index "$index" < /dev/null > /dev/null 2>&1 &
     fi
     return 0
   fi
