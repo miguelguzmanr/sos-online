@@ -47,6 +47,7 @@ public sealed class Plugin : BasePlugin
             if (TestHarness.TryArg("rngprobe", out _)) RngProbe.Install(harmony);
             CombatTrace.Install(harmony);
             BattleTurns.Install(harmony);
+            TeamTiming.Install(harmony);
             LevelUps.Install(harmony);
             SpawnTrace.Install(harmony);
             if (TestHarness.TryArg("whichrva", out var rvas))
@@ -68,7 +69,7 @@ public sealed class Plugin : BasePlugin
 internal static class Settings
 {
     private static BepInEx.Configuration.ConfigEntry<bool> _openOnStart, _ownTurns, _advancedStatus;
-    private static BepInEx.Configuration.ConfigEntry<string> _rejoin, _statusBar;
+    private static BepInEx.Configuration.ConfigEntry<string> _rejoin, _statusBar, _teamTiming;
 
     public static void Bind(BepInEx.Configuration.ConfigFile config)
     {
@@ -80,6 +81,10 @@ internal static class Settings
             "Host: how friends join or rejoin a game in progress. Ask: you let them in from your pause screen, then everyone " +
             "holds still and reloads for a moment. Auto: the same without asking (experimental). Off: nobody joins a game " +
             "in progress; everyone regroups at the title screen.");
+        _teamTiming = config.Bind("Online", "TeamTiming", nameof(Lockstep.TeamTiming.Modes.Original),
+            "Host: whose presses count for timed hits and blocks. Original: anyone's (the game's own team timing). " +
+            "HitsOnly: anyone's for hits; each player blocks for their own character. None: each player times their own " +
+            "hits and blocks. Can change during co-op; it applies from the next battle.");
         _statusBar = config.Bind("Display", "StatusBar", nameof(StatusBars.On),
             "The player bar at the top left during play: Off, On or Advanced (adds a detailed line with ping, sync and " +
             "waits). It always shows on the title screen and the co-op pause screen.");
@@ -117,6 +122,17 @@ internal static class Settings
             return Enum.TryParse<RejoinModes>(_rejoin?.Value, true, out var m) && m != RejoinModes.CatchUp ? m : RejoinModes.Ask;
         }
         set { if (_rejoin != null) _rejoin.Value = value.ToString(); }
+    }
+
+    /// <summary>Host setting: whose presses count for timed hits and blocks (changeable during co-op, from the next battle).</summary>
+    public static Lockstep.TeamTiming.Modes TeamTiming
+    {
+        get
+        {
+            if (TestHarness.TryArg("teamtiming", out var t) && Enum.TryParse<Lockstep.TeamTiming.Modes>(t, true, out var tm)) return tm;
+            return Enum.TryParse<Lockstep.TeamTiming.Modes>(_teamTiming?.Value, true, out var m) ? m : Lockstep.TeamTiming.Modes.Original;
+        }
+        set { if (_teamTiming != null) _teamTiming.Value = value.ToString(); }
     }
 
     public enum StatusBars { Off, On, Advanced }

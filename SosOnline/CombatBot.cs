@@ -17,6 +17,8 @@ internal static class CombatBot
     private static int _actorsFrame = -1000;
     /// <summary>Press timed attacks at the locally perfect moment (off: menus only, presses come from a script).</summary>
     public static bool PerfectPresses;
+    /// <summary>--sosonline-botall: press for every party member's hits and blocks, as a player helping a friend would.</summary>
+    public static bool AnyActor;
     private static readonly System.Collections.Generic.HashSet<int> PressedImpacts = new();
 
     /// <summary>Frames after the visible impact at which the bot presses.</summary>
@@ -56,14 +58,14 @@ internal static class CombatBot
         bool timedPhase = false;
         foreach (var a in _actors)
         {
-            if (a == null || a.Player == null || a.Player.id != me.id) continue;
+            if (a == null || a.Player == null || (a.Player.id != me.id && !AnyActor)) continue;
             var atk = a.timedAttackHandler;
             if (atk != null && atk.IsInputPhaseStarted())
             {
                 timedPhase = true;
                 // Press ImpactOffset frames after the impact is on screen, like a player reacting to the hit.
                 int origin = Session.Instance.Engine.AppliedFrame + 1; // the frame this capture belongs to
-                if (PerfectPresses && TimingCompensation.LastImpactFrame.TryGetValue(me.id, out int impact)
+                if (PerfectPresses && TimingCompensation.LastImpactFrame.TryGetValue(a.Player.id, out int impact)
                     && origin == impact + ImpactOffset && PressedImpacts.Add(impact))
                 {
                     Press(snap, "Interact");

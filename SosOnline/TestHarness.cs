@@ -51,6 +51,8 @@ namespace SosOnline;
 ///   --sosonline-nodlc             act as a PC without any DLC (in and out of sessions)
 ///   --sosonline-botblock=N        the bot blocks N frames after this PC sees the block window open
 ///   --sosonline-fakedevice=KIND   this PC reports KIND as its device on Assign Players (keyboard, xbox, playstation, ps5, switch, joycon, …)
+///   --sosonline-botall            the bot presses for every party member's hits and blocks, not only its player's (Team Timing tests)
+///   --sosonline-teamtiming=MODE   the host's Team Timing: original, hitsonly or none
 ///   --sosonline-joinmode=M        the host's Join Mode: ask, auto or catchup (test runs default to catchup)
 ///   --sosonline-pauseopen=F,...   open this PC's own pause screen on frame F and log its entries
 ///   --sosonline-titlebarshot      title screen: the Online page; once another player is in the session, the player
@@ -166,6 +168,7 @@ internal static class TestHarness
         if (Args.TryGetValue("botphase", out var bp)) CombatBot.Phase = int.Parse(bp);
         if (Args.TryGetValue("botlevelup", out var blu)) CombatBot.LevelUpMoves = int.Parse(blu);
         if (Args.TryGetValue("botblock", out var bb)) CombatBot.BlockOffset = int.Parse(bb);
+        if (Args.ContainsKey("botall")) CombatBot.AnyActor = true;
         if (Args.ContainsKey("castprobe") || Args.ContainsKey("callprobe")) Lockstep.CombatTrace.CastProbe = true;
         if (Args.TryGetValue("readprobe", out var rp)) { var r = rp.Split(','); Lockstep.InputOverride.ReadProbeFrom = int.Parse(r[0]); Lockstep.InputOverride.ReadProbeTo = int.Parse(r[1]); }
         if (Args.TryGetValue("botswitch", out var bsw)) CombatBot.SwitchEvery = int.Parse(bsw);

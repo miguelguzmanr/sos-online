@@ -198,9 +198,38 @@ internal sealed partial class Session
     /// The session's rules after its DLC set, in every message that starts lockstep on a PC (Start, DropIn,
     /// DropInReload, CatchUp). The host's own settings while it isn't running yet, else the session's.
     /// </summary>
-    private void WriteRules(BinaryWriter w) => w.Write(Engine.Running ? BattleTurns.OwnTurns : Settings.OwnTurns);
+    private void WriteRules(BinaryWriter w)
+    {
+        w.Write(Engine.Running ? BattleTurns.OwnTurns : Settings.OwnTurns);
+        w.Write((byte)(Engine.Running ? TeamTiming.Mode : Settings.TeamTiming));
+    }
 
-    private static void ReadRules(BinaryReader r) => BattleTurns.SetRule(r.ReadBoolean());
+    private static void ReadRules(BinaryReader r)
+    {
+        BattleTurns.SetRule(r.ReadBoolean());
+        TeamTiming.SetRule((TeamTiming.Modes)r.ReadByte());
+    }
+
+    /// <summary>
+    /// Host: Team Timing changes. During co-op every PC switches on one scheduled frame (battles use it from the next
+    /// one on), and the area log keeps it so a catch-up replay switches on the same frame.
+    /// </summary>
+    public void SetTeamTiming(TeamTiming.Modes mode)
+    {
+        Settings.TeamTiming = mode;
+        if (!IsHost || !Engine.Running || Phase != Phase.Running) return;
+        int frame = FirstSafeFrame;
+        Plugin.Log.LogInfo($"[teamtiming] f{Engine.AppliedFrame} host sets {mode} at f{frame}");
+        foreach (var peer in _peers.Values.Where(p => !p.Pending))
+        {
+            var (w, ms) = Protocol.Begin(Msg.TeamTiming);
+            w.Write(frame);
+            w.Write((byte)mode);
+            Send(peer.Id, ms, true);
+        }
+        _area.LogTiming(frame, mode);
+        Engine.Schedule(frame, () => TeamTiming.Apply(mode, frame));
+    }
 
     private string _sentDlc = "";
     private double _nextDlcCheck;
@@ -1266,6 +1295,14 @@ internal sealed partial class Session
                 Engine.Schedule(at, () => BattleTurns.Apply(cmd, at));
                 break;
             }
+            case Msg.TeamTiming:
+            {
+                int at = r.ReadInt32();
+                var mode = (TeamTiming.Modes)r.ReadByte();
+                if (!Engine.Running) break;
+                Engine.Schedule(at, () => TeamTiming.Apply(mode, at));
+                break;
+            }
             case Msg.Removed:
                 _hostTakesBack = false; // no reconnecting to a game we were removed from
                 Plugin.Log.LogInfo("[session] the host removed this PC from co-op");
@@ -1470,7 +1507,9 @@ internal sealed partial class Session
         // An area log from an earlier run counts frames of that run.
         if (IsHost) _area.Clear("a new run started");
         if (IsHost && !Engine.Running) BattleTurns.SetRule(Settings.OwnTurns);
+        if (IsHost && !Engine.Running) TeamTiming.SetRule(Settings.TeamTiming);
         BattleTurns.Reset();
+        TeamTiming.Reset();
         LevelUps.Reset();
         _resyncing = false;
         _soloRestored = false;
@@ -1559,6 +1598,8 @@ internal sealed partial class Session
         GameBridge.UnlockTime();
         DlcGate.Clear();
         BattleTurns.SetRule(false);
+        TeamTiming.SetRule(TeamTiming.Modes.Original);
+        TeamTiming.Reset();
         LevelUps.Reset();
         // A guest that re-syncs drops in again by a reload; anyone else plays alone from here.
         if (!_resyncing) ReturnToSolo();
@@ -1654,6 +1695,7 @@ internal sealed partial class Session
     {
         CombatTrace.OnFrame(frame);
         BattleTurns.OnFrame(frame);
+        TeamTiming.OnFrame(frame);
         if (_catchUp != null && frame == _catchUp.L) CatchUpEntry(frame);
         if (frame == _entryFrame)
         {
@@ -3025,11 +3067,13 @@ internal sealed partial class Session
         int saveSlot = r.ReadInt32();
         var party = PartySpawn.Read(r);
         int live = r.ReadInt32();
-        var (roster, characters, levelUps, additive) = AreaLog.ReadRoster(r);
+        var (roster, characters, levelUps, additive, timingAtEntry, timing) = AreaLog.ReadRoster(r);
         var dlc = ReadDlc(r);
         bool ownTurns = r.ReadBoolean();
+        r.ReadByte(); // the session's Team Timing now; the replay starts from the one at L (timingAtEntry)
         if (Phase == Phase.Running) return;
         BattleTurns.SetRule(ownTurns);
+        TeamTiming.SetRule(timingAtEntry);
         _awaitingMirrorReload = false;
         bool rejoin = ResyncWaiting || _resyncing;
         Plugin.Log.LogInfo($"[catchup] start at f{L} (load {seq}, clock {clockBase:R}), {live - L} frames behind; save slot {saveSlot}, playing {string.Join(",", playing.Select(s => $"P{s + 1}"))}, party {party}{(rejoin ? "; rejoining after a divergence" : "")}");
@@ -3063,6 +3107,13 @@ internal sealed partial class Session
             string c = character;
             Engine.Schedule(frame, () => GameBridge.AssignCharacter(s, c));
             Plugin.Log.LogInfo($"[catchup] replaying character change: P{s + 1} plays {c} from f{frame}");
+        }
+        foreach (var (frame, mode) in timing)
+        {
+            int at = frame;
+            var m = mode;
+            Engine.Schedule(at, () => TeamTiming.Apply(m, at));
+            Plugin.Log.LogInfo($"[catchup] replaying Team Timing change: {m} from f{at}");
         }
         foreach (int frame in levelUps)
         {

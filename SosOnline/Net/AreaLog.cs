@@ -46,6 +46,10 @@ internal sealed class AreaLog
     /// </summary>
     public List<(int frame, int slot, string character)> Characters { get; } = new();
 
+    /// <summary>Team Timing as it was on frame L, and the host's changes on frames after L (a replay applies them too).</summary>
+    public TeamTiming.Modes TimingAtEntry { get; private set; }
+    public List<(int frame, TeamTiming.Modes mode)> Timing { get; } = new();
+
     /// <summary>Frames after L on which a level-up started (its barrier's release): a replay starts it there too.</summary>
     public List<int> LevelUps { get; } = new();
     /// <summary>
@@ -79,6 +83,8 @@ internal sealed class AreaLog
         // The occupied slots recorded at L cover changes up to L; one decided earlier for a later frame still applies.
         Roster.RemoveAll(e => e.frame <= frame);
         Characters.RemoveAll(e => e.frame <= frame);
+        TimingAtEntry = TeamTiming.Mode;
+        Timing.RemoveAll(e => e.frame <= frame);
         LevelUps.RemoveAll(f => f <= frame);
         Additive.RemoveAll(e => e.frame <= frame);
     }
@@ -94,6 +100,12 @@ internal sealed class AreaLog
     {
         Additive.Add((frame, key, timeBase));
         if (L >= 0) Plugin.Log.LogInfo($"[catchup] loading step logged: {key} at f{frame}");
+    }
+
+    public void LogTiming(int frame, TeamTiming.Modes mode)
+    {
+        Timing.Add((frame, mode));
+        if (L >= 0) Plugin.Log.LogInfo($"[catchup] Team Timing change logged: {mode} from f{frame}");
     }
 
     /// <summary>Host: slot <paramref name="slot"/> joins (or leaves) the session on <paramref name="frame"/>.</summary>
@@ -116,6 +128,9 @@ internal sealed class AreaLog
         foreach (var (frame, slot, join) in Roster) { w.Write(frame); w.Write((byte)slot); w.Write(join); }
         w.Write(Characters.Count);
         foreach (var (frame, slot, character) in Characters) { w.Write(frame); w.Write((byte)slot); w.Write(character); }
+        w.Write((byte)TimingAtEntry);
+        w.Write(Timing.Count);
+        foreach (var (frame, mode) in Timing) { w.Write(frame); w.Write((byte)mode); }
         w.Write(LevelUps.Count);
         foreach (int frame in LevelUps) w.Write(frame);
         w.Write(Additive.Count);
@@ -123,17 +138,21 @@ internal sealed class AreaLog
     }
 
     public static (List<(int frame, int slot, bool join)> roster, List<(int frame, int slot, string character)> characters,
-        List<int> levelUps, List<(int frame, string key, double timeBase)> additive) ReadRoster(BinaryReader r)
+        List<int> levelUps, List<(int frame, string key, double timeBase)> additive,
+        TeamTiming.Modes timingAtEntry, List<(int frame, TeamTiming.Modes mode)> timing) ReadRoster(BinaryReader r)
     {
         var list = new List<(int, int, bool)>();
         for (int n = r.ReadInt32(); n > 0; n--) list.Add((r.ReadInt32(), r.ReadByte(), r.ReadBoolean()));
         var chars = new List<(int, int, string)>();
         for (int n = r.ReadInt32(); n > 0; n--) chars.Add((r.ReadInt32(), r.ReadByte(), r.ReadString()));
+        var atEntry = (TeamTiming.Modes)r.ReadByte();
+        var timing = new List<(int, TeamTiming.Modes)>();
+        for (int n = r.ReadInt32(); n > 0; n--) timing.Add((r.ReadInt32(), (TeamTiming.Modes)r.ReadByte()));
         var levelUps = new List<int>();
         for (int n = r.ReadInt32(); n > 0; n--) levelUps.Add(r.ReadInt32());
         var additive = new List<(int, string, double)>();
         for (int n = r.ReadInt32(); n > 0; n--) additive.Add((r.ReadInt32(), r.ReadString(), r.ReadDouble()));
-        return (list, chars, levelUps, additive);
+        return (list, chars, levelUps, additive, atEntry, timing);
     }
 
     /// <summary>A new lockstep run starts: its frames count from its own start, so nothing of the old run applies.</summary>
@@ -146,6 +165,7 @@ internal sealed class AreaLog
         Snapshots.Clear();
         Roster.Clear();
         Characters.Clear();
+        Timing.Clear();
         LevelUps.Clear();
         Additive.Clear();
     }

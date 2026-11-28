@@ -821,6 +821,8 @@ internal static class NativeMenus
         // Fixed for a session when it starts: here no lockstep runs, so they change freely.
         yield return ($"{SettingLabels.BattleTurns}: {SettingLabels.BattleTurnsValue(Settings.OwnTurns)}",
             () => { Settings.OwnTurns = !Settings.OwnTurns; ShowPage(HostOptionsPage, SettingLabels.BattleTurns); });
+        yield return ($"{SettingLabels.TeamTiming}: {SettingLabels.TeamTimingValue(Settings.TeamTiming)}",
+            () => { s.SetTeamTiming(SettingLabels.NextTeamTiming(Settings.TeamTiming)); ShowPage(HostOptionsPage, SettingLabels.TeamTiming); });
         yield return ($"{SettingLabels.InputDelay}: {SettingLabels.DelayValue(s.ConfiguredDelay)}",
             () => { s.ConfiguredDelay = SettingLabels.NextDelay(s.ConfiguredDelay); ShowPage(HostOptionsPage, SettingLabels.InputDelay); });
         yield return ("Back", () => ShowPage(MainPage, "Host Settings"));

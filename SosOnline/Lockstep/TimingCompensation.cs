@@ -70,7 +70,26 @@ internal static class TimingCompensation
             if (player != null) LastImpactFrame[player.id] = Engine.AppliedFrame;
         }
         catch { }
-        if (!Active) return true;
+        var allowed = TeamTiming.ForAttack();
+        if (!Active)
+        {
+            // No delay to make up for, but Team Timing still limits whose presses count.
+            if (allowed == null) return true;
+            var cb = __1;
+            _reentrant = true;
+            try
+            {
+                Action<TeamQTEResult> limited = result =>
+                {
+                    try { Limit(result, allowed, "attack"); }
+                    catch (Exception e) { Plugin.Log.LogError($"[timing] team timing failed: {e}"); }
+                    cb?.Invoke(result);
+                };
+                __instance.GetResult(__0, limited);
+            }
+            finally { _reentrant = false; }
+            return false;
+        }
 
         var handler = __instance;
         var move = __0;
@@ -82,6 +101,7 @@ internal static class TimingCompensation
             BeforeWindow = handler.GetBeforeHitWindowDuration(),
             AfterWindow = handler.GetAfterHitWindowDuration(),
             Owner = handler.combatActor?.Player,
+            Allowed = allowed,
         };
         bool hadOverride = handler.overrideAfterHitWindowDuration;
         float previousOverride = handler.overridenAfterHitWindowDuration;
@@ -102,6 +122,7 @@ internal static class TimingCompensation
                         if (hadOverride) handler.OverrideAfterHitWindowDuration(previousOverride);
                         else handler.StopOverrideAfterHitWindowDuration();
                         result = Regrade(result, impact);
+                        TeamTiming.NoteLimited(result, impact.Allowed);
                     }
                     catch (Exception e) { Plugin.Log.LogError($"[timing] attack grading failed: {e}"); }
                     callback?.Invoke(result);
@@ -121,6 +142,25 @@ internal static class TimingCompensation
         public float Time, BeforeWindow, AfterWindow;
         /// <summary>Game time when the deferred judgment ran (the game's post-impact slow-down starts here).</summary>
         public Player Owner;
+        /// <summary>Team Timing: the slots whose presses count (null: everyone's, the game's own way).</summary>
+        public HashSet<int> Allowed;
+    }
+
+    /// <summary>Team Timing: every other player's entry becomes "no press", so only the allowed players' presses count.</summary>
+    private static void Limit(TeamQTEResult result, HashSet<int> allowed, string what)
+    {
+        var list = result?.results;
+        if (list == null || allowed == null) return;
+        for (int i = 0; i < list.Count; i++)
+        {
+            var entry = list[i];
+            if (entry == null || entry.owner == null) continue;
+            int slot = Game.GameBridge.SlotOf(entry.owner);
+            if (slot < 0 || allowed.Contains(slot) || entry.result == EQTEResult.FailDidNoPress) continue;
+            Plugin.Log.LogInfo($"[timing] {what} f{Engine.AppliedFrame}: P{slot + 1}'s {entry.result} doesn't count (Team Timing)");
+            list[i] = new QTEResult(entry.owner, EQTEResult.FailDidNoPress);
+        }
+        TeamTiming.NoteLimited(result, allowed);
     }
 
     /// <summary>Replaces each session player's result with the grade of the presses they actually made.</summary>
@@ -145,6 +185,7 @@ internal static class TimingCompensation
             EQTEResult game = existing != null && existing.owner != null ? existing.result : EQTEResult.FailDidNoPress;
             int channel = InputOverride.ChannelOf(p);
             EQTEResult mine = channel >= 0 && channel < InputOverride.SlotCount ? Grade(channel, impact) : game;
+            if (impact.Allowed != null && !impact.Allowed.Contains(Game.GameBridge.SlotOf(p))) mine = EQTEResult.FailDidNoPress;
             grades.Add((p, mine));
             if (mine != game) changed = true;
             // Always logged (a few lines per battle): comparing both PCs' logs shows whether a battle desync came from timing.
@@ -218,10 +259,15 @@ internal static class TimingCompensation
 
     private static void BlockResultPostfix(PlayerCombatActor __instance, ref TeamQTEResult __result)
     {
-        if (!Active || __result == null || !NativeCode.Is<PlayerCombatActor>(__instance)) return;
+        if (__result == null || !NativeCode.Is<PlayerCombatActor>(__instance)) return;
+        HashSet<int> allowed = null;
+        try { allowed = TeamTiming.ForBlock(__instance); }
+        catch (Exception e) { Plugin.Log.LogError($"[timing] team timing (block) failed: {e}"); }
+        if (!Active) { if (allowed != null) Limit(__result, allowed, "block"); return; }
         try
         {
-            var owner = __instance.Player;
+            // Team Timing: the blocking character's own player is the one graded (by default the player of the turn).
+            var owner = allowed != null ? Game.GameBridge.CoopPlayer(allowed.First())?.Player ?? __instance.Player : __instance.Player;
             int channel = InputOverride.ChannelOf(owner);
             if (channel < 0 || channel >= InputOverride.SlotCount) return;
             if (_interact == -2) _interact = ActionTable.IndexOf("Interact");
@@ -270,6 +316,11 @@ internal static class TimingCompensation
         catch (Exception e)
         {
             Plugin.Log.LogError($"[timing] block compensation failed: {e}");
+        }
+        finally
+        {
+            try { if (allowed != null) Limit(__result, allowed, "block"); }
+            catch (Exception e) { Plugin.Log.LogError($"[timing] team timing (block) failed: {e}"); }
         }
     }
 

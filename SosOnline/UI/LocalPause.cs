@@ -299,6 +299,14 @@ internal static class LocalPause
                     Value = () => SettingLabels.RejoinValue(Settings.Rejoin),
                     Change = dir => Settings.Rejoin = SettingLabels.NextRejoin(Settings.Rejoin, dir),
                 });
+                // Changes during co-op: every PC switches on one scheduled frame, battles from the next one on.
+                list.Add(new Entry
+                {
+                    Label = SettingLabels.TeamTiming,
+                    Hint = SettingLabels.Help(SettingLabels.TeamTiming),
+                    Value = () => SettingLabels.TeamTimingValue(Settings.TeamTiming),
+                    Change = dir => s.SetTeamTiming(SettingLabels.NextTeamTiming(Settings.TeamTiming, dir)),
+                });
                 // Fixed for the run: shown, not changeable (every PC would have to switch on the same frame).
                 list.Add(new Entry { Label = SettingLabels.BattleTurns, Hint = SettingLabels.Locked, Locked = true, Value = () => SettingLabels.BattleTurnsValue(BattleTurns.OwnTurns) });
                 list.Add(new Entry { Label = SettingLabels.InputDelay, Hint = SettingLabels.Locked, Locked = true, Value = () => SettingLabels.DelayValue(s.Engine.Delay) });

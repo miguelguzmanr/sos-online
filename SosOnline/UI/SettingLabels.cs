@@ -9,7 +9,7 @@ namespace SosOnline.UI;
 internal static class SettingLabels
 {
     public const string OpenOnStart = "Open on Start", Rejoin = "Rejoin", BattleTurns = "Battle Turns",
-        InputDelay = "Input Delay", StatusBar = "Status Bar";
+        TeamTiming = "Team Timing", InputDelay = "Input Delay", StatusBar = "Status Bar";
 
     public static string OnOff(bool on) => on ? "On" : "Off";
 
@@ -30,6 +30,16 @@ internal static class SettingLabels
     }
 
     public static string BattleTurnsValue(bool ownTurns) => ownTurns ? "Custom" : "Original";
+
+    public static string TeamTimingValue(Lockstep.TeamTiming.Modes mode) => mode switch
+    {
+        Lockstep.TeamTiming.Modes.HitsOnly => "Hits Only",
+        Lockstep.TeamTiming.Modes.None => "None",
+        _ => "Original",
+    };
+
+    public static Lockstep.TeamTiming.Modes NextTeamTiming(Lockstep.TeamTiming.Modes mode, int dir = 1) =>
+        (Lockstep.TeamTiming.Modes)(((int)mode + dir + 3) % 3);
 
     /// <summary>Input delay in frames: 0 is Auto (from the ping).</summary>
     private static readonly int[] Delays = { 0, 3, 5, 8 };
@@ -63,6 +73,12 @@ internal static class SettingLabels
             _ => "You let each friend in. They join in the\nnext area you enter, after a short reload",
         },
         BattleTurns => "Original: a random player takes each turn.\nCustom: you take your own character's turns",
+        TeamTiming => Settings.TeamTiming switch
+        {
+            Lockstep.TeamTiming.Modes.HitsOnly => "Everyone can time hits.\nYou time your own blocks",
+            Lockstep.TeamTiming.Modes.None => "You time your own hits and blocks.\nCombos are timed together",
+            _ => "Everyone can time every hit and block",
+        },
         InputDelay => "Each press waits a moment so every PC stays in step.\nAuto follows the ping. Low 50, Medium 85, High 135 ms",
         StatusBar => "The players at the top left during play.\nAdvanced adds ping and sync details",
         _ => null,

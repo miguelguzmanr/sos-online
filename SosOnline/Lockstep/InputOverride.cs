@@ -145,8 +145,10 @@ internal static class InputOverride
     {
         var s = Resolve(p);
         if (s == null) return true;
-        result = Has(s, ActionTable.IndexOf(id), bit);
-        if (ReadProbeTo >= 0) ProbeRead(p, ActionTable.IndexOf(id), bit.ToString(), result);
+        int index = ActionTable.IndexOf(id);
+        // Team Timing: a press that wouldn't count reads as none, so the game shows nothing for it.
+        result = Has(s, index, bit) && !TeamTiming.Hides(p, index);
+        if (ReadProbeTo >= 0) ProbeRead(p, index, bit.ToString(), result);
         return false;
     }
 
@@ -154,8 +156,9 @@ internal static class InputOverride
     {
         var s = Resolve(p);
         if (s == null) return true;
-        result = Has(s, ActionTable.IndexOf(name), bit);
-        if (ReadProbeTo >= 0) ProbeRead(p, ActionTable.IndexOf(name), bit.ToString(), result);
+        int index = ActionTable.IndexOf(name);
+        result = Has(s, index, bit) && !TeamTiming.Hides(p, index);
+        if (ReadProbeTo >= 0) ProbeRead(p, index, bit.ToString(), result);
         return false;
     }
 

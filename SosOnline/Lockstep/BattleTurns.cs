@@ -276,6 +276,9 @@ internal static class BattleTurns
         return -1;
     }
 
+    /// <summary>The host gave the current turn to its player (take over or pass): any character, until the turn ends.</summary>
+    public static bool Given => _forced >= 0;
+
     /// <summary>A host command can act now: a player is choosing a command in a battle.</summary>
     public static bool CanCommand => Running && GameBridge.InBattle && Choosing && CurrentSlot >= 0;
 
@@ -305,6 +308,7 @@ internal static class BattleTurns
             try { ctrl.SetCurrentPlayer(player); }
             finally { _applying = false; }
             if (selected != null) ctrl.SetSelectedActor(selected);
+            if (cmd == CmdPass) TeamTiming.OnPassed(target);
             Plugin.Log.LogInfo($"[turns] f{frame} host's {what}: P{from + 1}'s turn goes to P{target + 1}");
         }
         catch (Exception e) { Plugin.Log.LogWarning($"[turns] f{frame} host's {what} failed: {e.Message}"); }
