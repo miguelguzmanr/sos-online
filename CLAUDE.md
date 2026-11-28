@@ -138,7 +138,7 @@ tools/new-signing-key.ps1   create the release signing key (once)
   - Players join and confirm with their synced input. Keyboard players work too, through fallbacks from the regular UI actions.
   - The game's device shuffling is ignored during sessions.
   - On submit, each session slot is remapped to the player number its cursor chose, on every PC. Cursor, ready and the game's character assignment already run on synced input.
-  - Every online player stands in with the keyboard icon. Each icon shows the player's name under it and is tinted in their colour (P1 cyan, P2 amber, P3 pink), so a player's keyboard reads as theirs even in another player's column. Two players can pick the same character, as in the game; their icons stack in that column.
+  - The keyboard stands in as every online player's device on the screen, but each player's icon shows the device they use (keyboard, Xbox, PlayStation, Switch or Joy-Con pad, the game's own sprites). Each PC finds its own with the game's own choice (`InputDeviceIcon.GetControllerIcon` on its last active controller, the same as the button prompts) while the screen is open and sends it when it changes (`Msg.DeviceKind`, display only); until it arrives the keyboard shows. Each icon shows the player's name under it and is tinted in their colour (P1 cyan, P2 amber, P3 pink), so it reads as theirs even in another player's column. Two players can pick the same character, as in the game; their icons stack in that column.
 
 **Verified** (loopback, 2–3 instances):
 

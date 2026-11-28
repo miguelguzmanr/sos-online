@@ -142,6 +142,8 @@ internal sealed partial class Session
     public readonly string[] SlotName = new string[InputOverride.SlotCount];
     /// <summary>Slots whose player has their local pause screen open (display only: the banner's "P2 is paused").</summary>
     public readonly bool[] SlotPaused = new bool[InputOverride.SlotCount];
+    /// <summary>Each slot's device as its PC reports it (display only: the Assign Players icons); 255 until then.</summary>
+    public readonly byte[] SlotDevice = Enumerable.Repeat((byte)255, InputOverride.SlotCount).ToArray();
     public readonly ulong[] SlotPeer = new ulong[InputOverride.SlotCount];
 
     public readonly LockstepEngine Engine = new();
@@ -866,7 +868,10 @@ internal sealed partial class Session
                 SendWelcome(peer);
                 BroadcastRoster();
                 for (int s = 0; s < InputOverride.SlotCount; s++)
+                {
                     if (SlotPaused[s]) SendPauseStatus(peer.Id, s, true);
+                    if (s != slot && SlotDevice[s] != 255) SendDevice(peer.Id, s, SlotDevice[s]);
+                }
                 Status = !peer.Approved ? $"{name} wants to join as P{slot + 1}."
                     : peer.Pending ? $"{name} is joining as P{slot + 1}…" : $"{name} joined as P{slot + 1}.";
                 Toast.Show(!peer.Approved ? $"{name} wants to join. Pause to let them in." : Status);
@@ -950,6 +955,14 @@ internal sealed partial class Session
                 bool paused = r.ReadBoolean();
                 if (peer == null || slot != peer.Slot) return;
                 OnPauseStatus(slot, paused);
+                break;
+            }
+            case Msg.DeviceKind:
+            {
+                int slot = r.ReadByte();
+                byte kind = r.ReadByte();
+                if (peer == null || slot != peer.Slot) return;
+                OnDevice(slot, kind);
                 break;
             }
             case Msg.LogChunk:
@@ -1214,6 +1227,13 @@ internal sealed partial class Session
                 if (slot != LocalSlot) OnPauseStatus(slot, paused);
                 break;
             }
+            case Msg.DeviceKind:
+            {
+                int slot = r.ReadByte();
+                byte kind = r.ReadByte();
+                if (slot != LocalSlot) OnDevice(slot, kind);
+                break;
+            }
             case Msg.AreaFiles:
             {
                 int id = r.ReadInt32();
@@ -1390,7 +1410,7 @@ internal sealed partial class Session
         Plugin.Log.LogInfo($"[session] {peer.Name} {why}");
         if (IsHost)
         {
-            if (peer.Slot > 0) { SlotPeer[peer.Slot] = 0; SlotName[peer.Slot] = null; OnPauseStatus(peer.Slot, false); }
+            if (peer.Slot > 0) { SlotPeer[peer.Slot] = 0; SlotName[peer.Slot] = null; OnPauseStatus(peer.Slot, false); SlotDevice[peer.Slot] = 255; }
             // A guest already leaving that went silent before its leave frame: its last inputs will never come, so
             // it leaves earlier, on the frame after the last one we got (nobody can be past it: we relay its input).
             int leaveFrame = Math.Max(peer.LastInputFrame + 1, Engine.AppliedFrame + 1);
@@ -2192,6 +2212,34 @@ internal sealed partial class Session
         var (w, ms) = Protocol.Begin(Msg.PauseStatus);
         w.Write((byte)slot);
         w.Write(paused);
+        Send(to, ms, true);
+    }
+
+    /// <summary>This PC's device kind (Assign Players found it): tell the others when it changes (display only).</summary>
+    public void SetLocalDevice(byte kind)
+    {
+        if (Phase != Phase.Running || SlotDevice[LocalSlot] == kind) return;
+        SlotDevice[LocalSlot] = kind;
+        Plugin.Log.LogInfo($"[assign] this PC's device: {(AssignPlayersSession.DeviceKind)kind}");
+        if (IsHost) { foreach (var peer in _peers.Values) SendDevice(peer.Id, LocalSlot, kind); }
+        else SendDevice(HostId, LocalSlot, kind);
+    }
+
+    private void OnDevice(int slot, byte kind)
+    {
+        if (slot < 0 || slot >= InputOverride.SlotCount || SlotDevice[slot] == kind) return;
+        SlotDevice[slot] = kind;
+        Plugin.Log.LogInfo($"[assign] P{slot + 1}'s device: {(AssignPlayersSession.DeviceKind)kind}");
+        if (IsHost)
+            foreach (var peer in _peers.Values)
+                if (peer.Slot != slot) SendDevice(peer.Id, slot, kind);
+    }
+
+    private void SendDevice(ulong to, int slot, byte kind)
+    {
+        var (w, ms) = Protocol.Begin(Msg.DeviceKind);
+        w.Write((byte)slot);
+        w.Write(kind);
         Send(to, ms, true);
     }
 
@@ -3169,6 +3217,8 @@ internal sealed partial class Session
         Array.Clear(SlotPeer);
         Array.Clear(SlotName);
         Array.Clear(SlotPaused);
+        Array.Fill(SlotDevice, (byte)255);
+        AssignPlayersSession.ResetDeviceIcons();
         LocalPause.Reset();
         if (!UsingUdp && SteamApi.Available)
         {

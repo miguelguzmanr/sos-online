@@ -143,8 +143,88 @@ internal static class AssignPlayersSession
             catch (Exception e) { Plugin.Log.LogError($"[assign] update failed: {e}"); }
         }
 
-        private static void Postfix() => _closeRequested = _submitting = false;
+        private static void Postfix(AssignControllersScreen __instance)
+        {
+            _closeRequested = _submitting = false;
+            if (InSession && NativeCode.Is<AssignControllersScreen>(__instance)) UpdateDeviceIcons(__instance);
+        }
     }
+
+    // ---------------------------------------------------------------- each player's own device icon
+
+    /// <summary>
+    /// A player's device as Assign Players draws it, in the order of the game's sprites (<c>InputDeviceIcon</c>).
+    /// Each PC finds its own with the game's own choice (<c>GetControllerIcon</c> on its device) and sends it to the
+    /// others (<c>Msg.DeviceKind</c>, display only); <see cref="Unknown"/> until then, which keeps the keyboard.
+    /// </summary>
+    internal enum DeviceKind : byte { Keyboard, Xbox, PlayStation, PS4PC, PS5, PS5PC, Switch, JoyCon, Unknown = 255 }
+
+    private static UnityEngine.Sprite SpriteFor(InputDeviceIcon icon, DeviceKind kind) => kind switch
+    {
+        DeviceKind.Keyboard => icon.keyboardController,
+        DeviceKind.Xbox => icon.xboxController,
+        DeviceKind.PlayStation => icon.psController,
+        DeviceKind.PS4PC => icon.ps4PCController,
+        DeviceKind.PS5 => icon.ps5Controller,
+        DeviceKind.PS5PC => icon.ps5PCController,
+        DeviceKind.Switch => icon.switchController,
+        DeviceKind.JoyCon => icon.joyconController,
+        _ => null,
+    };
+
+    private static int _kindChecked = -1000;
+    private static readonly DeviceKind[] _shown = Enumerable.Repeat(DeviceKind.Unknown, InputOverride.SlotCount).ToArray();
+
+    /// <summary>
+    /// While the screen is open: this PC's own kind is checked twice a second and sent when it changes; every online
+    /// player's icon shows their PC's kind. The icon is only drawn: nothing synced reads it.
+    /// </summary>
+    private static void UpdateDeviceIcons(AssignControllersScreen screen)
+    {
+        try
+        {
+            var items = screen.controllerUIItems;
+            if (items == null || items.Count == 0) return;
+            int now = UnityEngine.Time.frameCount;
+            if (now - _kindChecked >= 30 && items[0].icon != null)
+            {
+                _kindChecked = now;
+                Session.Instance.SetLocalDevice((byte)OwnKind(items[0].icon));
+            }
+            for (int i = 0; i < items.Count; i++)
+            {
+                var item = items[i];
+                int slot = GameBridge.SlotOf(item?.player?.Player);
+                var img = item?.icon?.controllerIcon;
+                if (slot < 0 || img == null) continue;
+                var kind = (DeviceKind)Session.Instance.SlotDevice[slot];
+                var sprite = SpriteFor(item.icon, kind);
+                if (sprite == null) continue;
+                if (img.sprite == null || img.sprite.Pointer != sprite.Pointer) img.sprite = sprite;
+                if (_shown[slot] != kind)
+                {
+                    _shown[slot] = kind;
+                    Plugin.Log.LogInfo($"[assign] P{slot + 1}'s icon: {kind}{(slot == Session.Instance.LocalSlot ? " (this PC)" : "")}");
+                }
+            }
+        }
+        catch (Exception e) { Plugin.Log.LogWarning($"[assign] device icons: {e.Message}"); }
+    }
+
+    /// <summary>This PC's own device, as the game would draw it on this screen (--sosonline-fakedevice=KIND in tests).</summary>
+    private static DeviceKind OwnKind(InputDeviceIcon icon)
+    {
+        if (TestHarness.TryArg("fakedevice", out var fake) && Enum.TryParse<DeviceKind>(fake, true, out var fk)) return fk;
+        var controller = ButtonPrompts.OwnController();
+        var sprite = controller != null ? icon.GetControllerIcon(controller) : null;
+        if (sprite == null) return DeviceKind.Keyboard;
+        for (var k = DeviceKind.Keyboard; k <= DeviceKind.JoyCon; k++)
+            if (SpriteFor(icon, k)?.Pointer == sprite.Pointer) return k;
+        return DeviceKind.Keyboard;
+    }
+
+    /// <summary>A new session: nothing shown yet (icons are set again on the next screen).</summary>
+    public static void ResetDeviceIcons() { for (int i = 0; i < _shown.Length; i++) _shown[i] = DeviceKind.Unknown; }
 
     /// <summary>The game's close check, answered from synced input only (never a local device).</summary>
     [HarmonyPatch(typeof(AssignControllersScreen), nameof(AssignControllersScreen.GetCloseScreenInput))]

@@ -119,16 +119,7 @@ internal static class ButtonPrompts
                 var mine = GameBridge.PlayerForSlot(Session.Instance.LocalSlot);
                 var helper = mine?.controllers;
                 if (helper == null || helper.Pointer == __instance.Pointer) return true;
-                Controller result;
-                _inner = true;
-                try { result = helper.GetLastActiveController(); }
-                finally { _inner = false; }
-                // Nothing used yet: the pad if this PC has one, else the keyboard (the game's own fallback order).
-                if (result == null)
-                {
-                    var joysticks = ReInput.controllers.Joysticks.ToList();
-                    result = helper.joystickCount > 0 && joysticks.Count > 0 ? joysticks[0].Cast<Controller>() : ReInput.controllers.Keyboard?.Cast<Controller>();
-                }
+                var result = OwnController();
                 if (result == null) return true;
                 __result = result;
                 LogChange(__instance, mine, result);
@@ -140,6 +131,26 @@ internal static class ButtonPrompts
                 return true;
             }
         }
+    }
+
+    /// <summary>
+    /// This PC's own device: its player's last active controller; when nothing was used yet, the pad if this PC has
+    /// one, else the keyboard (the game's own fallback order). Also what Assign Players shows for this PC's player.
+    /// </summary>
+    public static Controller OwnController()
+    {
+        var helper = GameBridge.PlayerForSlot(Session.Instance.LocalSlot)?.controllers;
+        if (helper == null) return null;
+        Controller result;
+        _inner = true;
+        try { result = helper.GetLastActiveController(); }
+        finally { _inner = false; }
+        if (result == null)
+        {
+            var joysticks = ReInput.controllers.Joysticks.ToList();
+            result = helper.joystickCount > 0 && joysticks.Count > 0 ? joysticks[0].Cast<Controller>() : ReInput.controllers.Keyboard?.Cast<Controller>();
+        }
+        return result;
     }
 
     /// <summary>Last redirect per prompt method; logged when it changes (the battle asks every frame).</summary>
