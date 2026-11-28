@@ -580,7 +580,7 @@ internal sealed class Session
             var (w, ms) = Protocol.Begin(Msg.LogRequest);
             Send(peer.Id, ms, true);
         }
-        Toast.Show($"Asked {string.Join(", ", _peers.Values.Select(p => p.Name))} for logs");
+        Toast.Show($"Asked {PlayerNames.List(_peers.Values.Select(p => p.Name).ToList())} for logs");
     }
 
     private void UpdateLogShare()
@@ -1137,7 +1137,7 @@ internal sealed class Session
                 if (!Engine.Running) break;
                 if (!atEntry) Engine.Schedule(at, () => SaveForDropIn(at));
                 Engine.HoldPlayers(at);
-                Toast.Show($"{names} is joining. Hold on…");
+                Toast.Show($"{PlayerNames.With(PlayerNames.Unpack(names), "is", "are")} joining. Hold on…");
                 break;
             }
             case Msg.DropInReload:
@@ -1967,7 +1967,10 @@ internal sealed class Session
         }
         BroadcastRoster();
         var asking = _peers.Values.Where(p => !p.Approved).Select(p => p.Name).ToList();
-        Toast.Show(asking.Count > 0 ? $"{string.Join(", ", asking)} wants to join. Pause to let them in." : $"{names} is joining");
+        if (asking.Count == 0) { Toast.Show($"{PlayerNames.With(_peers.Values.Select(p => p.Name).ToList(), "is", "are")} joining"); return; }
+        string ask = $"{PlayerNames.With(asking, "wants", "want")} to join. Pause to let them in.";
+        // Two long names don't fit a toast: count them instead (the pause screen names each one).
+        Toast.Show(ask.Length <= Toast.MaxChars ? ask : $"{(asking.Count == 2 ? "Two" : asking.Count.ToString())} friends want to join. Pause to let them in.");
     }
 
     private void BackToSolo()
@@ -2278,12 +2281,13 @@ internal sealed class Session
                 if (_joiners.Count == 0) return;
                 _dropInSaveFrame = Engine.AppliedFrame + Engine.Delay + 3;
                 _dropInSlot = -1;
-                string names = string.Join(", ", _joiners.Select(id => _peers[id].Name));
+                var joining = _joiners.Select(id => _peers[id].Name).ToList();
+                string names = PlayerNames.List(joining);
                 foreach (var peer in _peers.Values.Where(p => !p.Pending))
                 {
                     var (w, ms) = Protocol.Begin(Msg.DropInSave);
                     w.Write(_dropInSaveFrame);
-                    w.Write(names);
+                    w.Write(PlayerNames.Pack(joining));
                     w.Write(false);
                     Send(peer.Id, ms, true);
                 }
@@ -2291,7 +2295,7 @@ internal sealed class Session
                 Engine.Schedule(at, () => SaveForDropIn(at));
                 Engine.HoldPlayers(at);
                 _dropIn = DropInStep.Saving;
-                Toast.Show($"{names} is joining. Hold on…");
+                Toast.Show($"{PlayerNames.With(joining, "is", "are")} joining. Hold on…");
                 Plugin.Log.LogInfo($"[dropin] {names}: autosave at f{at} (test: anywhere), players held until the reload");
                 break;
             }
@@ -2353,18 +2357,19 @@ internal sealed class Session
         _dropInSaveFrame = release;
         _dropInSlot = -1;
         _dropInLevel = null;
-        string names = string.Join(", ", _joiners.Select(id => _peers[id].Name));
+        var joining = _joiners.Select(id => _peers[id].Name).ToList();
+        string names = PlayerNames.List(joining);
         foreach (var peer in _peers.Values.Where(p => !p.Pending))
         {
             var (w, ms) = Protocol.Begin(Msg.DropInSave);
             w.Write(release);
-            w.Write(names);
+            w.Write(PlayerNames.Pack(joining));
             w.Write(true);
             Send(peer.Id, ms, true);
         }
         Engine.HoldPlayers(release);
         _dropIn = DropInStep.Saving;
-        Toast.Show($"{names} is joining. Hold on…");
+        Toast.Show($"{PlayerNames.With(joining, "is", "are")} joining. Hold on…");
         Plugin.Log.LogInfo($"[dropin] {names}: join with the area entry at f{release}, players held until the reload");
     }
 
@@ -2560,7 +2565,7 @@ internal sealed class Session
 
         ScheduleReloadInPlace(at, _dropInSlot, spawn, slots, timeBase, dlc, areaReturn);
         BroadcastRoster();
-        string names = string.Join(", ", _joiners.Select(id => _peers[id].Name));
+        string names = PlayerNames.List(_joiners.Select(id => _peers[id].Name).ToList());
         Status = $"{names} joined.";
         Plugin.Log.LogInfo($"[dropin] {names} (slots {string.Join(",", slots)}) join at f{at}, reload slot {_dropInSlot}, spawn {spawn}, DLC {DlcGate.Describe(dlc)}");
         _joiners.Clear();
@@ -2638,7 +2643,7 @@ internal sealed class Session
             var (w, ms) = Protocol.Begin(Msg.DropInAbort);
             Send(peer.Id, ms, true);
         }
-        Toast.Show($"{string.Join(", ", _peers.Values.Where(p => slots.Contains(p.Slot)).Select(p => p.Name))} will join after this");
+        Toast.Show($"{PlayerNames.List(_peers.Values.Where(p => slots.Contains(p.Slot)).Select(p => p.Name).ToList())} will join after this");
     }
 
     private void ReloadInPlace(int frame, int saveSlot, PartySpawn spawn, double timeBase)

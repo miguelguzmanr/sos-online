@@ -284,7 +284,7 @@ pwsh -File tools\publish-release.ps1
 | `tests/battle-map.sh`, `tests/map-results.sh` | Maps the game's timed-hit and block grading: one run per press offset. |
 | `tests/battle-live.sh` | Two instances, a battle on both from frame 1500: prints the guest's corrections and mismatches (finding 8). |
 | `tests/dropin.sh` | Three instances: a third player joins 30 s in (`JOIN_DELAY`). `HOSTFLAGS`/`JOINFLAGS` add flags, e.g. `--sosonline-nocatchup` (reload in place), `--sosonline-loadatjoin`, `--sosonline-play=0` (join from its own game). Reloads join anywhere (`--sosonline-dropinanywhere`) unless `DOOR=F`: then at a synced test door on frame F. Compares both guests' states with the host's. |
-| `tests/dropin-two.sh` | Host alone, then two joiners in one area; both catch up from the same area entry. |
+| `tests/dropin-two.sh` | Host alone, then two joiners in one area; both catch up from the same area entry. With `DOOR=F`, a short `JOIN2_DELAY` and reloads (as in the sweep's `dropin-two-door`), both are waiting at a synced test door and join with one reload. |
 | `tests/stage1.sh` | The host plays its own save with the lobby open; guest A joins, leaves from the pause screen (co-op to solo), guest B joins later. |
 | `tests/menu-status.sh` | Pause screen and menu notice while a third player catches up. |
 | `tests/battle-turns.sh` | A battle where both players take turns over a simulated lagged link (`LAG`, `JITTER`, `SPIKES`); prints both PCs' turn decisions and the first differing snapshot. Run it 3–4 times: battle splits are intermittent. |

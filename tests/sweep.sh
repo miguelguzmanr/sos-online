@@ -68,6 +68,7 @@ run dropin-door env DOOR=2400 HOSTFLAGS="--sosonline-nocatchup --sosonline-joinm
 run dropin-loadatjoin env HOSTFLAGS="--sosonline-nocatchup --sosonline-loadatjoin" JOINFLAGS=--sosonline-nocatchup bash tests/dropin.sh
 run dropin-owngame env JOINFLAGS=--sosonline-play=0 bash tests/dropin.sh
 run dropin-two bash tests/dropin-two.sh
+run dropin-two-door env DOOR=3000 QUIT=4800 JOIN2_DELAY=5 HOSTFLAGS="--sosonline-nocatchup --sosonline-joinmode=auto" JOINFLAGS=--sosonline-nocatchup bash tests/dropin-two.sh
 run stage1 bash tests/stage1.sh
 run menu-status bash tests/menu-status.sh
 

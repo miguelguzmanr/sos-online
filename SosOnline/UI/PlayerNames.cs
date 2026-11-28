@@ -1,4 +1,7 @@
+using System;
+using System.Collections.Generic;
 using System.Globalization;
+using System.Linq;
 using System.Text;
 
 namespace SosOnline.UI;
@@ -55,6 +58,28 @@ internal static class PlayerNames
         foreach (char c in text) if (c <= 'ɏ') n++;
         return n;
     }
+
+    /// <summary>Names as a sentence reads them: "Robin", "Robin and Sam", "Robin, Sam, and Kai".</summary>
+    public static string List(IReadOnlyList<string> names) => names.Count switch
+    {
+        0 => "",
+        1 => names[0],
+        2 => $"{names[0]} and {names[1]}",
+        _ => $"{string.Join(", ", names.Take(names.Count - 1))}, and {names[names.Count - 1]}",
+    };
+
+    /// <summary>The names and the verb that agrees with them: "Robin is", "Robin and Sam are".</summary>
+    public static string With(IReadOnlyList<string> names, string one, string many) =>
+        $"{List(names)} {(names.Count == 1 ? one : many)}";
+
+    /// <summary>
+    /// Names sent in a message, one per line (cleaned names have no line breaks), for the other PC to build its
+    /// own sentence with <see cref="List"/> or <see cref="With"/>.
+    /// </summary>
+    public static string Pack(IEnumerable<string> names) => string.Join("\n", names);
+
+    public static IReadOnlyList<string> Unpack(string packed) =>
+        string.IsNullOrEmpty(packed) ? Array.Empty<string>() : packed.Split('\n');
 
     /// <summary>At most <paramref name="max"/> visible characters, never splitting one; "..." when cut.</summary>
     public static string Shorten(string text, int max)

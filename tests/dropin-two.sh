@@ -2,6 +2,9 @@
 # Two joiners in one area: the host (27100) plays alone and walks; joiner A (27101) drops in JOIN_DELAY seconds after
 # the host starts, joiner B (27102) JOIN2_DELAY seconds after A. With Stage 3 both catch up from the same area entry:
 # B replays A's merge (and A's leave, if AFLAGS makes A quit early, e.g. AFLAGS=--sosonline-quit=3000).
+# DOOR=F: drop-ins by a reload join at an area entry, a synced test door on frame F, instead of anywhere. With a short
+# JOIN2_DELAY and reloads (HOSTFLAGS="--sosonline-nocatchup --sosonline-joinmode=auto" JOINFLAGS=--sosonline-nocatchup)
+# both joiners are waiting at the door and come in with one reload.
 # HOSTFLAGS goes to the host, JOINFLAGS to both joiners, AFLAGS / BFLAGS to one of them. Compares both joiners'
 # state logs with the host's.
 cd "$(dirname "$0")/.."
@@ -9,13 +12,14 @@ cd "$(dirname "$0")/.."
 S="$(cygpath -m "$PWD/tests/scripts")"
 Q=${QUIT:-5400}
 COMMON="--sosonline-delay=3 --sosonline-quit=$Q"
-tests/session.sh 27100 "--sosonline-dropinanywhere --sosonline-start=0 --sosonline-guests=0 --sosonline-seed=777 --sosonline-script=$S/host-walk.txt $COMMON $HOSTFLAGS" \
+if [ -n "$DOOR" ]; then IN="--sosonline-door=$DOOR"; else IN="--sosonline-dropinanywhere"; fi
+tests/session.sh 27100 "$IN --sosonline-start=0 --sosonline-guests=0 --sosonline-seed=777 --sosonline-script=$S/host-walk.txt $COMMON $HOSTFLAGS" \
   "$COMMON $JOINFLAGS $AFLAGS" "${JOIN_DELAY:-30}" \
   "$COMMON $JOINFLAGS $BFLAGS" "${JOIN2_DELAY:-20}"
 sleep 10; while tasklist | grep -qi SeaOfStars; do sleep 3; done
 for p in 27100 27101 27102; do
   echo "--- $p"
-  grep -h -E "\[dropin\]|\[catchup\] [^f]|roster change|left|leaves at|postponed|\[barrier\].*(stopped|passed|holds)" "$O/log-$p.txt" | cut -c1-230
+  grep -h -E "\[toast\].*join|\[dropin\]|\[catchup\] [^f]|roster change|left|leaves at|postponed|\[barrier\].*(stopped|passed|holds)" "$O/log-$p.txt" | cut -c1-230
 done
 for p in 27101 27102; do
   python3 - "$O/state-27100.log" "$O/state-$p.log" "$p" <<'PY'
