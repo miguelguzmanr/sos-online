@@ -38,6 +38,7 @@ public sealed class Plugin : BasePlugin
             SosOnline.Update.AutoUpdate.Start();
             GameClock.Install();
             LoadBarrier.Install();
+            AdditiveBarrier.Install();
             if (TestHarness.TraceEnabled) Diagnostics.InstallTrace(harmony);
             if (TestHarness.TryArg("tracecalls", out var traceClasses)) Diagnostics.InstallCallTrace(harmony, traceClasses);
             if (TestHarness.TryArg("dashprobe", out _)) Diagnostics.InstallDashProbe(harmony);

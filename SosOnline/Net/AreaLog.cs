@@ -48,6 +48,12 @@ internal sealed class AreaLog
 
     /// <summary>Frames after L on which a level-up started (its barrier's release): a replay starts it there too.</summary>
     public List<int> LevelUps { get; } = new();
+    /// <summary>
+    /// Loading steps of levels loaded during play (<see cref="AdditiveBarrier"/>) released on frames after L:
+    /// (frame, step key, clock base). The host picked these frames from when each PC got there, so a joiner runs them on the
+    /// same frames.
+    /// </summary>
+    public List<(int frame, string key, double timeBase)> Additive { get; } = new();
 
     /// <summary>The host's state snapshots since L: a joiner checks its replay against them as it goes.</summary>
     public List<StateSnapshot> Snapshots { get; } = new();
@@ -74,12 +80,20 @@ internal sealed class AreaLog
         Roster.RemoveAll(e => e.frame <= frame);
         Characters.RemoveAll(e => e.frame <= frame);
         LevelUps.RemoveAll(f => f <= frame);
+        Additive.RemoveAll(e => e.frame <= frame);
     }
 
     public void LogLevelUp(int frame)
     {
         LevelUps.Add(frame);
         if (L >= 0) Plugin.Log.LogInfo($"[catchup] level-up start logged: f{frame}");
+    }
+
+    /// <summary>Host: the loading step <paramref name="key"/> runs on <paramref name="frame"/> on every PC.</summary>
+    public void LogAdditive(int frame, string key, double timeBase)
+    {
+        Additive.Add((frame, key, timeBase));
+        if (L >= 0) Plugin.Log.LogInfo($"[catchup] loading step logged: {key} at f{frame}");
     }
 
     /// <summary>Host: slot <paramref name="slot"/> joins (or leaves) the session on <paramref name="frame"/>.</summary>
@@ -104,10 +118,12 @@ internal sealed class AreaLog
         foreach (var (frame, slot, character) in Characters) { w.Write(frame); w.Write((byte)slot); w.Write(character); }
         w.Write(LevelUps.Count);
         foreach (int frame in LevelUps) w.Write(frame);
+        w.Write(Additive.Count);
+        foreach (var (frame, key, timeBase) in Additive) { w.Write(frame); w.Write(key); w.Write(timeBase); }
     }
 
     public static (List<(int frame, int slot, bool join)> roster, List<(int frame, int slot, string character)> characters,
-        List<int> levelUps) ReadRoster(BinaryReader r)
+        List<int> levelUps, List<(int frame, string key, double timeBase)> additive) ReadRoster(BinaryReader r)
     {
         var list = new List<(int, int, bool)>();
         for (int n = r.ReadInt32(); n > 0; n--) list.Add((r.ReadInt32(), r.ReadByte(), r.ReadBoolean()));
@@ -115,7 +131,9 @@ internal sealed class AreaLog
         for (int n = r.ReadInt32(); n > 0; n--) chars.Add((r.ReadInt32(), r.ReadByte(), r.ReadString()));
         var levelUps = new List<int>();
         for (int n = r.ReadInt32(); n > 0; n--) levelUps.Add(r.ReadInt32());
-        return (list, chars, levelUps);
+        var additive = new List<(int, string, double)>();
+        for (int n = r.ReadInt32(); n > 0; n--) additive.Add((r.ReadInt32(), r.ReadString(), r.ReadDouble()));
+        return (list, chars, levelUps, additive);
     }
 
     /// <summary>A new lockstep run starts: its frames count from its own start, so nothing of the old run applies.</summary>
@@ -129,6 +147,7 @@ internal sealed class AreaLog
         Roster.Clear();
         Characters.Clear();
         LevelUps.Clear();
+        Additive.Clear();
     }
 
     public void Invalidate(string reason)

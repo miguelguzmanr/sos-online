@@ -766,6 +766,33 @@ internal static class TestHarness
         catch (Exception e) { Plugin.Log.LogWarning($"[test] camp failed: {e.Message}"); }
     }
 
+    /// <summary>
+    /// --sosonline-yeet=F: on frame F (pass it to every instance) the golem's throw nearest the leader starts, as its
+    /// own cutscene starts it (<c>YeetTransitionController.StartTransition</c>). It loads its level during play.
+    /// </summary>
+    private static void Yeet(int frame)
+    {
+        try
+        {
+            var yeet = Manager<YeetTransitionController>.instance;
+            var leader = GameBridge.Party?.Leader;
+            if (yeet == null || leader == null) { Plugin.Log.LogWarning($"[test] f{frame} yeet: no controller or leader"); return; }
+            YeetTransitionData best = null;
+            float bestD = float.MaxValue;
+            foreach (var data in yeet.transitionDatas)
+            {
+                if (data?.from == null || data.to == null) continue;
+                float d = (data.from.transform.position - leader.transform.position).magnitude;
+                Plugin.Log.LogInfo($"[test] yeet {data.from.name} -> {data.to.name} ({data.to.yeetDestinationType}), {d:F1} m");
+                if (d < bestD) { bestD = d; best = data; }
+            }
+            if (best == null) { Plugin.Log.LogWarning($"[test] f{frame} yeet: no transitions"); return; }
+            Plugin.Log.LogInfo($"[test] f{frame} yeet: {best.from.name} -> {best.to.name}");
+            yeet.StartTransition(best.from, best.to, 0f);
+        }
+        catch (Exception e) { Plugin.Log.LogWarning($"[test] yeet failed: {e.Message}"); }
+    }
+
     /// <summary>--sosonline-campstart=F / campstop=F: the game's own start and stop of camping at the nearest campfire.</summary>
     private static void CampForce(int frame, bool start)
     {
@@ -951,6 +978,7 @@ internal static class TestHarness
             catch (Exception e) { Plugin.Log.LogWarning($"[test] pause state: {e.Message}"); }
         if (Args.ContainsKey("npcprobe")) NpcProbe(frame);
         if (At("campat", frame)) Camp(frame);
+        if (At("yeet", frame)) Yeet(frame);
         // Camping itself, past the story unlock the campfire checks (an early save only gets "The campfire feels cozy").
         if (At("campstart", frame)) CampForce(frame, true);
         if (At("campstop", frame)) CampForce(frame, false);

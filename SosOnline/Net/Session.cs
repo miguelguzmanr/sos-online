@@ -25,7 +25,7 @@ internal enum Phase
 }
 
 /// <summary>Everything about one online co-op session: who is in it, the handshake, and the lockstep run.</summary>
-internal sealed class Session
+internal sealed partial class Session
 {
     public static readonly Session Instance = new();
 
@@ -696,7 +696,8 @@ internal sealed class Session
         UpdateDropIn();
         UpdateCatchUpHost();
         UpdateCatchUpJoiner();
-        if (IsHost && Phase == Phase.Running) { TryReleaseLoad(); TryReleaseLevelUp(); }
+        if (IsHost && Phase == Phase.Running) { TryReleaseLoad(); TryReleaseLevelUp(); TryReleaseAdditive(); }
+        if (Engine.Running) AdditiveBarrier.Update();
         if (IsHost && Phase == Phase.Running)
             foreach (var peer in _peers.Values.Where(p => p.LeavingAt >= 0 && Engine.AppliedFrame >= p.LeavingAt).ToList())
             {
@@ -908,6 +909,9 @@ internal sealed class Session
                     if (other.Id != from) SendInputTo(other.Id, frame, slot, input, null);
                 break;
             }
+            case Msg.AdditiveReached:
+                OnAdditiveReached(peer, r);
+                break;
             case Msg.Loaded:
             {
                 // A joiner catching up replays loads the session finished long ago.
@@ -1182,6 +1186,9 @@ internal sealed class Session
                 ScheduleLevelUpRelease(r.ReadInt32());
                 break;
             }
+            case Msg.AdditiveRelease:
+                OnAdditiveRelease(r);
+                break;
             case Msg.LoadRelease:
             {
                 int seq = r.ReadInt32();
@@ -1520,6 +1527,7 @@ internal sealed class Session
         if (_catchUp != null) { EndCatchUpFastForward(); _catchUp = null; }
         _releaseFrames.Clear();
         _entryFrame = -1;
+        ResetAdditiveBarrier("lockstep stopped");
         // A load held at the barrier would never end otherwise.
         if (_heldSeq >= 0)
         {
@@ -1767,6 +1775,7 @@ internal sealed class Session
         _heldSeq = -1;
         _loadReports.Clear();
         GameClock.EndLoadHold();
+        ResetAdditiveBarrier("a new run started");
     }
 
     /// <summary>
@@ -2805,6 +2814,7 @@ internal sealed class Session
             GameClock.AlignPhysicsPhase();
             return true;
         }
+        if (HoldForAdditive()) return true;
         return _releaseFrames.TryGetValue(Engine.Frame, out int seq) && _heldSeq != seq && GameBridge.LoadingLevel;
     }
 
@@ -2967,7 +2977,7 @@ internal sealed class Session
         int saveSlot = r.ReadInt32();
         var party = PartySpawn.Read(r);
         int live = r.ReadInt32();
-        var (roster, characters, levelUps) = AreaLog.ReadRoster(r);
+        var (roster, characters, levelUps, additive) = AreaLog.ReadRoster(r);
         var dlc = ReadDlc(r);
         bool ownTurns = r.ReadBoolean();
         if (Phase == Phase.Running) return;
@@ -3012,6 +3022,12 @@ internal sealed class Session
             Plugin.Log.LogInfo($"[catchup] replaying a level-up start at f{frame}");
         }
         _catchUp = new CatchUpState { L = L, Seq = seq, Party = party, Playing = playing, Since = Now, Total = live - L };
+        // Loading steps of levels loaded during play since L run on the frames the session ran them on.
+        foreach (var (frame, key, timeBase) in additive)
+        {
+            AdditiveBarrier.Schedule(key, frame, timeBase);
+            Plugin.Log.LogInfo($"[catchup] replaying loading step {key} at f{frame}");
+        }
         // The save's load is load <seq> of the session's count; it ends on frame L, as it did for everyone.
         _loadSeq = seq - 1;
         ScheduleLoadRelease(seq, L, clockBase);
