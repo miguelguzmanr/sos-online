@@ -2,7 +2,7 @@
 # Screenshots for the README, from loopback test sessions at 1280x720 with test player names.
 # Every instance takes screenshots on fixed frames; `tests/readme-shots.sh picks` then copies the README's picks
 # to docs/screenshots. Output: BepInEx/SosOnline/readme/<run>-shot-<port>-<frame>.png in the game folder. About 12 minutes.
-# Usage: tests/readme-shots.sh [run...]   runs: online party dropin assign battle pause turns resync (default: all)
+# Usage: tests/readme-shots.sh [run...]   runs: online party dropin assign battle pause turns timing resync (default: all)
 # Close the game first. Tests play from sandbox copies of the saves (--sosonline-start / --sosonline-play).
 cd "$(dirname "$0")/.." || exit 1
 . tests/game-dir.sh; . tests/launch.sh; O="$GAME/BepInEx/SosOnline"; OUT="$O/readme"; mkdir -p "$OUT"
@@ -17,7 +17,7 @@ keep() { for f in "$O"/shot-*.png; do [ -f "$f" ] && mv "$f" "$OUT/$1-$(basename
 names=("--sosonline-name=Alex" "--sosonline-name=Sam" "--sosonline-name=Robin")
 
 online() { # The title screen's Online page, hosting (UDP, no Steam lobby), Host Settings with the players' default Rejoin, the version line.
-NO_TILE=1 start_game 0 -screen-fullscreen 0 -screen-width 1280 -screen-height 720 --sosonline-udp=27100 --sosonline-joinmode=ask --sosonline-onlineshot
+NO_TILE=1 start_game 0 -screen-fullscreen 0 -screen-width 1280 -screen-height 720 --sosonline-udp=27100 --sosonline-joinmode=ask --sosonline-teamtiming=original --sosonline-onlineshot
 waitgames; mv "$O"/ui-online-*.png "$OUT/" 2>/dev/null
 }
 
@@ -63,9 +63,16 @@ waitgames; keep pause
 turns() { # Battle turns over a lagged link (Waiting in the player bar): whose turn it is on both PCs, and the host's
 #    battle pause page (Take This Turn, Pass Turn to P2).
 T="--sosonline-delay=4 --sosonline-encounter=1500 --sosonline-bot --sosonline-lag=40 --sosonline-jitter=30 --sosonline-spikes=10 --sosonline-quit=2700 --sosonline-shots=$(every10 1600 2650)"
-tests/session.sh 27100 "--sosonline-dropinanywhere --sosonline-start=0 --sosonline-guests=1 --sosonline-seed=777 --sosonline-script=$S/host-walk.txt --sosonline-pauseopen=2160 ${names[0]} $T" \
+tests/session.sh 27100 "--sosonline-dropinanywhere --sosonline-start=0 --sosonline-guests=1 --sosonline-seed=777 --sosonline-script=$S/host-walk.txt --sosonline-pauseopen=1876 ${names[0]} $T" \
   "--sosonline-script=$S/guest-join-walk.txt ${names[1]} $T" 4
 waitgames; keep turns
+}
+
+timing() { # Team Timing None: Sam's bot presses for every hit, Alex's never does; the timed-hit panel shows only the row
+#    of whoever's press counts (Alex's attack ~1784, Sam's ~1984). The same flags as tests/team-timing.sh.
+T="--sosonline-delay=4 --sosonline-encounter=1500 --sosonline-ownturns=1 --sosonline-lag=20 --sosonline-jitter=10 --sosonline-quit=2100 --sosonline-shots=$(every10 1760 2000)"
+tests/session.sh 27100 "--sosonline-start=0 --sosonline-guests=1 --sosonline-seed=777 --sosonline-teamtiming=none --sosonline-bot=menu --sosonline-botphase=0 --sosonline-script=$S/host-walk.txt ${names[0]} $T"   "--sosonline-bot --sosonline-botall --sosonline-botblock=86 --sosonline-botphase=22 --sosonline-script=$S/guest-join-walk.txt ${names[1]} $T" 4
+waitgames; keep timing
 }
 
 resync() { # Out of sync: Sam's game diverges at 1500 and rejoins by replay.
@@ -84,16 +91,18 @@ pick ui-online-page-27100.png online-menu.png
 pick ui-online-options-help-27100.png online-options.png
 crop pause-shot-27100-003040.png 8 8 86 128 bar-play.png          # in play: icons only, Robin joining
 crop pause-shot-27100-002700.png 8 8 270 128 bar-names.png        # on a pause screen: names, Paused, Wants to join
-crop turns-shot-27100-002180.png 8 8 210 92 bar-waiting.png       # a lagged link: Waiting
+crop turns-shot-27100-001880.png 8 8 210 92 bar-waiting.png       # a lagged link: Waiting
 pick pause-shot-27100-002700.png pause-host.png
 pick pause-shot-27101-002700.png pause-friend.png
 pick turns-shot-27100-001750.png turn-host.png
 pick turns-shot-27101-001750.png turn-friend.png
-pick turns-shot-27100-002180.png battle-menu-host.png
-pick turns-shot-27101-002180.png battle-menu-friend.png
+pick turns-shot-27100-001880.png battle-menu-host.png
+pick turns-shot-27101-001880.png battle-menu-friend.png
 pick pause-shot-27100-003040.png join-hold.png
 pick pause-shot-27102-003240.png join-joined.png
 pick assign-shot-27100-001750.png assign-players.png
+crop timing-shot-27100-001790.png 1080 470 200 110 timing-host.png    # Team Timing None: Alex's attack, only P1's row
+crop timing-shot-27100-001990.png 1080 470 200 110 timing-friend.png  # Sam's attack, only P2's row
 pick party-shot-27100-001300.png three-players.png
 pick dropin-shot-27100-001350.png two-players.png
 }
@@ -101,6 +110,6 @@ pick dropin-shot-27100-001350.png two-players.png
 
 bash tests/display-prefs.sh save
 clean
-for run in ${@:-online party dropin assign battle pause turns resync}; do echo "run $run"; "$run"; done
+for run in ${@:-online party dropin assign battle pause turns timing resync}; do echo "run $run"; "$run"; done
 bash tests/display-prefs.sh restore
 ls "$OUT" | grep -c png

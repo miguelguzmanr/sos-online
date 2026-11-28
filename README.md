@@ -9,7 +9,7 @@ Play **Sea of Stars: Sunset Edition** co-op online with your Steam friends. The 
 
 - **Up to three players** over Steam, using the game's own co-op. To the game, your friends are simply players 2 and 3.
 - **Drop in, drop out.** Friends join a game in progress from a Steam invite or the friends list and take a party member; anyone can leave while the others keep playing.
-- **Timed hits and blocks feel right online.** Each press is judged by when you made it, not when it reached the other PCs.
+- **Timed hits and blocks feel right online.** Each press is judged by when you made it, not when it reached the other PCs. The host chooses whether everyone can time every hit and block, as in the game, or each player times their own (**Team Timing**).
 - **Native menus.** An **Online** entry on the title screen and pause menu, built from the game's own widgets.
 - **Your saves stay yours.** Friends play on a copy of the host's save; their own saves are never touched.
 - **Fixes itself.** If a friend's game gets out of sync, it corrects itself or rejoins in a few seconds.
@@ -52,6 +52,14 @@ In battles each player gets the turns of their own character, and the cursor sta
 | ![Alex's turn, on Alex's PC](docs/screenshots/turn-host.png) | ![Alex's turn, on Sam's PC](docs/screenshots/turn-friend.png) |
 | **Alex's battle pause page** | **Sam: *[P2] Your turn*** |
 | ![The host's battle pause page: Take This Turn, Pass Turn](docs/screenshots/battle-menu-host.png) | ![Sam's turn, on Sam's PC](docs/screenshots/battle-menu-friend.png) |
+
+### Team Timing
+
+In the game anyone can press for any timed hit or block, and the best press counts. Host Settings → **Team Timing** keeps that (**Original**, the default), or lets each player time their own: with **Hits Only** you block for your own character; with **None** you also time the hits of your own turns, and a combo is timed by the players of its characters. Characters nobody plays stay team-timed. The timed-hit panel on the right shows only the players whose presses count.
+
+| Alex attacks: only Alex's row (a miss here) | Sam attacks: only Sam's row |
+|---|---|
+| ![Timed-hit panel with only P1's row](docs/screenshots/timing-host.png) | ![Timed-hit panel with only P2's row](docs/screenshots/timing-friend.png) |
 
 ### Joining a game in progress
 
@@ -116,6 +124,7 @@ The host's **Online** → **Host Settings** → **Rejoin** decides how friends j
 **During a session:**
 - **Pause** (Start / Esc) pauses only your screen; the game keeps running for everyone. **Pause for Everyone** opens the game's own pause menu on every PC, e.g. for **Assign Players** (choose who plays whom).
 - **Battles:** each player takes the turns of their own character, and a notice on the right says whose turn it is. The host can switch back to the game's own random turns in **Online** → **Host Settings** → **Battle Turns** → **Original**.
+- **Timed hits and blocks:** anyone can time them, as in the game. With **Host Settings** → **Team Timing** → **Hits Only** each player blocks for their own character; with **None** each player also times their own turns' hits. The host can change it during co-op (pause → **Host Settings**); it applies from the next battle.
 - The players and their connection show in the top-left corner. **Status Bar** (pause → **Options**, or **Online** → **Mod Settings**) hides it during play (**Off**) or adds a detailed line (**Advanced**).
 - **Leave Co-op** (pause screen): your character goes back to the party AI and the others keep playing. The host's **End Co-op** ends it for everyone.
 - A friend who joins a save they played before gets their last character in it back, if it's free.
