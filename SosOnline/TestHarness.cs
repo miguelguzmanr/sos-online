@@ -69,6 +69,8 @@ namespace SosOnline;
 ///   --sosonline-play=SLOT[a]      guest: first play save SLOT on its own (offline), then join (--sosonline-join);
 ///                                 host: play save SLOT with the lobby open (no --sosonline-start), friends join it there
 ///   --sosonline-rememberchar=ID   host: pretend each guest last played character ID ("last": the last party member)
+///   --sosonline-keepcharacters    host (UDP): keep the characters remembered in the previous run's sandbox, as after a
+///                                 restart of the game
 ///   --sosonline-swapat=F          host: at frame F, check every guest's character as if it had just begun playing, with
 ///                                 the last party member as the one it played before (a swap while a joiner catches up)
 ///   --sosonline-joinafter=S       with --sosonline-play: join S seconds after its own game is playable (default 10)
@@ -126,7 +128,11 @@ internal static class TestHarness
         {
             Session.Instance.UseUdp(ushort.Parse(port));
             // Test instances never touch the real saves, nor each other's.
+            // --sosonline-keepcharacters: the characters remembered in the previous run's sandbox carry over (a restart).
+            var chars = Path.Combine(SaveMirror.SaveDir, $"SosOnlineTest-{port}", CharacterMemory.FileName);
+            byte[] kept = Args.ContainsKey("keepcharacters") && File.Exists(chars) ? File.ReadAllBytes(chars) : null;
             SaveMirror.UseSandbox($"SosOnlineTest-{port}");
+            if (kept != null) { File.WriteAllBytes(chars, kept); Plugin.Log.LogInfo("[test] kept the remembered characters"); }
             SaveMirror.MirrorFolder = $"SosOnlineSession-{port}";
             SpikeB.CopyIntoSandbox();
         }

@@ -2013,13 +2013,12 @@ internal sealed class Session
 
     // ------------------------------------------------------------------ Stage 1: characters
 
-    /// <summary>Host: the character each guest (by Steam id) last played. Given back when they rejoin.</summary>
-    private readonly Dictionary<ulong, string> _lastCharacter = new();
+    // The character each guest (by Steam id) last played is kept per save slot in CharacterMemory, across game starts.
     private bool _swapTestDone;
 
     /// <summary>
     /// Host, every frame of a run: when a guest begins playing (the game hands it the next free character), give it
-    /// back the character it played before, if that one is free. Every PC reassigns on the same frame
+    /// back the character it last played in this save (this run or an earlier one), if that one is free. Every PC reassigns on the same frame
     /// (<see cref="Msg.AssignCharacter"/>), joiners still replaying included, and the area log records it for later
     /// joiners. (It used to invalidate the log: a guest that re-synced by replay got its character back on merging,
     /// so a second re-sync or drop-in in that area always waited for a reload; the sweep of 2026-11-16.)
@@ -2035,9 +2034,10 @@ internal sealed class Session
             foreach (var peer in _peers.Values.Where(p => !p.Pending))
             {
                 peer.CharacterChecked = false;
-                _lastCharacter[peer.Id] = GameBridge.LastPartyCharacter();
+                CharacterMemory.Set(GameBridge.LoadedSlot, peer.Id, GameBridge.LastPartyCharacter());
             }
         }
+        int saveSlot = GameBridge.LoadedSlot;
         foreach (var peer in _peers.Values)
         {
             if (peer.Pending || peer.LeavingAt >= 0) continue;
@@ -2047,13 +2047,14 @@ internal sealed class Session
             if (!peer.CharacterChecked)
             {
                 peer.CharacterChecked = true;
-                if (TestHarness.TryArg("rememberchar", out var test) && !_lastCharacter.ContainsKey(peer.Id))
-                    _lastCharacter[peer.Id] = test == "last" ? GameBridge.LastPartyCharacter() : test;
-                if (_lastCharacter.TryGetValue(peer.Id, out var before) && !string.IsNullOrEmpty(before) && before != now
+                if (TestHarness.TryArg("rememberchar", out var test) && CharacterMemory.Get(saveSlot, peer.Id) == null)
+                    CharacterMemory.Set(saveSlot, peer.Id, test == "last" ? GameBridge.LastPartyCharacter() : test);
+                string before = CharacterMemory.Get(saveSlot, peer.Id);
+                if (!string.IsNullOrEmpty(before) && before != now
                     && GameBridge.CanAssignCharacter(peer.Slot, before))
                 {
                     int at = FirstSafeFrame;
-                    Plugin.Log.LogInfo($"[characters] {peer.Name} played {before} before (has {now}): giving it back at f{at}");
+                    Plugin.Log.LogInfo($"[characters] {peer.Name} played {before} last in slot {saveSlot} (has {now}): giving it back at f{at}");
                     foreach (var other in _peers.Values)
                     {
                         // Joiners whose CatchUp went out already; earlier ones get it from the log.
@@ -2070,7 +2071,7 @@ internal sealed class Session
                     continue; // remembered again once the swap shows
                 }
             }
-            _lastCharacter[peer.Id] = now;
+            CharacterMemory.Set(saveSlot, peer.Id, now);
         }
     }
 

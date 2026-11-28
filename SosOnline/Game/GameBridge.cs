@@ -399,6 +399,12 @@ internal static class GameBridge
         get { try { return Saves?.Saving ?? false; } catch { return false; } }
     }
 
+    /// <summary>The save slot the game is playing (or -1).</summary>
+    public static int LoadedSlot
+    {
+        get { try { return Saves?.LoadedSaveGameSlot?.slotIndex ?? -1; } catch { return -1; } }
+    }
+
     /// <summary>Writes an autosave of the current game; returns its slot index (or -1).</summary>
     public static int AutoSave()
     {

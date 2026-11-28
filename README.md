@@ -118,6 +118,7 @@ The host's **Online** → **Host Settings** → **Rejoin** decides how friends j
 - **Battles:** each player takes the turns of their own character, and a notice on the right says whose turn it is. The host can switch back to the game's own random turns in **Online** → **Host Settings** → **Battle Turns** → **Original**.
 - The players and their connection show in the top-left corner. **Status Bar** (pause → **Options**, or **Online** → **Mod Settings**) hides it during play (**Off**) or adds a detailed line (**Advanced**).
 - **Leave Co-op** (pause screen): your character goes back to the party AI and the others keep playing. The host's **End Co-op** ends it for everyone.
+- A friend who joins a save they played before gets their last character in it back, if it's free.
 - If a friend loses the connection, their game reconnects by itself for a minute and rejoins like above.
 - **Host:** pause → **Players** removes a player. In a battle, Start opens a host page to take a stuck turn (**Take This Turn**) or pass it to the next player.
 - Use a gamepad or keyboard; the mouse is not synchronized.
