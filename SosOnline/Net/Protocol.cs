@@ -47,11 +47,13 @@ internal enum Msg : byte
     DlcOwned = 38,    // guest → host: the DLC this PC owns, again (the game reads Steam's answer a while after its start)
     PlayersRelease = 41, // host → guests playing: frame (a drop-in stopped before its reload; players move again after it)
     Booted = 42,      // guest → host: this PC's game has finished starting (it can load a drop-in save at once)
+    LevelUpReady = 43, // guest → host: level-up sequence, frame this PC has the level-up scene (its start is held)
+    LevelUpRelease = 44, // host → guests: level-up sequence, frame on which every PC starts the level-up
 }
 
 internal static class Protocol
 {
-    public const int Version = 18; // 18: DropInSave sends the joiners' names one per line; 17: drop-ins at the next area entry (Booted, DropInSave at the entry); 16: players held still during a drop-in (DropInSave names, PlayersRelease), Welcome says whether the host takes players back; 15: Welcome says whether the host still has to let the joiner in; 14: the session's battle-turn rule; 9: snapshots carry each character's facing; 10: and the game's pause flag; 11: log sharing; 12: character changes in the catch-up, area files; 13: DLC owned and the session's DLC
+    public const int Version = 19; // 19: the level-up barrier (LevelUpReady, LevelUpRelease, in the area log); 18: DropInSave sends the joiners' names one per line; 17: drop-ins at the next area entry (Booted, DropInSave at the entry); 16: players held still during a drop-in (DropInSave names, PlayersRelease), Welcome says whether the host takes players back; 15: Welcome says whether the host still has to let the joiner in; 14: the session's battle-turn rule; 9: snapshots carry each character's facing; 10: and the game's pause flag; 11: log sharing; 12: character changes in the catch-up, area files; 13: DLC owned and the session's DLC
 
     public static (BinaryWriter w, MemoryStream ms) Begin(Msg type)
     {

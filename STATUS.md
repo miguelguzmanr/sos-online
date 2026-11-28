@@ -2,7 +2,7 @@
 
 Current state of the project, for whoever picks it up next. Update it at the end of every working session: replace what changed, don't append a diary. Technical background is in [CLAUDE.md](CLAUDE.md); causes and fixes in detail are in [docs/FINDINGS.md](docs/FINDINGS.md), the drop-in plan and its progress in [docs/PLAN.md](docs/PLAN.md).
 
-*Last updated: 2026-11-27.*
+*Last updated: 2026-11-28.*
 
 ## State right now
 
@@ -24,6 +24,9 @@ Current state of the project, for whoever picks it up next. Update it at the end
 - **Test saves:** existing single/2-player scripts run from the user's newest save (`--sosonline-start=0a`), while `tests/three-player-*.sh` and `tests/rejoin-paused.sh` use the sandboxed fixtures in `tests/saves/` (`midgame-necromancer/`, `endgame-worldmap/`).
 
 ## Open items, by priority
+
+- **Committed, not released: your character, your level up** (2026-11-28, `Lockstep/LevelUps.cs`, findings §22). With **Battle Turns** on Custom, the player who controls a character chooses its bonus after a battle (cursor and confirm); a character nobody playing owns keeps the game's way (P1 confirms, as in local co-op); Original is the game's way. *[P2] Level Up* notice on every PC (`docs/messages.csv` row 331, for review). Also fixed: the level up could split the PCs: its scene loads asynchronously and arrived a frame apart, so the cursor started on another star and the same confirm gave another bonus. New level-up barrier: time stands still from the fade, every PC starts the level up on the host's release frame (`Msg.LevelUpReady`/`LevelUpRelease`, in the area log; protocol 19). New test `tests/level-up.sh` (in the sweep) and flags `--sosonline-awardxp`, `--sosonline-onehit`, `--sosonline-botlevelup`. **Tested** hidden, from the user's save: Custom three times (P1 chose Valere's, P2 Zale's, P1 Garl's; 0 of 292 differ each time), Original once (P1 chose all; 0 of 291). Not yet: a catch-up replay across a level up, three players, Steam, a full sweep.
+- **Found: the `midgame-necromancer` fixture's level load never finishes** (2026-11-28): from it the barrier's `scene Empty loaded at f288: game time held` is never followed by a release, snapshots say `loading` until the quit, and an encounter started at f1500 never begins (party frozen mid-dash). `tests/three-player-battle.sh` passed from it on 2026-11-25 (163/163), before findings §21 held time from the scene load, so that change may be the cause. Not investigated; the `three-player-*` scripts and `rejoin-paused.sh` use this save.
 
 From the playtest of 2026-11-26 (v0.1.86, three players over Steam, Mountain Trail and Forbidden Cavern; host logs and seven friends' log zips). Committed on `main`, not released (findings §18, §19):
 

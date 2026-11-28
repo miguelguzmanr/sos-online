@@ -696,7 +696,7 @@ internal sealed class Session
         UpdateDropIn();
         UpdateCatchUpHost();
         UpdateCatchUpJoiner();
-        if (IsHost && Phase == Phase.Running) TryReleaseLoad();
+        if (IsHost && Phase == Phase.Running) { TryReleaseLoad(); TryReleaseLevelUp(); }
         if (IsHost && Phase == Phase.Running)
             foreach (var peer in _peers.Values.Where(p => p.LeavingAt >= 0 && Engine.AppliedFrame >= p.LeavingAt).ToList())
             {
@@ -915,6 +915,14 @@ internal sealed class Session
                 int seq = r.ReadInt32();
                 int at = r.ReadInt32();
                 ReportLoaded(peer.Slot, seq, at);
+                break;
+            }
+            case Msg.LevelUpReady:
+            {
+                if (peer == null || peer.Pending) return;
+                int seq = r.ReadInt32();
+                int at = r.ReadInt32();
+                ReportLevelUp(peer.Slot, seq, at);
                 break;
             }
             case Msg.Hash:
@@ -1166,6 +1174,12 @@ internal sealed class Session
                 var snap = StateSnapshot.Read(r);
                 // A drop-in guest gets the host's snapshots before its run starts; it has no state for those frames.
                 if (Engine.Running && snap.Frame >= Engine.StartFrame) Sync.OnHostSnapshot(snap);
+                break;
+            }
+            case Msg.LevelUpRelease:
+            {
+                r.ReadInt32(); // sequence (the host's bookkeeping)
+                ScheduleLevelUpRelease(r.ReadInt32());
                 break;
             }
             case Msg.LoadRelease:
@@ -1430,6 +1444,7 @@ internal sealed class Session
         if (IsHost) _area.Clear("a new run started");
         if (IsHost && !Engine.Running) BattleTurns.SetRule(Settings.OwnTurns);
         BattleTurns.Reset();
+        LevelUps.Reset();
         _resyncing = false;
         _soloRestored = false;
         _soloLeavesPending = false;
@@ -1516,6 +1531,7 @@ internal sealed class Session
         GameBridge.UnlockTime();
         DlcGate.Clear();
         BattleTurns.SetRule(false);
+        LevelUps.Reset();
         // A guest that re-syncs drops in again by a reload; anyone else plays alone from here.
         if (!_resyncing) ReturnToSolo();
         try { GameBridge.Input?.AutoAssignUnassignedControllers(); } catch { }
@@ -1679,8 +1695,74 @@ internal sealed class Session
     /// <summary>1-based sequence of the active (or next) level load barrier during lockstep.</summary>
     public int CurrentLoadSeq => _heldSeq >= 0 ? _loadSeq : _loadSeq + 1;
 
+    // ------------------------------------------------------------------ level-up barrier
+
+    private int _levelUpSeq;
+    private readonly Dictionary<int, Dictionary<int, int>> _levelUpReports = new(); // host: seq → slot → frame
+
+    /// <summary>
+    /// Called when this PC has the level-up scene and its start (<c>DoLevelUp</c>) is held (<see cref="LevelUps"/>). Like a
+    /// level load's end: the host collects the frame each PC got there and picks a release frame; a replaying joiner
+    /// gets the release frames from the area log.
+    /// </summary>
+    public void HoldLevelUp(int frame)
+    {
+        int seq = ++_levelUpSeq;
+        Plugin.Log.LogInfo($"[levelup] f{frame} level-up {seq}: the scene is here, start held");
+        if (_catchUp != null) return;
+        if (IsHost) ReportLevelUp(LocalSlot, seq, frame);
+        else
+        {
+            var (w, ms) = Protocol.Begin(Msg.LevelUpReady);
+            w.Write(seq);
+            w.Write(frame);
+            Send(HostId, ms, true);
+        }
+    }
+
+    private void ReportLevelUp(int slot, int seq, int frame)
+    {
+        if (!_levelUpReports.TryGetValue(seq, out var bySlot)) _levelUpReports[seq] = bySlot = new Dictionary<int, int>();
+        bySlot[slot] = frame;
+        TryReleaseLevelUp();
+    }
+
+    /// <summary>Host: once every PC in the session has the level-up scene, every PC starts the level-up on one frame.</summary>
+    private void TryReleaseLevelUp()
+    {
+        if (!Engine.Running || _levelUpReports.Count == 0) return;
+        int now = Engine.AppliedFrame;
+        foreach (int seq in _levelUpReports.Keys.OrderBy(k => k).ToList())
+        {
+            var bySlot = _levelUpReports[seq];
+            for (int s = 0; s < InputOverride.SlotCount; s++)
+                if (Engine.InSessionAt(s, now) && !bySlot.ContainsKey(s)) return;
+            int release = now + Engine.Delay + 3; // as a level load's release (TryReleaseLoad)
+            Plugin.Log.LogInfo($"[levelup] level-up {seq}: scene at {string.Join(", ", bySlot.OrderBy(kv => kv.Key).Select(kv => $"P{kv.Key + 1} f{kv.Value}"))}; start at f{release}");
+            foreach (var peer in _peers.Values.Where(p => !p.Pending || p.CatchUp == CatchUpStep.Running))
+            {
+                var (w, ms) = Protocol.Begin(Msg.LevelUpRelease);
+                w.Write(seq);
+                w.Write(release);
+                Send(peer.Id, ms, true);
+            }
+            _levelUpReports.Remove(seq);
+            _area.LogLevelUp(release);
+            ScheduleLevelUpRelease(release);
+        }
+    }
+
+    private void ScheduleLevelUpRelease(int frame)
+    {
+        if (!Engine.Running) return;
+        if (frame < Engine.Frame) Plugin.Log.LogError($"[levelup] start frame {frame} already passed (now f{Engine.Frame})");
+        Engine.Schedule(frame, () => LevelUps.Release(frame));
+    }
+
     private void ResetLoadBarrier()
     {
+        _levelUpSeq = 0;
+        _levelUpReports.Clear();
         _loadSeq = 0;
         _heldSeq = -1;
         _loadReports.Clear();
@@ -2885,7 +2967,7 @@ internal sealed class Session
         int saveSlot = r.ReadInt32();
         var party = PartySpawn.Read(r);
         int live = r.ReadInt32();
-        var (roster, characters) = AreaLog.ReadRoster(r);
+        var (roster, characters, levelUps) = AreaLog.ReadRoster(r);
         var dlc = ReadDlc(r);
         bool ownTurns = r.ReadBoolean();
         if (Phase == Phase.Running) return;
@@ -2923,6 +3005,11 @@ internal sealed class Session
             string c = character;
             Engine.Schedule(frame, () => GameBridge.AssignCharacter(s, c));
             Plugin.Log.LogInfo($"[catchup] replaying character change: P{s + 1} plays {c} from f{frame}");
+        }
+        foreach (int frame in levelUps)
+        {
+            ScheduleLevelUpRelease(frame);
+            Plugin.Log.LogInfo($"[catchup] replaying a level-up start at f{frame}");
         }
         _catchUp = new CatchUpState { L = L, Seq = seq, Party = party, Playing = playing, Since = Now, Total = live - L };
         // The save's load is load <seq> of the session's count; it ends on frame L, as it did for everyone.

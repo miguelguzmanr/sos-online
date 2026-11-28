@@ -37,6 +37,12 @@ internal static class CombatBot
     public static bool VaryMoves;
     private static int _menuPresses;
 
+    /// <summary>--sosonline-botlevelup=N: on a level-up bonus choice, this bot moves the cursor right N times before it
+    /// confirms (-1: it only confirms, as on any menu). Two PCs with different N choose different stars, so the star
+    /// chosen shows whose input the screen took.</summary>
+    public static int LevelUpMoves = -1;
+    private static int _levelUpScreen = -1, _levelUpMoved;
+
     public static InputSnapshot Apply(int frame, InputSnapshot snap)
     {
         if (frame - _actorsFrame > 30)
@@ -85,6 +91,28 @@ internal static class CombatBot
         // so the battle timeline doesn't depend on the input delay.
         if (!timedPhase && frame > 640 && (frame - Phase) % 45 == 0)
         {
+            if (LevelUpMoves >= 0 && LevelUps.CanChoose)
+            {
+                if (_levelUpScreen != LevelUps.ScreenCount) { _levelUpScreen = LevelUps.ScreenCount; _levelUpMoved = 0; }
+                if (_levelUpMoved < LevelUpMoves)
+                {
+                    _levelUpMoved++;
+                    int h = ActionTable.IndexOf("UIMoveHorizontal");
+                    if (h >= 0)
+                    {
+                        snap.Axis[h] = InputSnapshot.Quantize(1f);
+                        snap.AxisRaw[h] = InputSnapshot.Quantize(1f);
+                        snap.Bits[h] |= ActionBits.Button | ActionBits.ButtonDown;
+                    }
+                    Plugin.Log.LogInfo($"[bot] f{frame} level up: cursor right ({_levelUpMoved}/{LevelUpMoves})");
+                }
+                else
+                {
+                    Press(snap, "UI_Confirm");
+                    Plugin.Log.LogInfo($"[bot] f{frame} level up: confirm");
+                }
+                return snap;
+            }
             _menuPresses++;
             if (SwitchEvery > 0 && _menuPresses % SwitchEvery == 0)
             {

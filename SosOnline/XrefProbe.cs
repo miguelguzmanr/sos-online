@@ -25,6 +25,13 @@ internal static class XrefProbe
         (typeof(SaveManager), "LoadSaveSlot"),
         (typeof(SaveManager), "LoadSaveSlotAndSetLastIndex"),
         (typeof(SaveManager), "UnloadSaveSlotData"),
+        // Level ups: which player's input the bonus choice reads (Lockstep/LevelUps.cs).
+        (typeof(LevelUpSceneController), "LevelUpCharacter"),
+        (typeof(LevelUpSceneController), "ShowUpgradeSelection"),
+        (typeof(LevelUpSceneController), "EndLevelUp"),
+        (typeof(LevelUpScreen), "Init"),
+        (typeof(LevelUpScreen), "Update"),
+        (typeof(WorldUINavigation<LevelUpStar>), "EnableNavigation"),
     };
 
     public static void Run()

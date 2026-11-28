@@ -163,6 +163,7 @@ internal static class TestHarness
         if (Args.ContainsKey("nocatchup")) Session.Instance.CatchUpEnabled = false;
         if (Args.TryGetValue("botoffset", out var bo)) CombatBot.ImpactOffset = int.Parse(bo);
         if (Args.TryGetValue("botphase", out var bp)) CombatBot.Phase = int.Parse(bp);
+        if (Args.TryGetValue("botlevelup", out var blu)) CombatBot.LevelUpMoves = int.Parse(blu);
         if (Args.TryGetValue("botblock", out var bb)) CombatBot.BlockOffset = int.Parse(bb);
         if (Args.ContainsKey("castprobe") || Args.ContainsKey("callprobe")) Lockstep.CombatTrace.CastProbe = true;
         if (Args.TryGetValue("readprobe", out var rp)) { var r = rp.Split(','); Lockstep.InputOverride.ReadProbeFrom = int.Parse(r[0]); Lockstep.InputOverride.ReadProbeTo = int.Parse(r[1]); }
@@ -1009,6 +1010,41 @@ internal static class TestHarness
         if (Args.ContainsKey("assignprobe")) Diagnostics.AssignProbe(frame);
         if (Args.TryGetValue("encounter", out var ef) && int.TryParse(ef, out int encounterFrame) && frame == encounterFrame)
             StartNearestEncounter();
+        // --sosonline-awardxp=F[:N]: every PC gives the party the XP it lacks for N more levels (default 1) on frame F,
+        // so the next battle won ends in a level up (pass it to every instance).
+        if (Args.TryGetValue("awardxp", out var ax) && ax.Split(':') is var axp && int.TryParse(axp[0], out int axFrame) && axFrame == frame)
+        {
+            try
+            {
+                var stats = GameBridge.Stats;
+                int levels = axp.Length > 1 ? int.Parse(axp[1]) : 1, given = 0;
+                int level = stats.GetLevel(true, 0);
+                given = stats.GetXPRemainingToNextLevel() - 1;
+                for (int i = 1; i < levels; i++) given += stats.GetXPRequiredToLevelUp(level + i);
+                // One XP short of the last level: the battle's own XP completes it, so the level up comes from the battle.
+                stats.AwardXP(given);
+                Plugin.Log.LogInfo($"[test] f{frame} awarded {given} XP (level {level}, now {stats.GetLevel(true, 0)} with unspent XP)");
+            }
+            catch (Exception e) { Plugin.Log.LogWarning($"[test] award XP: {e.Message}"); }
+        }
+        // --sosonline-onehit: in battles every enemy dies on its next hit (the game's own dieOnNextHit), so bots win
+        // and the game's victory, XP and level ups follow (pass it to every instance).
+        if (Args.ContainsKey("onehit") && frame % 10 == 0)
+        {
+            try
+            {
+                var cm = GameBridge.Combat;
+                var actors = cm != null && cm.IsAnEncounterRunning() ? cm.CurrentEncounter?.AllActors : null;
+                for (int i = 0; actors != null && i < actors.Count; i++)
+                {
+                    var target = actors[i]?.TryCast<EnemyCombatActor>()?.CombatTarget?.TryCast<EnemyCombatTarget>();
+                    if (target == null || target.dieOnNextHit) continue;
+                    target.dieOnNextHit = true;
+                    Plugin.Log.LogInfo($"[test] f{frame} {actors[i].name} dies on its next hit");
+                }
+            }
+            catch (Exception e) { Plugin.Log.LogWarning($"[test] one hit: {e.Message}"); }
+        }
         // Once per start: a rejoined run counts frames from 0 again.
         if (Args.TryGetValue("netdrop", out var nd) && nd.Split(':') is [var ndf, var nds] && int.TryParse(ndf, out int ndFrame) && ndFrame == frame && !_netDropped)
         {

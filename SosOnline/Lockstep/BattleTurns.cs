@@ -110,9 +110,11 @@ internal static class BattleTurns
     }
 
     /// <summary>The slot that owns this actor's character and is playing, or -1.</summary>
-    private static int OwnerOf(CombatActor actor)
+    private static int OwnerOf(CombatActor actor) => OwnerSlot(IdOf(actor));
+
+    /// <summary>The slot that controlled this character outside battles and is still playing, or -1 (also for level ups).</summary>
+    public static int OwnerSlot(string id)
     {
-        string id = IdOf(actor);
         if (string.IsNullOrEmpty(id)) return -1;
         for (int slot = 0; slot < Owner.Length; slot++)
             if (Owner[slot] == id && S.Engine.InSessionAt(slot, Frame) && GameBridge.IsPlaying(slot)) return slot;

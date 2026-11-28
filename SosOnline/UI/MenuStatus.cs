@@ -34,6 +34,7 @@ internal static class MenuStatus
         (typeof(OptionsScreen), "Options"),
         (typeof(RemappingMenu), "Controls"),
         (typeof(AssignControllersScreen), "Assign Players"),
+        (typeof(LevelUpScreen), "Level Up"),
         (typeof(HowToPlayScreen), "How to play"),
         (typeof(AchievementScreen), "Achievements"),
         (typeof(ShopPopup), "Shop"),

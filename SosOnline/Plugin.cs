@@ -46,6 +46,7 @@ public sealed class Plugin : BasePlugin
             if (TestHarness.TryArg("rngprobe", out _)) RngProbe.Install(harmony);
             CombatTrace.Install(harmony);
             BattleTurns.Install(harmony);
+            LevelUps.Install(harmony);
             SpawnTrace.Install(harmony);
             if (TestHarness.TryArg("whichrva", out var rvas))
                 foreach (var hex in rvas.Split(',', StringSplitOptions.RemoveEmptyEntries))

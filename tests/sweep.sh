@@ -57,6 +57,7 @@ bash tests/display-prefs.sh save > /dev/null 2>&1
 
 # Battles split intermittently: several runs.
 for i in 1 2 3; do run battle-turns-$i env ENCOUNTER=650 QUIT=5000 bash tests/battle-turns.sh --sosonline-start=0a; done
+run level-up bash tests/level-up.sh
 run save-p1 env QUIT=1500 bash tests/save-sync.sh --sosonline-saveat=600
 run save-p2 env SAVER=guest QUIT=1500 bash tests/save-sync.sh --sosonline-saveat=600 --sosonline-saveby=1
 run resync env DIVERGE=1600 QUIT=9500 EXTRA="--sosonline-encounter=1500 --sosonline-bot --sosonline-lag=20 --sosonline-jitter=25" bash tests/resync.sh

@@ -46,6 +46,9 @@ internal sealed class AreaLog
     /// </summary>
     public List<(int frame, int slot, string character)> Characters { get; } = new();
 
+    /// <summary>Frames after L on which a level-up started (its barrier's release): a replay starts it there too.</summary>
+    public List<int> LevelUps { get; } = new();
+
     /// <summary>The host's state snapshots since L: a joiner checks its replay against them as it goes.</summary>
     public List<StateSnapshot> Snapshots { get; } = new();
 
@@ -70,6 +73,13 @@ internal sealed class AreaLog
         // The occupied slots recorded at L cover changes up to L; one decided earlier for a later frame still applies.
         Roster.RemoveAll(e => e.frame <= frame);
         Characters.RemoveAll(e => e.frame <= frame);
+        LevelUps.RemoveAll(f => f <= frame);
+    }
+
+    public void LogLevelUp(int frame)
+    {
+        LevelUps.Add(frame);
+        if (L >= 0) Plugin.Log.LogInfo($"[catchup] level-up start logged: f{frame}");
     }
 
     /// <summary>Host: slot <paramref name="slot"/> joins (or leaves) the session on <paramref name="frame"/>.</summary>
@@ -92,15 +102,20 @@ internal sealed class AreaLog
         foreach (var (frame, slot, join) in Roster) { w.Write(frame); w.Write((byte)slot); w.Write(join); }
         w.Write(Characters.Count);
         foreach (var (frame, slot, character) in Characters) { w.Write(frame); w.Write((byte)slot); w.Write(character); }
+        w.Write(LevelUps.Count);
+        foreach (int frame in LevelUps) w.Write(frame);
     }
 
-    public static (List<(int frame, int slot, bool join)> roster, List<(int frame, int slot, string character)> characters) ReadRoster(BinaryReader r)
+    public static (List<(int frame, int slot, bool join)> roster, List<(int frame, int slot, string character)> characters,
+        List<int> levelUps) ReadRoster(BinaryReader r)
     {
         var list = new List<(int, int, bool)>();
         for (int n = r.ReadInt32(); n > 0; n--) list.Add((r.ReadInt32(), r.ReadByte(), r.ReadBoolean()));
         var chars = new List<(int, int, string)>();
         for (int n = r.ReadInt32(); n > 0; n--) chars.Add((r.ReadInt32(), r.ReadByte(), r.ReadString()));
-        return (list, chars);
+        var levelUps = new List<int>();
+        for (int n = r.ReadInt32(); n > 0; n--) levelUps.Add(r.ReadInt32());
+        return (list, chars, levelUps);
     }
 
     /// <summary>A new lockstep run starts: its frames count from its own start, so nothing of the old run applies.</summary>
@@ -113,6 +128,7 @@ internal sealed class AreaLog
         Snapshots.Clear();
         Roster.Clear();
         Characters.Clear();
+        LevelUps.Clear();
     }
 
     public void Invalidate(string reason)

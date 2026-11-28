@@ -39,7 +39,8 @@ internal sealed class StateSnapshot
     public static StateSnapshot CaptureLocal(int frame)
     {
         var sw = System.Diagnostics.Stopwatch.StartNew();
-        var s = new StateSnapshot { Frame = frame, Loading = GameBridge.LoadingLevel };
+        // A held level-up start counts as loading: its scene appears on each PC's own frame (LevelUps.Holding).
+        var s = new StateSnapshot { Frame = frame, Loading = GameBridge.LoadingLevel || LevelUps.Holding };
         s.Add("lvl", () => GameBridge.CurrentLevelId);
         s.Add("scenes", () => GameBridge.ActiveSceneName);
         s.Add("party", s.CaptureParty);
